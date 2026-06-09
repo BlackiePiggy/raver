@@ -38,8 +38,10 @@ type QuestionDraftOption = {
   id: string;
   text: string;
   imageUrl: string;
-  scoreAxis: string;
-  scoreValue: string;
+  primaryScoreAxis: string;
+  primaryScoreValue: string;
+  secondaryScoreAxis: string;
+  secondaryScoreValue: string;
   directResultCode: string;
 };
 
@@ -69,8 +71,10 @@ const createEmptyQuestionOption = (index: number): QuestionDraftOption => ({
   id: `option_${index + 1}`,
   text: '',
   imageUrl: '',
-  scoreAxis: '',
-  scoreValue: '1',
+  primaryScoreAxis: '',
+  primaryScoreValue: '2',
+  secondaryScoreAxis: '',
+  secondaryScoreValue: '1',
   directResultCode: '',
 });
 
@@ -110,8 +114,10 @@ const buildQuestionDraft = (item: AdminPersonalityQuestion | null): QuestionDraf
           id: option.id || `option_${index + 1}`,
           text: option.text ?? '',
           imageUrl: option.imageUrl ?? '',
-          scoreAxis: Object.keys(option.scorePayload || {})[0] ?? '',
-          scoreValue: String(Object.values(option.scorePayload || {})[0] ?? 1),
+          primaryScoreAxis: option.primaryScoreAxis ?? '',
+          primaryScoreValue: String(option.primaryScoreValue ?? 2),
+          secondaryScoreAxis: option.secondaryScoreAxis ?? '',
+          secondaryScoreValue: String(option.secondaryScoreValue ?? 1),
           directResultCode: option.directResultCode ?? '',
         })),
       }
@@ -274,8 +280,10 @@ export default function AdminPersonalityPage() {
         text: option.text || null,
         imageUrl: option.imageUrl || null,
         sortOrder: index,
-        scoreAxis: option.scoreAxis || null,
-        scoreValue: Number(option.scoreValue) || 1,
+        primaryScoreAxis: option.primaryScoreAxis || null,
+        primaryScoreValue: Number(option.primaryScoreValue) || 2,
+        secondaryScoreAxis: option.secondaryScoreAxis || null,
+        secondaryScoreValue: Number(option.secondaryScoreValue) || 1,
         directResultCode: option.directResultCode || null,
       })),
     };
@@ -669,7 +677,7 @@ export default function AdminPersonalityPage() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">{questionEditorMode === 'edit' ? '编辑题目' : '新建题目'}</h2>
-                  <p className="mt-1 text-sm text-gray-500">每个选项要么配置一个维度加分，要么配置一个直接触发的人格结果 code。</p>
+                  <p className="mt-1 text-sm text-gray-500">每个选项可配置主轴和次轴，隐藏人格仍通过直接触发 code 控制。</p>
                 </div>
                 {questionEditorMode === 'edit' && selectedQuestionId ? (
                   <button type="button" onClick={handleArchiveQuestion} disabled={!canWrite || saving} className="rounded-full border border-red-200 px-4 py-2 text-sm font-medium text-red-600 disabled:opacity-50">
@@ -760,12 +768,12 @@ export default function AdminPersonalityPage() {
                           />
                         </label>
                         <label className="block text-sm text-gray-700">
-                          <span className="mb-1 block">维度</span>
+                          <span className="mb-1 block">主轴</span>
                           <select
-                            value={option.scoreAxis}
+                            value={option.primaryScoreAxis}
                             onChange={(event) => {
                               const next = [...questionDraft.options];
-                              next[index] = { ...next[index], scoreAxis: event.target.value };
+                              next[index] = { ...next[index], primaryScoreAxis: event.target.value };
                               setQuestionDraft({ ...questionDraft, options: next });
                             }}
                             className="w-full rounded-2xl border border-gray-200 px-4 py-2.5"
@@ -780,13 +788,47 @@ export default function AdminPersonalityPage() {
                           </select>
                         </label>
                         <label className="block text-sm text-gray-700">
-                          <span className="mb-1 block">分值</span>
+                          <span className="mb-1 block">主轴权重</span>
                           <input
                             type="number"
-                            value={option.scoreValue}
+                            value={option.primaryScoreValue}
                             onChange={(event) => {
                               const next = [...questionDraft.options];
-                              next[index] = { ...next[index], scoreValue: event.target.value };
+                              next[index] = { ...next[index], primaryScoreValue: event.target.value };
+                              setQuestionDraft({ ...questionDraft, options: next });
+                            }}
+                            className="w-full rounded-2xl border border-gray-200 px-4 py-2.5"
+                            disabled={!canWrite || saving}
+                          />
+                        </label>
+                        <label className="block text-sm text-gray-700">
+                          <span className="mb-1 block">次轴</span>
+                          <select
+                            value={option.secondaryScoreAxis}
+                            onChange={(event) => {
+                              const next = [...questionDraft.options];
+                              next[index] = { ...next[index], secondaryScoreAxis: event.target.value };
+                              setQuestionDraft({ ...questionDraft, options: next });
+                            }}
+                            className="w-full rounded-2xl border border-gray-200 px-4 py-2.5"
+                            disabled={!canWrite || saving}
+                          >
+                            <option value="">无</option>
+                            {['E', 'I', 'S', 'N', 'T', 'F', 'J', 'P'].map((axis) => (
+                              <option key={axis} value={axis}>
+                                {axis}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block text-sm text-gray-700">
+                          <span className="mb-1 block">次轴权重</span>
+                          <input
+                            type="number"
+                            value={option.secondaryScoreValue}
+                            onChange={(event) => {
+                              const next = [...questionDraft.options];
+                              next[index] = { ...next[index], secondaryScoreValue: event.target.value };
                               setQuestionDraft({ ...questionDraft, options: next });
                             }}
                             className="w-full rounded-2xl border border-gray-200 px-4 py-2.5"

@@ -6,12 +6,33 @@ const PERSONALITY_DEBUG_ADMIN_ROLE = 'admin';
 const PERSONALITY_STANDARD_MODE = 'standard';
 const PERSONALITY_DEBUG_MODE = 'debug_set';
 const AXIS_CODES = ['E', 'I', 'S', 'N', 'T', 'F', 'J', 'P'] as const;
-const AXIS_PAIRS = [
-  ['E', 'I'],
-  ['S', 'N'],
-  ['T', 'F'],
-  ['J', 'P'],
-] as const;
+const PAIR_CODES = ['EI', 'SN', 'TF', 'JP'] as const;
+const AXIS_TO_PAIR: Record<(typeof AXIS_CODES)[number], { pair: (typeof PAIR_CODES)[number]; deltaSign: 1 | -1 }> = {
+  E: { pair: 'EI', deltaSign: 1 },
+  I: { pair: 'EI', deltaSign: -1 },
+  S: { pair: 'SN', deltaSign: 1 },
+  N: { pair: 'SN', deltaSign: -1 },
+  T: { pair: 'TF', deltaSign: 1 },
+  F: { pair: 'TF', deltaSign: -1 },
+  J: { pair: 'JP', deltaSign: 1 },
+  P: { pair: 'JP', deltaSign: -1 },
+};
+const PAIR_META: Record<
+  (typeof PAIR_CODES)[number],
+  {
+    left: (typeof AXIS_CODES)[number];
+    right: (typeof AXIS_CODES)[number];
+    fallback: (typeof AXIS_CODES)[number];
+  }
+> = {
+  EI: { left: 'E', right: 'I', fallback: 'I' },
+  SN: { left: 'S', right: 'N', fallback: 'N' },
+  TF: { left: 'T', right: 'F', fallback: 'F' },
+  JP: { left: 'J', right: 'P', fallback: 'P' },
+};
+
+type PairCode = (typeof PAIR_CODES)[number];
+type AxisCode = (typeof AXIS_CODES)[number];
 
 export type PersonalitySessionMode = 'standard' | 'debug_set';
 
@@ -103,6 +124,7 @@ export type PersonalitySessionSubmitResult = {
   questionCount: number;
   answeredCount: number;
   axisScores: Record<string, number>;
+  balanceScores: Record<string, number>;
   result: PersonalityResultPayload;
 };
 
@@ -125,6 +147,49 @@ const normalizePositiveInt = (value: number | null | undefined, fallback: number
   const normalized = Math.floor(value);
   return normalized > 0 ? normalized : fallback;
 };
+
+const normalizeSignedInt = (value: unknown): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  const normalized = Math.trunc(value);
+  return normalized === 0 ? null : normalized;
+};
+
+const emptyPairBalances = (): Record<PairCode, number> =>
+  Object.fromEntries(PAIR_CODES.map((pair) => [pair, 0])) as Record<PairCode, number>;
+
+const emptyAxisScores = (): Record<AxisCode, number> =>
+  Object.fromEntries(AXIS_CODES.map((axis) => [axis, 0])) as Record<AxisCode, number>;
+
+const emptyPairEvidence = (): Record<
+  PairCode,
+  {
+    leftPrimary: number;
+    rightPrimary: number;
+    leftSecondary: number;
+    rightSecondary: number;
+  }
+> =>
+  Object.fromEntries(
+    PAIR_CODES.map((pair) => [
+      pair,
+      {
+        leftPrimary: 0,
+        rightPrimary: 0,
+        leftSecondary: 0,
+        rightSecondary: 0,
+      },
+    ])
+  ) as Record<
+    PairCode,
+    {
+      leftPrimary: number;
+      rightPrimary: number;
+      leftSecondary: number;
+      rightSecondary: number;
+    }
+  >;
+
+const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
 const uniqueIds = (values: readonly string[]): string[] => {
   const seen = new Set<string>();
@@ -243,8 +308,15 @@ const buildQuestionSnapshot = (
       option.scorePayload && typeof option.scorePayload === 'object' && !Array.isArray(option.scorePayload)
         ? Object.fromEntries(
             Object.entries(option.scorePayload as Record<string, unknown>)
-              .filter(([key, raw]) => AXIS_CODES.includes(key as (typeof AXIS_CODES)[number]) && typeof raw === 'number')
-              .map(([key, raw]) => [key, Math.max(0, Math.floor(raw as number))])
+              .map(([key, raw]) => [String(key || '').trim().toUpperCase(), normalizeSignedInt(raw)] as const)
+              .filter(([key, raw]) => {
+                if (raw === null) return false;
+                return (
+                  AXIS_CODES.includes(key as AxisCode) ||
+                  PAIR_CODES.includes(key as PairCode)
+                );
+              })
+              .map(([key, raw]) => [key, raw as number])
           )
         : {},
     directResultCode: option.directResultCode ?? null,
@@ -266,8 +338,9 @@ const buildDisabledReason = (input: {
   return null;
 };
 
-const resolveAxisScores = (answers: PersonalitySessionAnswer[], questions: PersonalityQuestionServerSnapshot[]): {
+const resolveScoringState = (answers: PersonalitySessionAnswer[], questions: PersonalityQuestionServerSnapshot[]): {
   axisScores: Record<string, number>;
+  balanceScores: Record<string, number>;
   directResultCodes: string[];
   answeredCount: number;
 } => {
@@ -277,7 +350,8 @@ const resolveAxisScores = (answers: PersonalitySessionAnswer[], questions: Perso
     answerMap.set(answer.questionId, answer.optionId ?? null);
   }
 
-  const axisScores: Record<string, number> = Object.fromEntries(AXIS_CODES.map((axis) => [axis, 0]));
+  const pairBalances = emptyPairBalances();
+  const pairEvidence = emptyPairEvidence();
   const directResultCodes: string[] = [];
   let answeredCount = 0;
 
@@ -291,47 +365,171 @@ const resolveAxisScores = (answers: PersonalitySessionAnswer[], questions: Perso
       directResultCodes.push(option.directResultCode);
     }
     for (const [axis, value] of Object.entries(option.scorePayload || {})) {
-      axisScores[axis] = (axisScores[axis] ?? 0) + normalizePositiveInt(value, 0);
+      const normalizedKey = String(axis || '').trim().toUpperCase();
+      const normalizedValue = normalizeSignedInt(value);
+      if (normalizedValue === null) continue;
+
+      if (PAIR_CODES.includes(normalizedKey as PairCode)) {
+        const pairCode = normalizedKey as PairCode;
+        pairBalances[pairCode] += normalizedValue;
+        if (Math.abs(normalizedValue) >= 2) {
+          if (normalizedValue > 0) {
+            pairEvidence[pairCode].leftPrimary += 1;
+          } else {
+            pairEvidence[pairCode].rightPrimary += 1;
+          }
+        } else {
+          if (normalizedValue > 0) {
+            pairEvidence[pairCode].leftSecondary += Math.abs(normalizedValue);
+          } else {
+            pairEvidence[pairCode].rightSecondary += Math.abs(normalizedValue);
+          }
+        }
+        continue;
+      }
+
+      if (AXIS_CODES.includes(normalizedKey as AxisCode)) {
+        const axisCode = normalizedKey as AxisCode;
+        const { pair, deltaSign } = AXIS_TO_PAIR[axisCode];
+        const pairDelta = normalizedValue * deltaSign;
+        pairBalances[pair] += pairDelta;
+        if (Math.abs(normalizedValue) >= 2) {
+          if (pairDelta > 0) {
+            pairEvidence[pair].leftPrimary += 1;
+          } else {
+            pairEvidence[pair].rightPrimary += 1;
+          }
+        } else {
+          if (pairDelta > 0) {
+            pairEvidence[pair].leftSecondary += Math.abs(pairDelta);
+          } else {
+            pairEvidence[pair].rightSecondary += Math.abs(pairDelta);
+          }
+        }
+      }
     }
   }
 
-  return { axisScores, directResultCodes, answeredCount };
+  const axisScores = emptyAxisScores();
+  for (const pair of PAIR_CODES) {
+    const balance = pairBalances[pair];
+    const meta = PAIR_META[pair];
+    axisScores[meta.left] = clamp(8 + balance, 0, 16);
+    axisScores[meta.right] = clamp(8 - balance, 0, 16);
+  }
+
+  return {
+    axisScores,
+    balanceScores: pairBalances,
+    directResultCodes,
+    answeredCount,
+  };
 };
 
-const axisRangeTriggerMatches = (axisScores: Record<string, number>): boolean => {
-  return AXIS_PAIRS.every(([left, right]) => {
-    const dominant = Math.max(axisScores[left] ?? 0, axisScores[right] ?? 0);
-    return dominant >= 7 && dominant <= 9;
+const balanceRangeTriggerMatches = (balanceScores: Record<string, number>): boolean => {
+  return PAIR_CODES.every((pair) => Math.abs(balanceScores[pair] ?? 0) <= 1);
+};
+
+const resolveRegularMbtiCode = (input: {
+  balanceScores: Record<string, number>;
+  answeredQuestions: PersonalityQuestionServerSnapshot[];
+  answers: PersonalitySessionAnswer[];
+}): string => {
+  const answerMap = new Map<string, string | null>();
+  for (const answer of input.answers) {
+    if (!answer.questionId) continue;
+    answerMap.set(answer.questionId, answer.optionId ?? null);
+  }
+
+  const pairEvidence = emptyPairEvidence();
+
+  for (const question of input.answeredQuestions) {
+    const optionId = answerMap.get(question.questionId);
+    if (!optionId) continue;
+    const option = question.options.find((item) => item.optionId === optionId);
+    if (!option) continue;
+    for (const [rawKey, rawValue] of Object.entries(option.scorePayload || {})) {
+      const key = String(rawKey || '').trim().toUpperCase();
+      const value = normalizeSignedInt(rawValue);
+      if (value === null) continue;
+
+      if (PAIR_CODES.includes(key as PairCode)) {
+        const pairCode = key as PairCode;
+        if (Math.abs(value) >= 2) {
+          if (value > 0) pairEvidence[pairCode].leftPrimary += 1;
+          else pairEvidence[pairCode].rightPrimary += 1;
+        } else {
+          if (value > 0) pairEvidence[pairCode].leftSecondary += Math.abs(value);
+          else pairEvidence[pairCode].rightSecondary += Math.abs(value);
+        }
+        continue;
+      }
+
+      if (AXIS_CODES.includes(key as AxisCode)) {
+        const axisCode = key as AxisCode;
+        const { pair, deltaSign } = AXIS_TO_PAIR[axisCode];
+        const pairDelta = value * deltaSign;
+        if (Math.abs(value) >= 2) {
+          if (pairDelta > 0) pairEvidence[pair].leftPrimary += 1;
+          else pairEvidence[pair].rightPrimary += 1;
+        } else {
+          if (pairDelta > 0) pairEvidence[pair].leftSecondary += Math.abs(pairDelta);
+          else pairEvidence[pair].rightSecondary += Math.abs(pairDelta);
+        }
+      }
+    }
+  }
+
+  const letters = PAIR_CODES.map((pair) => {
+    const balance = input.balanceScores[pair] ?? 0;
+    const meta = PAIR_META[pair];
+    if (balance > 0) return meta.left;
+    if (balance < 0) return meta.right;
+
+    const evidence = pairEvidence[pair];
+    if (evidence.leftPrimary !== evidence.rightPrimary) {
+      return evidence.leftPrimary > evidence.rightPrimary ? meta.left : meta.right;
+    }
+    if (evidence.leftSecondary !== evidence.rightSecondary) {
+      return evidence.leftSecondary > evidence.rightSecondary ? meta.left : meta.right;
+    }
+    return meta.fallback;
   });
-};
 
-const resolveRegularResultCode = (axisScores: Record<string, number>, axisThreshold: number): string => {
-  const letters = AXIS_PAIRS.map(([left, right]) => ((axisScores[left] ?? 0) >= axisThreshold ? left : right));
   return letters.join('');
 };
 
 const resolveResultCode = (input: {
-  axisScores: Record<string, number>;
+  balanceScores: Record<string, number>;
   directResultCodes: string[];
   hiddenResultPriority: string[];
-  axisThreshold: number;
+  answeredQuestions: PersonalityQuestionServerSnapshot[];
+  answers: PersonalitySessionAnswer[];
 }): string => {
   const directSet = new Set(input.directResultCodes.map((code) => String(code || '').trim()).filter(Boolean));
   for (const code of input.hiddenResultPriority) {
     if (directSet.has(code)) return code;
   }
-  if (axisRangeTriggerMatches(input.axisScores)) {
+  if (balanceRangeTriggerMatches(input.balanceScores)) {
     return 'HHHH';
   }
-  return resolveRegularResultCode(input.axisScores, input.axisThreshold);
+  return resolveRegularMbtiCode({
+    balanceScores: input.balanceScores,
+    answeredQuestions: input.answeredQuestions,
+    answers: input.answers,
+  });
 };
 
 const getResultByCode = async (
   tx: Prisma.TransactionClient | typeof prisma,
   code: string
 ): Promise<PersonalityResultPayload> => {
-  const row = await tx.personalityResultType.findUnique({
-    where: { code },
+  const normalized = String(code || '').trim().toUpperCase();
+  const row = await tx.personalityResultType.findFirst({
+    where: {
+      OR: [{ code: normalized }, { mbtiCode: normalized }],
+      isActive: true,
+    },
     select: {
       code: true,
       title: true,
@@ -346,7 +544,7 @@ const getResultByCode = async (
     },
   });
   if (!row || !row.isActive) {
-    throw new PersonalityServiceError(409, 'PERSONALITY_RESULT_TYPE_NOT_FOUND', `Personality result type ${code} is not configured`);
+    throw new PersonalityServiceError(409, 'PERSONALITY_RESULT_TYPE_NOT_FOUND', `Personality result type ${normalized} is not configured`);
   }
   return mapResultPayload(row);
 };
@@ -532,6 +730,8 @@ export const createPersonalitySession = async (
       questions: snapshots.map(toClientQuestionPayload),
       startedAt: session.startedAt.toISOString(),
     };
+  }, {
+    timeout: 15000,
   });
 };
 
@@ -594,12 +794,23 @@ export const submitPersonalitySession = async (
     const snapshotEnvelope = readQuestionSnapshotEnvelope(session.questionSnapshot);
     const configSnapshot = session.configSnapshot as unknown as PersonalityConfigSnapshot;
     const scoringQuestions = snapshotEnvelope.questions.filter((question) => !question.isEasterEgg);
-    const { axisScores, directResultCodes, answeredCount } = resolveAxisScores(answers, snapshotEnvelope.questions);
+    const { axisScores, balanceScores, directResultCodes, answeredCount } = resolveScoringState(
+      answers,
+      snapshotEnvelope.questions
+    );
+    if (answeredCount < snapshotEnvelope.questions.length) {
+      throw new PersonalityServiceError(
+        409,
+        'PERSONALITY_SESSION_INCOMPLETE',
+        'All personality questions must be answered before submit'
+      );
+    }
     const resultCode = resolveResultCode({
-      axisScores,
+      balanceScores,
       directResultCodes,
       hiddenResultPriority: uniqueIds(configSnapshot.hiddenResultPriority || ['PHOENIX', 'CPDD', 'DRUNK', 'HHHH']),
-      axisThreshold: normalizePositiveInt(configSnapshot.axisThreshold, 9),
+      answeredQuestions: scoringQuestions,
+      answers,
     });
     const result = await getResultByCode(tx, resultCode);
     const submittedAt = new Date();
@@ -642,6 +853,7 @@ export const submitPersonalitySession = async (
       questionCount: scoringQuestions.length,
       answeredCount,
       axisScores,
+      balanceScores,
       result,
     };
   });

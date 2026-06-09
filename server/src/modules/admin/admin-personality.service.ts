@@ -5,6 +5,7 @@ const PERSONALITY_CONFIG_ID = 'default';
 const MIN_OPTION_COUNT = 2;
 const MAX_OPTION_COUNT = 5;
 const AXIS_CODES = ['E', 'I', 'S', 'N', 'T', 'F', 'J', 'P'] as const;
+const PAIR_CODES = ['EI', 'SN', 'TF', 'JP'] as const;
 
 export class AdminPersonalityError extends Error {
   status: number;
@@ -22,8 +23,10 @@ export type AdminPersonalityQuestionOptionInput = {
   text?: string | null;
   imageUrl?: string | null;
   sortOrder?: number | null;
-  scoreAxis?: string | null;
-  scoreValue?: number | null;
+  primaryScoreAxis?: string | null;
+  primaryScoreValue?: number | null;
+  secondaryScoreAxis?: string | null;
+  secondaryScoreValue?: number | null;
   directResultCode?: string | null;
 };
 
@@ -76,6 +79,88 @@ const normalizeAxisCode = (value: unknown): string | null => {
   return normalized && AXIS_CODES.includes(normalized as (typeof AXIS_CODES)[number]) ? normalized : null;
 };
 
+const normalizePairCode = (value: unknown): string | null => {
+  const normalized = normalizeText(value, 16)?.toUpperCase() ?? null;
+  return normalized && PAIR_CODES.includes(normalized as (typeof PAIR_CODES)[number]) ? normalized : null;
+};
+
+const axisToPairDelta = (axis: string): { pair: string; delta: 1 | -1 } => {
+  switch (axis) {
+    case 'E':
+      return { pair: 'EI', delta: 1 };
+    case 'I':
+      return { pair: 'EI', delta: -1 };
+    case 'S':
+      return { pair: 'SN', delta: 1 };
+    case 'N':
+      return { pair: 'SN', delta: -1 };
+    case 'T':
+      return { pair: 'TF', delta: 1 };
+    case 'F':
+      return { pair: 'TF', delta: -1 };
+    case 'J':
+      return { pair: 'JP', delta: 1 };
+    case 'P':
+      return { pair: 'JP', delta: -1 };
+    default:
+      throw new AdminPersonalityError(400, 'PERSONALITY_AXIS_INVALID', 'Unsupported axis code');
+  }
+};
+
+const normalizeSignedScoreValue = (value: unknown): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  const normalized = Math.trunc(value);
+  return normalized === 0 ? null : normalized;
+};
+
+const scorePayloadToEditorFields = (
+  scorePayload: Prisma.JsonValue | null
+): {
+  scorePayload: Record<string, number>;
+  primaryScoreAxis: string | null;
+  primaryScoreValue: number | null;
+  secondaryScoreAxis: string | null;
+  secondaryScoreValue: number | null;
+} => {
+  const normalizedPayload =
+    scorePayload && typeof scorePayload === 'object' && !Array.isArray(scorePayload)
+      ? Object.fromEntries(
+          Object.entries(scorePayload as Record<string, unknown>)
+            .map(([key, value]) => [String(key || '').trim().toUpperCase(), normalizeSignedScoreValue(value)] as const)
+            .filter(([, value]) => value !== null)
+        )
+      : {};
+
+  const entries = Object.entries(normalizedPayload as Record<string, number>).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+  const pairToAxis = (pair: string, value: number): string | null => {
+    const normalizedPair = normalizePairCode(pair);
+    if (!normalizedPair) return null;
+    switch (normalizedPair) {
+      case 'EI':
+        return value >= 0 ? 'E' : 'I';
+      case 'SN':
+        return value >= 0 ? 'S' : 'N';
+      case 'TF':
+        return value >= 0 ? 'T' : 'F';
+      case 'JP':
+        return value >= 0 ? 'J' : 'P';
+      default:
+        return null;
+    }
+  };
+
+  const primary = entries[0] ? { axis: pairToAxis(entries[0][0], entries[0][1]), value: Math.abs(entries[0][1]) } : null;
+  const secondary = entries[1] ? { axis: pairToAxis(entries[1][0], entries[1][1]), value: Math.abs(entries[1][1]) } : null;
+
+  return {
+    scorePayload: normalizedPayload as Record<string, number>,
+    primaryScoreAxis: primary?.axis ?? null,
+    primaryScoreValue: primary?.value ?? null,
+    secondaryScoreAxis: secondary?.axis ?? null,
+    secondaryScoreValue: secondary?.value ?? null,
+  };
+};
+
 const ensurePersonalityConfig = async () => {
   return prisma.personalityConfig.upsert({
     where: { id: PERSONALITY_CONFIG_ID },
@@ -120,14 +205,11 @@ const mapQuestion = (question: {
   createdAt: question.createdAt.toISOString(),
   updatedAt: question.updatedAt.toISOString(),
   options: question.options.map((option) => ({
+    ...scorePayloadToEditorFields(option.scorePayload),
     id: option.id,
     text: option.text,
     imageUrl: option.imageUrl,
     sortOrder: option.sortOrder,
-    scorePayload:
-      option.scorePayload && typeof option.scorePayload === 'object' && !Array.isArray(option.scorePayload)
-        ? option.scorePayload
-        : {},
     directResultCode: option.directResultCode,
     createdAt: option.createdAt.toISOString(),
     updatedAt: option.updatedAt.toISOString(),
@@ -186,16 +268,29 @@ const validateQuestionPayload = (input: AdminPersonalityQuestionInput) => {
   }
 
   const options = input.options.map((option, index) => {
-    const axis = normalizeAxisCode(option.scoreAxis);
-    const scoreValue = normalizeOptionalPositiveInt(option.scoreValue) ?? 1;
+    const primaryAxis = normalizeAxisCode(option.primaryScoreAxis);
+    const secondaryAxis = normalizeAxisCode(option.secondaryScoreAxis);
+    const primaryScoreValue = normalizeSignedScoreValue(option.primaryScoreValue);
+    const secondaryScoreValue = normalizeSignedScoreValue(option.secondaryScoreValue);
     const directResultCode = normalizeText(option.directResultCode, 64);
-    if (!axis && !directResultCode) {
+    if (!primaryAxis && !secondaryAxis && !directResultCode) {
       throw new AdminPersonalityError(
         400,
         'PERSONALITY_OPTION_SCORE_REQUIRED',
-        'Each option must define scoreAxis or directResultCode'
+        'Each option must define at least one score axis or directResultCode'
       );
     }
+
+    const scorePayload: Record<string, number> = {};
+    if (primaryAxis) {
+      const primary = axisToPairDelta(primaryAxis);
+      scorePayload[primary.pair] = (scorePayload[primary.pair] ?? 0) + (primaryScoreValue ?? 2) * primary.delta;
+    }
+    if (secondaryAxis) {
+      const secondary = axisToPairDelta(secondaryAxis);
+      scorePayload[secondary.pair] = (scorePayload[secondary.pair] ?? 0) + (secondaryScoreValue ?? 1) * secondary.delta;
+    }
+
     return {
       id: normalizeText(option.id, 128) ?? undefined,
       text: normalizeText(option.text, 2000),
@@ -204,7 +299,7 @@ const validateQuestionPayload = (input: AdminPersonalityQuestionInput) => {
         typeof option.sortOrder === 'number' && Number.isFinite(option.sortOrder)
           ? Math.floor(option.sortOrder)
           : index,
-      scorePayload: axis ? { [axis]: scoreValue } : {},
+      scorePayload,
       directResultCode: directResultCode ?? null,
     };
   });

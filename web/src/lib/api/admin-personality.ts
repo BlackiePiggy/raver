@@ -23,6 +23,10 @@ export type AdminPersonalityQuestionOption = {
   imageUrl: string | null;
   sortOrder: number;
   scorePayload: Record<string, number>;
+  primaryScoreAxis?: string | null;
+  primaryScoreValue?: number | null;
+  secondaryScoreAxis?: string | null;
+  secondaryScoreValue?: number | null;
   directResultCode: string | null;
   createdAt: string;
   updatedAt: string;
@@ -75,8 +79,10 @@ export type AdminPersonalityQuestionInput = {
     text?: string | null;
     imageUrl?: string | null;
     sortOrder?: number | null;
-    scoreAxis?: string | null;
-    scoreValue?: number | null;
+    primaryScoreAxis?: string | null;
+    primaryScoreValue?: number | null;
+    secondaryScoreAxis?: string | null;
+    secondaryScoreValue?: number | null;
     directResultCode?: string | null;
   }>;
 };
