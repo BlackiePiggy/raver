@@ -1605,6 +1605,36 @@ router.post('/quiz/questions', authenticate, requireAdmin, async (req: AuthReque
   }
 });
 
+router.post('/quiz/questions/import', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const questions = Array.isArray(body.questions) ? body.questions : null;
+    if (!questions) {
+      res.status(400).json({ error: 'questions is required', code: 'QUIZ_IMPORT_QUESTIONS_REQUIRED' });
+      return;
+    }
+    const result = await adminQuizService.importQuestions(questions);
+    await adminAuditService.createAction({
+      actorId: req.user?.userId || 'unknown',
+      action: 'quiz.question.import',
+      targetType: 'quiz_question_batch',
+      targetId: `count:${result.count}`,
+      detail: {
+        count: result.count,
+        itemIds: result.items.map((item) => item.id),
+      },
+    });
+    res.status(201).json({ success: true, ...result });
+  } catch (error) {
+    if (error instanceof AdminQuizError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    console.error('Import admin quiz questions error:', error);
+    res.status(500).json({ error: 'Failed to import quiz questions' });
+  }
+});
+
 router.get('/quiz/questions/:id', authenticate, requireAdminOrOperator, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const item = await adminQuizService.getQuestion(String(req.params.id || '').trim());

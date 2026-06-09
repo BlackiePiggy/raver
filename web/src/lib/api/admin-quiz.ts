@@ -89,6 +89,29 @@ export type AdminQuizQuestionInput = {
   }>;
 };
 
+export type AdminQuizQuestionImportInput = {
+  status?: QuizQuestionStatus;
+  stemText: string;
+  stemImageUrl?: string | null;
+  correctOptionId?: string;
+  correctOptionIndex?: number;
+  timeLimitSec?: number | null;
+  sortOrder?: number | null;
+  tags?: string[];
+  difficulty?: string | null;
+  explanation?: string | null;
+  options: Array<
+    | string
+    | {
+        id?: string;
+        text?: string | null;
+        imageUrl?: string | null;
+        sortOrder?: number | null;
+        isCorrect?: boolean;
+      }
+  >;
+};
+
 const buildQuery = (params?: Record<string, string | number | boolean | undefined>): string => {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params || {})) {
@@ -133,6 +156,18 @@ export const adminQuizApi = {
       method: 'POST',
       body: JSON.stringify(input),
     });
+  },
+
+  async importQuestions(input: {
+    questions: AdminQuizQuestionImportInput[];
+  }): Promise<{ success: true; count: number; items: AdminQuizQuestion[] }> {
+    return authenticatedJsonFetch<{ success: true; count: number; items: AdminQuizQuestion[] }>(
+      '/api/admin/v1/quiz/questions/import',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
+    );
   },
 
   async updateQuestion(id: string, input: AdminQuizQuestionInput): Promise<{ success: true; item: AdminQuizQuestion }> {

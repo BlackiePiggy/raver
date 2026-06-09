@@ -218,6 +218,80 @@ final class QuizFlowViewModelTests: XCTestCase {
         ))
     }
 
+    func testManualSubmitOnLastQuestionDoesNotLeaveTimeoutBanner() async throws {
+        let service = MockWebFeatureService()
+
+        await service.setQuizScenario(
+            .init(
+                status: Self.defaultSummary(),
+                sessionFactory: {
+                    QuizSessionCreateResponse(
+                        sessionId: "quiz-session-manual-submit",
+                        questionCount: 1,
+                        passCorrectCount: 1,
+                        dailyAttemptLimit: 3,
+                        dailyRemainingAttemptsAfterStart: 2,
+                        timeZone: "Asia/Shanghai",
+                        questions: [
+                            QuizQuestionPayload(
+                                questionId: "q-manual-submit",
+                                stemText: "manual submit question",
+                                stemImageUrl: nil,
+                                options: [
+                                    QuizQuestionOptionPayload(optionId: "opt-a", text: "A", imageUrl: nil, sortOrder: 0),
+                                    QuizQuestionOptionPayload(optionId: "opt-b", text: "B", imageUrl: nil, sortOrder: 1),
+                                ],
+                                timeLimitSec: 1
+                            )
+                        ],
+                        startedAt: ISO8601DateFormatter().string(from: Date()),
+                        expiresAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(3600))
+                    )
+                },
+                submitHandler: { sessionId, answers in
+                    XCTAssertEqual(sessionId, "quiz-session-manual-submit")
+                    XCTAssertEqual(answers.count, 1)
+                    XCTAssertEqual(answers.first?.optionId, "opt-a")
+                    return QuizSessionSubmitResponse(
+                        sessionId: sessionId,
+                        totalCount: 1,
+                        correctCount: 1,
+                        passCorrectCount: 1,
+                        passed: true,
+                        passedAt: ISO8601DateFormatter().string(from: Date())
+                    )
+                },
+                abandonHandler: { sessionId in
+                    QuizSessionAbandonResponse(sessionId: sessionId, status: "abandoned")
+                }
+            )
+        )
+
+        let viewModel = QuizFlowViewModel(
+            service: service,
+            countdownTickNanoseconds: 200_000_000,
+            mediaRetryDelayNanoseconds: 1_000_000
+        )
+
+        await viewModel.startQuiz()
+        viewModel.selectOption("opt-a")
+        viewModel.goNext()
+
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        guard case .result(let result) = viewModel.phase else {
+            return XCTFail("expected result phase after manual submit")
+        }
+        XCTAssertTrue(result.passed)
+        XCTAssertNil(viewModel.feedbackMessage)
+
+        await viewModel.load()
+        guard case .ready = viewModel.phase else {
+            return XCTFail("expected ready phase after reloading quiz home")
+        }
+        XCTAssertNil(viewModel.feedbackMessage)
+    }
+
     private static func defaultSummary() -> QuizConfigSummary {
         QuizConfigSummary(
             isEnabled: true,

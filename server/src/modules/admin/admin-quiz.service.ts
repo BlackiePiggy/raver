@@ -43,6 +43,13 @@ export class AdminQuizError extends Error {
   }
 }
 
+const normalizeQuizQuestionStatusValue = (value: unknown): QuizQuestionStatus | undefined => {
+  if (value === QuizQuestionStatus.draft) return QuizQuestionStatus.draft;
+  if (value === QuizQuestionStatus.active) return QuizQuestionStatus.active;
+  if (value === QuizQuestionStatus.archived) return QuizQuestionStatus.archived;
+  return undefined;
+};
+
 const normalizeText = (value: unknown, maxLength: number): string | null => {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
@@ -214,6 +221,164 @@ const validateQuestionPayload = (input: AdminQuizQuestionUpsertInput): {
   };
 };
 
+type ValidatedQuizQuestionInput = ReturnType<typeof validateQuestionPayload>;
+
+const createQuestionRecord = async (
+  tx: Prisma.TransactionClient,
+  normalized: ValidatedQuizQuestionInput
+) => {
+  const question = await tx.quizQuestion.create({
+    data: {
+      status: normalized.status,
+      type: normalized.type,
+      stemText: normalized.stemText,
+      stemImageUrl: normalized.stemImageUrl,
+      timeLimitSec: normalized.timeLimitSec,
+      sortOrder: normalized.sortOrder,
+      tags: normalized.tags,
+      difficulty: normalized.difficulty,
+      explanation: normalized.explanation,
+    },
+  });
+
+  const optionIdMap = new Map<string, string>();
+  for (const option of normalized.options) {
+    const createdOption = await tx.quizQuestionOption.create({
+      data: {
+        questionId: question.id,
+        text: option.text,
+        imageUrl: option.imageUrl,
+        sortOrder: option.sortOrder,
+      },
+    });
+    if (option.id) optionIdMap.set(option.id, createdOption.id);
+  }
+
+  const mappedCorrectOptionId = optionIdMap.get(normalized.correctOptionId);
+  if (!mappedCorrectOptionId) {
+    throw new AdminQuizError(400, 'QUIZ_CORRECT_OPTION_INVALID', 'correctOptionId must match one option id');
+  }
+
+  await tx.quizQuestion.update({
+    where: { id: question.id },
+    data: { correctOptionId: mappedCorrectOptionId },
+  });
+
+  return tx.quizQuestion.findUniqueOrThrow({
+    where: { id: question.id },
+    include: {
+      options: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+    },
+  });
+};
+
+const normalizeImportQuestionPayload = (value: unknown, itemIndex: number): AdminQuizQuestionUpsertInput => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AdminQuizError(400, 'QUIZ_IMPORT_ITEM_INVALID', `Question #${itemIndex + 1} must be an object`);
+  }
+
+  const record = value as Record<string, unknown>;
+  const rawOptions = Array.isArray(record.options) ? record.options : null;
+  if (!rawOptions) {
+    throw new AdminQuizError(400, 'QUIZ_IMPORT_OPTIONS_REQUIRED', `Question #${itemIndex + 1} must include options`);
+  }
+
+  const normalizedOptions = rawOptions.map((option, optionIndex) => {
+    if (typeof option === 'string') {
+      return {
+        id: `import_option_${optionIndex + 1}`,
+        text: option,
+        imageUrl: null,
+        sortOrder: optionIndex,
+        isCorrect: false,
+      };
+    }
+
+    if (!option || typeof option !== 'object' || Array.isArray(option)) {
+      throw new AdminQuizError(
+        400,
+        'QUIZ_IMPORT_OPTION_INVALID',
+        `Question #${itemIndex + 1} option #${optionIndex + 1} must be a string or object`
+      );
+    }
+
+    const optionRecord = option as Record<string, unknown>;
+    return {
+      id: normalizeText(optionRecord.id, 128) ?? `import_option_${optionIndex + 1}`,
+      text: typeof optionRecord.text === 'string' ? optionRecord.text : null,
+      imageUrl: optionRecord.imageUrl,
+      sortOrder:
+        typeof optionRecord.sortOrder === 'number' && Number.isFinite(optionRecord.sortOrder)
+          ? Math.floor(optionRecord.sortOrder)
+          : optionIndex,
+      isCorrect: optionRecord.isCorrect === true,
+    };
+  });
+
+  const optionIds = new Set<string>();
+  for (const option of normalizedOptions) {
+    if (optionIds.has(option.id)) {
+      throw new AdminQuizError(
+        400,
+        'QUIZ_IMPORT_OPTION_ID_DUPLICATED',
+        `Question #${itemIndex + 1} contains duplicated option ids`
+      );
+    }
+    optionIds.add(option.id);
+  }
+
+  const markedCorrect = normalizedOptions.filter((option) => option.isCorrect);
+  if (markedCorrect.length > 1) {
+    throw new AdminQuizError(
+      400,
+      'QUIZ_IMPORT_CORRECT_OPTION_AMBIGUOUS',
+      `Question #${itemIndex + 1} has multiple options marked as correct`
+    );
+  }
+
+  let correctOptionId = normalizeText(record.correctOptionId, 128);
+  if (!correctOptionId && typeof record.correctOptionIndex === 'number' && Number.isFinite(record.correctOptionIndex)) {
+    const correctOptionIndex = Math.floor(record.correctOptionIndex);
+    if (correctOptionIndex < 0 || correctOptionIndex >= normalizedOptions.length) {
+      throw new AdminQuizError(
+        400,
+        'QUIZ_IMPORT_CORRECT_OPTION_INDEX_INVALID',
+        `Question #${itemIndex + 1} correctOptionIndex is out of range`
+      );
+    }
+    correctOptionId = normalizedOptions[correctOptionIndex]?.id ?? null;
+  }
+  if (!correctOptionId && markedCorrect.length === 1) {
+    correctOptionId = markedCorrect[0]?.id ?? null;
+  }
+  if (!correctOptionId) {
+    throw new AdminQuizError(
+      400,
+      'QUIZ_IMPORT_CORRECT_OPTION_REQUIRED',
+      `Question #${itemIndex + 1} must provide correctOptionId, correctOptionIndex, or one options[].isCorrect`
+    );
+  }
+
+  return {
+    status: normalizeQuizQuestionStatusValue(record.status) ?? QuizQuestionStatus.draft,
+    type: QuizQuestionType.single_choice,
+    stemText: typeof record.stemText === 'string' ? record.stemText : null,
+    stemImageUrl: typeof record.stemImageUrl === 'string' ? record.stemImageUrl : null,
+    correctOptionId,
+    timeLimitSec: typeof record.timeLimitSec === 'number' ? record.timeLimitSec : null,
+    sortOrder: typeof record.sortOrder === 'number' ? record.sortOrder : null,
+    tags: Array.isArray(record.tags) ? (record.tags as string[]) : [],
+    difficulty: typeof record.difficulty === 'string' ? record.difficulty : null,
+    explanation: typeof record.explanation === 'string' ? record.explanation : null,
+    options: normalizedOptions.map((option) => ({
+      id: option.id,
+      text: option.text,
+      imageUrl: option.imageUrl as string | null,
+      sortOrder: option.sortOrder,
+    })),
+  };
+};
+
 export const adminQuizService = {
   async getConfig() {
     const config = await ensureQuizConfig();
@@ -363,53 +528,29 @@ export const adminQuizService = {
 
   async createQuestion(input: AdminQuizQuestionUpsertInput) {
     const normalized = validateQuestionPayload(input);
-    const created = await prisma.$transaction(async (tx) => {
-      const question = await tx.quizQuestion.create({
-        data: {
-          status: normalized.status,
-          type: normalized.type,
-          stemText: normalized.stemText,
-          stemImageUrl: normalized.stemImageUrl,
-          timeLimitSec: normalized.timeLimitSec,
-          sortOrder: normalized.sortOrder,
-          tags: normalized.tags,
-          difficulty: normalized.difficulty,
-          explanation: normalized.explanation,
-        },
-      });
-
-      const optionIdMap = new Map<string, string>();
-      for (const option of normalized.options) {
-        const createdOption = await tx.quizQuestionOption.create({
-          data: {
-            questionId: question.id,
-            text: option.text,
-            imageUrl: option.imageUrl,
-            sortOrder: option.sortOrder,
-          },
-        });
-        if (option.id) optionIdMap.set(option.id, createdOption.id);
-      }
-
-      const mappedCorrectOptionId = optionIdMap.get(normalized.correctOptionId);
-      if (!mappedCorrectOptionId) {
-        throw new AdminQuizError(400, 'QUIZ_CORRECT_OPTION_INVALID', 'correctOptionId must match one option id');
-      }
-
-      await tx.quizQuestion.update({
-        where: { id: question.id },
-        data: { correctOptionId: mappedCorrectOptionId },
-      });
-
-      return tx.quizQuestion.findUniqueOrThrow({
-        where: { id: question.id },
-        include: {
-          options: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
-        },
-      });
-    });
+    const created = await prisma.$transaction(async (tx) => createQuestionRecord(tx, normalized));
 
     return mapQuestion(created);
+  },
+
+  async importQuestions(values: unknown[]) {
+    if (!Array.isArray(values) || values.length === 0) {
+      throw new AdminQuizError(400, 'QUIZ_IMPORT_EMPTY', 'questions must contain at least one item');
+    }
+
+    const normalizedItems = values.map((value, index) => validateQuestionPayload(normalizeImportQuestionPayload(value, index)));
+    const createdItems = await prisma.$transaction(async (tx) => {
+      const items = [];
+      for (const normalized of normalizedItems) {
+        items.push(await createQuestionRecord(tx, normalized));
+      }
+      return items;
+    });
+
+    return {
+      count: createdItems.length,
+      items: createdItems.map(mapQuestion),
+    };
   },
 
   async updateQuestion(id: string, input: AdminQuizQuestionUpsertInput) {

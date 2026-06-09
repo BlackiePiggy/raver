@@ -4359,6 +4359,7 @@ final class QuizFlowViewModel: ObservableObject {
 
     func load() async {
         cancelQuestionTasks()
+        feedbackMessage = nil
         do {
             phase = .loading
             let summary = try await service.fetchQuizStatus()
@@ -4392,6 +4393,7 @@ final class QuizFlowViewModel: ObservableObject {
 
     func goNext() {
         guard session != nil, !isPreparingQuestion, !isSubmitting else { return }
+        questionRunToken = UUID()
         Task {
             await advanceFromCurrentQuestion()
         }
@@ -4420,6 +4422,7 @@ final class QuizFlowViewModel: ObservableObject {
 
     func submitQuiz() async {
         guard let session, !isSubmitting else { return }
+        questionRunToken = UUID()
         cancelQuestionTasks()
         isSubmitting = true
         defer { isSubmitting = false }
@@ -4429,6 +4432,11 @@ final class QuizFlowViewModel: ObservableObject {
             }
             let result = try await service.submitQuizSession(sessionId: session.sessionId, answers: payload)
             self.session = nil
+            self.feedbackMessage = nil
+            self.isPreparingQuestion = false
+            self.preparationAttempt = 0
+            self.preparationMessage = nil
+            self.secondsRemaining = 0
             phase = .result(result)
             summary = try? await service.fetchQuizStatus()
         } catch {
