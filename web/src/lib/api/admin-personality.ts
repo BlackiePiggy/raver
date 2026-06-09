@@ -51,6 +51,7 @@ export type AdminPersonalityResultType = {
   subtitle: string | null;
   slangTagline: string | null;
   genreMapping: string | null;
+  genreBindings: PersonalityGenreBinding[];
   description: string;
   imageUrl: string | null;
   sortOrder: number;
@@ -93,12 +94,19 @@ export type AdminPersonalityResultTypeInput = {
   subtitle?: string | null;
   slangTagline?: string | null;
   genreMapping?: string | null;
+  genreBindings?: PersonalityGenreBinding[] | null;
   description: string;
   imageUrl?: string | null;
   sortOrder?: number | null;
   isActive?: boolean | null;
   isHidden?: boolean | null;
   mbtiCode?: string | null;
+};
+
+export type PersonalityGenreBinding = {
+  label: string;
+  genreId: string | null;
+  path: string | null;
 };
 
 export type AdminPersonalityDebugSet = {

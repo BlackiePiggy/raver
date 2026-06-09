@@ -327,7 +327,7 @@ struct ProfileView: View {
                     quickActionTile(title: LT("答题系统", "Quiz", "クイズ"), icon: "checklist") {
                         profilePush(.quiz)
                     }
-                    quickActionTile(title: "MBTI", icon: "brain") {
+                    quickActionTile(title: "EDMTI", icon: "brain") {
                         profilePush(.personality)
                     }
                     quickActionTile(title: LT("我的收藏", "My Saves", "保存済み"), icon: "star.fill") {
@@ -6142,7 +6142,7 @@ struct PersonalityFlowView: View {
                 personalityResultView(result)
             }
         }
-        .navigationTitle("MBTI")
+        .navigationTitle("EDMTI")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             if viewModel.summary == nil && viewModel.session == nil {
@@ -6404,82 +6404,223 @@ struct PersonalityFlowView: View {
     private func personalityResultView(_ result: PersonalitySessionSubmitResponse) -> some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(spacing: 18) {
-                    Spacer(minLength: 24)
+                VStack(spacing: 0) {
+                    // 顶部角色图
                     if let imageUrl = result.result.imageUrl,
-                       !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        GeometryReader { geometry in
-                            let imageWidth = geometry.size.width * 0.45
-                            AsyncImage(url: URL(string: imageUrl)) { phase in
-                                switch phase {
-                                case .empty:
-                                    ProgressView()
-                                        .frame(width: imageWidth, height: imageWidth)
-                                case .success(let image):
-                                    image
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: imageWidth)
-                                case .failure:
-                                    EmptyView()
-                                @unknown default:
-                                    EmptyView()
-                                }
+                    !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        AsyncImage(url: URL(string: imageUrl)) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxWidth: UIScreen.main.bounds.width * 0.45)
+                            default:
+                                Color.clear.frame(height: 0)
                             }
-                            .frame(maxWidth: .infinity)
                         }
-                        .frame(height: UIScreen.main.bounds.width * 0.45)
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 24)
+                        .padding(.bottom, 8)
                     }
-                    Text("\(result.result.code) · \(result.result.title)")
-                        .font(.largeTitle.weight(.bold))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(RaverTheme.primaryText)
+
+                    // 英文 code 在上，中文标题在下
+                    VStack(spacing: 4) {
+                        Text(result.result.code)
+                            .font(.system(size: 20, weight: .bold))
+                            .tracking(1.8)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 0.72, green: 0.52, blue: 1.0),
+                                        Color(red: 0.56, green: 0.38, blue: 0.96)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+
+                        Text(result.result.title)
+                            .font(.system(size: 34, weight: .heavy))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 0.72, green: 0.52, blue: 1.0),
+                                        Color(red: 0.56, green: 0.38, blue: 0.96)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 6)
+
+                    // subtitle
                     if let subtitle = result.result.subtitle, !subtitle.isEmpty {
                         Text(subtitle)
                             .font(.subheadline)
                             .foregroundStyle(RaverTheme.secondaryText)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 10)
                     }
+
+                    // 一句话总结，保留引用块样式，但放在当前上方位置
                     if let slang = result.result.slangTagline, !slang.isEmpty {
-                        Text(slang)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(RaverTheme.accent)
+                        HStack(spacing: 0) {
+                            Image(systemName: "quote.opening")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(RaverTheme.accent)
+                                .padding(.trailing, 10)
+                            Text(slang)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(RaverTheme.primaryText)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
+                            Image(systemName: "quote.closing")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(RaverTheme.accent)
+                                .padding(.leading, 10)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(RaverTheme.accent.opacity(0.22), lineWidth: 1)
+                        )
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 16)
                     }
-                    if let genre = result.result.genreMapping, !genre.isEmpty {
-                        GlassCard {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(LT("曲风对标", "Genre Match", "ジャンル対応"))
+
+                    VStack(spacing: 14) {
+                        // 专属曲风卡片（genre 拆成 chip tags）
+                        if let genre = result.result.genreMapping, !genre.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label(LT("你的专属曲风", "Your Genre Match", "あなたのジャンル"), systemImage: "music.note")
                                     .font(.headline)
-                                Text(genre)
-                                    .font(.subheadline)
-                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .foregroundStyle(RaverTheme.accent)
+
+                                let genreTags = genre
+                                    .components(separatedBy: CharacterSet(charactersIn: ",，、/"))
+                                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                                    .filter { !$0.isEmpty }
+
+                                genreChipsFlow(genreTags)
                             }
                         }
-                    }
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(LT("人格解读", "Description", "解説"))
+
+                        // 人格解读卡片
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label(LT("人格解读", "Description", "解説"), systemImage: "person.fill")
                                 .font(.headline)
+                                .foregroundStyle(RaverTheme.accent)
                             Text(result.result.description)
                                 .font(.subheadline)
-                                .foregroundStyle(RaverTheme.secondaryText)
+                                .foregroundStyle(Color.primary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
-                    Spacer(minLength: 24)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 24)
                 }
-                .padding(16)
             }
 
-            bottomActionBar(
-                secondaryTitle: LT("完成", "Done", "完了"),
-                primaryTitle: LT("返回测试首页", "Back to Test Home", "テストホームへ戻る"),
-                onSecondary: { dismiss() },
-                onPrimary: {
+            // 底部双按钮
+            HStack(spacing: 12) {
+                Button {
                     Task { await viewModel.load() }
+                } label: {
+                    Label(LT("再测一次", "Retake", "再テスト"), systemImage: "arrow.counterclockwise")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 50)
                 }
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(RaverTheme.card)
+                )
+                .foregroundStyle(RaverTheme.primaryText)
+
+                Button {
+                    dismiss()
+                } label: {
+                    Label(LT("分享结果", "Share", "シェア"), systemImage: "paperplane.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                }
+                .background(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.62, green: 0.42, blue: 1.0),
+                            RaverTheme.accent
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                )
+                .foregroundStyle(.white)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+            .background(
+                RaverTheme.card
+                    .ignoresSafeArea(edges: .bottom)
             )
         }
         .background(RaverTheme.background)
+    }
+
+    @ViewBuilder
+    private func genreChipsFlow(_ tags: [String]) -> some View {
+        // 简单的自动换行 flow layout（使用 LazyVStack + HStack 模拟）
+        let rows = buildRows(tags: tags, containerWidth: UIScreen.main.bounds.width - 80, font: UIFont.systemFont(ofSize: 13, weight: .semibold), spacing: 8)
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 8) {
+                    ForEach(row, id: \.self) { tag in
+                        Text(tag)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.primaryText)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(RaverTheme.accent.opacity(0.16))
+                            )
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(RaverTheme.accent.opacity(0.32), lineWidth: 1)
+                            )
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func buildRows(tags: [String], containerWidth: CGFloat, font: UIFont, spacing: CGFloat) -> [[String]] {
+        var rows: [[String]] = []
+        var currentRow: [String] = []
+        var currentWidth: CGFloat = 0
+        let paddingH: CGFloat = 24 + 8 // horizontal padding inside chip + spacing
+
+        for tag in tags {
+            let tagWidth = (tag as NSString).size(withAttributes: [.font: font]).width + paddingH
+            if currentWidth + tagWidth + spacing > containerWidth, !currentRow.isEmpty {
+                rows.append(currentRow)
+                currentRow = [tag]
+                currentWidth = tagWidth
+            } else {
+                currentRow.append(tag)
+                currentWidth += tagWidth + spacing
+            }
+        }
+        if !currentRow.isEmpty { rows.append(currentRow) }
+        return rows
     }
 
     private func disabledReasonText(_ code: String?) -> String {

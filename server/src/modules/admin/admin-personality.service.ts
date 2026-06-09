@@ -45,12 +45,23 @@ export type AdminPersonalityResultTypeInput = {
   subtitle?: string | null;
   slangTagline?: string | null;
   genreMapping?: string | null;
+  genreBindings?: Array<{
+    label?: string | null;
+    genreId?: string | null;
+    path?: string | null;
+  }> | null;
   description?: string | null;
   imageUrl?: string | null;
   sortOrder?: number | null;
   isActive?: boolean | null;
   isHidden?: boolean | null;
   mbtiCode?: string | null;
+};
+
+type PersonalityGenreBinding = {
+  label: string;
+  genreId: string | null;
+  path: string | null;
 };
 
 const normalizeText = (value: unknown, maxLength: number): string | null => {
@@ -61,6 +72,34 @@ const normalizeText = (value: unknown, maxLength: number): string | null => {
 };
 
 const normalizeOptionalUrl = (value: unknown): string | null => normalizeText(value, 2000);
+
+const normalizeGenreBindings = (value: unknown): PersonalityGenreBinding[] => {
+  if (!Array.isArray(value)) return [];
+  const items: PersonalityGenreBinding[] = [];
+  const seen = new Set<string>();
+
+  for (const rawItem of value) {
+    if (!rawItem || typeof rawItem !== 'object' || Array.isArray(rawItem)) continue;
+    const item = rawItem as Record<string, unknown>;
+    const label = normalizeText(item.label, 120);
+    const genreId = normalizeText(item.genreId, 128);
+    const path = normalizeText(item.path, 500);
+    const normalizedLabel = label ?? path?.split(' / ').filter(Boolean).at(-1) ?? null;
+    if (!normalizedLabel) continue;
+
+    const key = genreId ? `genre:${genreId}` : `custom:${normalizedLabel.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    items.push({
+      label: normalizedLabel,
+      genreId: genreId ?? null,
+      path: genreId ? path ?? null : null,
+    });
+  }
+
+  return items;
+};
 
 const normalizeOptionalPositiveInt = (value: unknown): number | null => {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
@@ -223,6 +262,7 @@ const mapResultType = (row: {
   subtitle: string | null;
   slangTagline: string | null;
   genreMapping: string | null;
+  genreBindings: Prisma.JsonValue | null;
   description: string;
   imageUrl: string | null;
   sortOrder: number;
@@ -238,6 +278,7 @@ const mapResultType = (row: {
   subtitle: row.subtitle,
   slangTagline: row.slangTagline,
   genreMapping: row.genreMapping,
+  genreBindings: normalizeGenreBindings(row.genreBindings),
   description: row.description,
   imageUrl: row.imageUrl,
   sortOrder: row.sortOrder,
@@ -337,6 +378,7 @@ const validateResultTypePayload = (input: AdminPersonalityResultTypeInput) => {
     subtitle: normalizeText(input.subtitle, 2000),
     slangTagline: normalizeText(input.slangTagline, 2000),
     genreMapping: normalizeText(input.genreMapping, 4000),
+    genreBindings: normalizeGenreBindings(input.genreBindings),
     description,
     imageUrl: normalizeOptionalUrl(input.imageUrl),
     sortOrder:
@@ -580,7 +622,10 @@ export const adminPersonalityService = {
   async createResultType(input: AdminPersonalityResultTypeInput) {
     const normalized = validateResultTypePayload(input);
     const created = await prisma.personalityResultType.create({
-      data: normalized,
+      data: {
+        ...normalized,
+        genreBindings: normalized.genreBindings as Prisma.InputJsonValue,
+      },
     });
     return mapResultType(created);
   },
@@ -596,6 +641,7 @@ export const adminPersonalityService = {
       subtitle: input.subtitle ?? existing.subtitle,
       slangTagline: input.slangTagline ?? existing.slangTagline,
       genreMapping: input.genreMapping ?? existing.genreMapping,
+      genreBindings: input.genreBindings ?? normalizeGenreBindings(existing.genreBindings),
       description: input.description ?? existing.description,
       imageUrl: input.imageUrl ?? existing.imageUrl,
       sortOrder: input.sortOrder ?? existing.sortOrder,
@@ -605,7 +651,10 @@ export const adminPersonalityService = {
     });
     const updated = await prisma.personalityResultType.update({
       where: { id },
-      data: normalized,
+      data: {
+        ...normalized,
+        genreBindings: normalized.genreBindings as Prisma.InputJsonValue,
+      },
     });
     return mapResultType(updated);
   },

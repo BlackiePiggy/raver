@@ -7,9 +7,12 @@ import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/a
 import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
+import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
+import { getApiUrl } from '@/lib/config';
 import {
   adminPersonalityApi,
   type AdminPersonalityConfig,
+  type PersonalityGenreBinding,
   type AdminPersonalityQuestion,
   type AdminPersonalityQuestionInput,
   type AdminPersonalityResultType,
@@ -26,12 +29,26 @@ type ResultDraft = {
   subtitle: string;
   slangTagline: string;
   genreMapping: string;
+  genreBindings: PersonalityGenreBinding[];
   description: string;
   imageUrl: string;
   sortOrder: string;
   isActive: boolean;
   isHidden: boolean;
   mbtiCode: string;
+};
+
+type GenreTreeSummaryNode = {
+  id: string;
+  name: string;
+  path: string;
+  children?: GenreTreeSummaryNode[];
+};
+
+type GenreSearchCandidate = {
+  id: string;
+  name: string;
+  path: string;
 };
 
 type QuestionDraftOption = {
@@ -59,6 +76,7 @@ const emptyResultDraft = (): ResultDraft => ({
   subtitle: '',
   slangTagline: '',
   genreMapping: '',
+  genreBindings: [],
   description: '',
   imageUrl: '',
   sortOrder: '0',
@@ -94,6 +112,7 @@ const buildResultDraft = (item: AdminPersonalityResultType | null): ResultDraft 
         subtitle: item.subtitle ?? '',
         slangTagline: item.slangTagline ?? '',
         genreMapping: item.genreMapping ?? '',
+        genreBindings: item.genreBindings ?? [],
         description: item.description,
         imageUrl: item.imageUrl ?? '',
         sortOrder: String(item.sortOrder ?? 0),
@@ -151,11 +170,47 @@ export default function AdminPersonalityPage() {
   const [debugSetQuestionIds, setDebugSetQuestionIds] = useState<string[]>([]);
   const [overlayAssets, setOverlayAssets] = useState<OverlayImageViewerAsset[]>([]);
   const [overlayIndex, setOverlayIndex] = useState<number | null>(null);
+  const [genreTree, setGenreTree] = useState<GenreTreeSummaryNode[]>([]);
+  const [genreSearch, setGenreSearch] = useState('');
+  const [genreSearchFocused, setGenreSearchFocused] = useState(false);
 
   useOverlayBodyLock(overlayIndex !== null);
 
   const selectedResult = resultTypes.find((item) => item.id === selectedResultTypeId) ?? null;
   const selectedQuestion = questions.find((item) => item.id === selectedQuestionId) ?? null;
+  const flattenedGenres = useMemo(() => {
+    const flatten = (items: GenreTreeSummaryNode[]): GenreSearchCandidate[] =>
+      items.flatMap((item) => [
+        {
+          id: item.id,
+          name: item.name,
+          path: item.path,
+        },
+        ...flatten(item.children ?? []),
+      ]);
+    return flatten(genreTree);
+  }, [genreTree]);
+  const genreSearchCandidates = useMemo(() => {
+    const keyword = genreSearch.trim().toLowerCase();
+    if (!keyword) return [];
+    const selectedIds = new Set(
+      resultDraft.genreBindings.map((binding) => binding.genreId).filter((value): value is string => Boolean(value))
+    );
+    return flattenedGenres
+      .filter((item) => !selectedIds.has(item.id))
+      .filter((item) => {
+        const haystacks = [item.name, item.path].map((value) => value.toLowerCase());
+        return haystacks.some((value) => value.includes(keyword));
+      })
+      .slice(0, 8);
+  }, [flattenedGenres, genreSearch, resultDraft.genreBindings]);
+  const canAddCustomGenreTag = useMemo(() => {
+    const keyword = genreSearch.trim();
+    if (!keyword) return false;
+    return !resultDraft.genreBindings.some(
+      (binding) => !binding.genreId && binding.label.trim().toLowerCase() === keyword.toLowerCase()
+    );
+  }, [genreSearch, resultDraft.genreBindings]);
 
   const loadAll = async () => {
     setLoading(true);
@@ -182,6 +237,21 @@ export default function AdminPersonalityPage() {
   useEffect(() => {
     if (!canRead) return;
     void loadAll();
+  }, [canRead]);
+
+  useEffect(() => {
+    if (!canRead) return;
+    const loadGenreTree = async () => {
+      try {
+        const payload = await authenticatedJsonFetch<{ data: GenreTreeSummaryNode[] }>(
+          getApiUrl('/v1/learn/genres/tree-summary')
+        );
+        setGenreTree(Array.isArray(payload.data) ? payload.data : []);
+      } catch (loadError) {
+        console.error('load personality genre tree summary failed', loadError);
+      }
+    };
+    void loadGenreTree();
   }, [canRead]);
 
   useEffect(() => {
@@ -243,6 +313,7 @@ export default function AdminPersonalityPage() {
       subtitle: resultDraft.subtitle || null,
       slangTagline: resultDraft.slangTagline || null,
       genreMapping: resultDraft.genreMapping || null,
+      genreBindings: resultDraft.genreBindings,
       description: resultDraft.description,
       imageUrl: resultDraft.imageUrl || null,
       sortOrder: Number(resultDraft.sortOrder) || 0,
@@ -356,6 +427,45 @@ export default function AdminPersonalityPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSelectGenreCandidate = (candidate: GenreSearchCandidate) => {
+    setResultDraft((current) => ({
+      ...current,
+      genreBindings: [
+        ...current.genreBindings,
+        {
+          label: candidate.name,
+          genreId: candidate.id,
+          path: candidate.path,
+        },
+      ],
+    }));
+    setGenreSearch('');
+  };
+
+  const handleAddCustomGenreTag = () => {
+    const keyword = genreSearch.trim();
+    if (!keyword) return;
+    setResultDraft((current) => ({
+      ...current,
+      genreBindings: [
+        ...current.genreBindings,
+        {
+          label: keyword,
+          genreId: null,
+          path: null,
+        },
+      ],
+    }));
+    setGenreSearch('');
+  };
+
+  const handleRemoveGenreBinding = (index: number) => {
+    setResultDraft((current) => ({
+      ...current,
+      genreBindings: current.genreBindings.filter((_, currentIndex) => currentIndex !== index),
+    }));
   };
 
   if (loading) {
@@ -566,7 +676,7 @@ export default function AdminPersonalityPage() {
               <div className="mt-5 grid gap-4 md:grid-cols-2">
                 <label className="block text-sm text-gray-700">
                   <span className="mb-1 block">Code</span>
-                  <input value={resultDraft.code} onChange={(e) => setResultDraft({ ...resultDraft, code: e.target.value })} className="w-full rounded-2xl border border-gray-200 px-4 py-2.5" disabled={!canWrite || saving || resultEditorMode === 'edit'} />
+                  <input value={resultDraft.code} onChange={(e) => setResultDraft({ ...resultDraft, code: e.target.value })} className="w-full rounded-2xl border border-gray-200 px-4 py-2.5" disabled={!canWrite || saving} />
                 </label>
                 <label className="block text-sm text-gray-700">
                   <span className="mb-1 block">名称</span>
@@ -580,12 +690,78 @@ export default function AdminPersonalityPage() {
                   <span className="mb-1 block">曲风对标</span>
                   <textarea value={resultDraft.genreMapping} onChange={(e) => setResultDraft({ ...resultDraft, genreMapping: e.target.value })} className="min-h-[110px] w-full rounded-2xl border border-gray-200 px-4 py-3" disabled={!canWrite || saving} />
                 </label>
+                <div className="text-sm text-gray-700 md:col-span-2">
+                  <span className="mb-1 block">绑定流派</span>
+                  <div className="rounded-2xl border border-gray-200 p-4">
+                    <div className="flex flex-wrap gap-2">
+                      {resultDraft.genreBindings.map((binding, index) => (
+                        <button
+                          key={`${binding.genreId ?? 'custom'}-${binding.label}-${index}`}
+                          type="button"
+                          onClick={() => handleRemoveGenreBinding(index)}
+                          disabled={!canWrite || saving}
+                          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
+                            binding.genreId
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                              : 'border-dashed border-gray-300 bg-gray-50 text-gray-700'
+                          }`}
+                          title={binding.path || binding.label}
+                        >
+                          <span>{binding.label}</span>
+                          <span className="text-[10px] opacity-70">{binding.genreId ? '库内' : '自定义'}</span>
+                        </button>
+                      ))}
+                      {resultDraft.genreBindings.length === 0 ? (
+                        <div className="rounded-full border border-dashed border-gray-200 px-3 py-1.5 text-xs text-gray-400">
+                          还没有绑定任何流派
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="relative mt-4">
+                      <input
+                        value={genreSearch}
+                        onChange={(event) => setGenreSearch(event.target.value)}
+                        onFocus={() => setGenreSearchFocused(true)}
+                        onBlur={() => window.setTimeout(() => setGenreSearchFocused(false), 120)}
+                        placeholder="搜索流派名称或路径，也可以直接添加自定义标签"
+                        className="w-full rounded-2xl border border-gray-200 px-4 py-2.5 text-sm"
+                        disabled={!canWrite || saving}
+                      />
+                      {genreSearchFocused && genreSearchCandidates.length > 0 ? (
+                        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
+                          {genreSearchCandidates.map((candidate) => (
+                            <button
+                              key={candidate.id}
+                              type="button"
+                              onClick={() => handleSelectGenreCandidate(candidate)}
+                              className="block w-full border-b border-gray-100 px-4 py-3 text-left transition last:border-b-0 hover:bg-gray-50"
+                            >
+                              <div className="text-sm font-medium text-gray-900">{candidate.name}</div>
+                              <div className="mt-1 text-xs text-gray-500">{candidate.path}</div>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleAddCustomGenreTag}
+                        disabled={!canWrite || saving || !canAddCustomGenreTag}
+                        className="rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 disabled:opacity-50"
+                      >
+                        添加自定义标签
+                      </button>
+                      <p className="text-xs text-gray-400">点击候选可绑定库内流派；也可以把库里没有的风格作为自定义标签加入。</p>
+                    </div>
+                  </div>
+                </div>
                 <label className="block text-sm text-gray-700 md:col-span-2">
                   <span className="mb-1 block">人设解读</span>
                   <textarea value={resultDraft.description} onChange={(e) => setResultDraft({ ...resultDraft, description: e.target.value })} className="min-h-[180px] w-full rounded-2xl border border-gray-200 px-4 py-3" disabled={!canWrite || saving} />
                 </label>
                 <label className="block text-sm text-gray-700">
-                  <span className="mb-1 block">MBTI Code</span>
+                  <span className="mb-1 block">EDMTI Code</span>
                   <input value={resultDraft.mbtiCode} onChange={(e) => setResultDraft({ ...resultDraft, mbtiCode: e.target.value })} className="w-full rounded-2xl border border-gray-200 px-4 py-2.5" disabled={!canWrite || saving} />
                 </label>
                 <label className="block text-sm text-gray-700">
