@@ -225,16 +225,16 @@ const buildCompressionSummaryText = (summary: UploadCompressionSummary): string 
     summary.originalBytes > 0 ? Math.max(0, Math.round((savedBytes / summary.originalBytes) * 100)) : 0;
 
   if (!summary.compressed || savedBytes <= 0) {
-    return `上传前 ${formatBytes(summary.originalBytes)} · 上传后 ${formatBytes(summary.uploadedBytes)} · 未发生压缩`;
+    return `${formatBytes(summary.originalBytes)} → ${formatBytes(summary.uploadedBytes)}`;
   }
 
-  return `上传前 ${formatBytes(summary.originalBytes)} · 上传后 ${formatBytes(summary.uploadedBytes)} · 缩减 ${savedPercent}%`;
+  return `${formatBytes(summary.originalBytes)} → ${formatBytes(summary.uploadedBytes)} · 压缩 ${savedPercent}%`;
 };
 
 /* ─── shared input style ─── */
 const inputCls = (multiline = false) =>
   `w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-gray-900 focus:ring-0 ${
-    multiline ? 'min-h-[96px] resize-y' : ''
+    multiline ? 'min-h-[80px] resize-y' : ''
   }`;
 
 const selectCls = () =>
@@ -246,10 +246,10 @@ const readOnlyInputCls = () =>
 /* ─── Field label wrapper ─── */
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-gray-500 tracking-wide">
+    <label className="flex flex-col gap-1">
+      <span className="text-[11px] font-medium text-gray-400 tracking-wide uppercase">
         {label}
-        {hint ? <span className="ml-1.5 font-normal text-gray-400">{hint}</span> : null}
+        {hint ? <span className="ml-1.5 font-normal normal-case text-gray-400">{hint}</span> : null}
       </span>
       {children}
     </label>
@@ -267,6 +267,20 @@ function Banner({ type, message }: { type: 'error' | 'notice'; message: string }
       }`}
     >
       {message}
+    </div>
+  );
+}
+
+/* ─── ID tooltip badge ─── */
+function IdTooltip({ id }: { id: string }) {
+  return (
+    <div className="group relative inline-flex items-center">
+      <span className="flex h-4 w-4 cursor-default items-center justify-center rounded-full border border-gray-300 text-[9px] font-bold text-gray-400 transition group-hover:border-gray-500 group-hover:text-gray-600 select-none">
+        i
+      </span>
+      <div className="pointer-events-none absolute left-5 top-1/2 z-20 -translate-y-1/2 whitespace-nowrap rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 font-mono text-[10px] text-gray-600 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+        {id}
+      </div>
     </div>
   );
 }
@@ -522,6 +536,7 @@ function QuizDeleteConfirmOverlay({
   );
 }
 
+/* ─── Image field: compact, no overflow ─── */
 function QuizImageField({
   imageUrl,
   alt,
@@ -546,9 +561,10 @@ function QuizImageField({
   const normalizedImageUrl = imageUrl.trim();
 
   return (
-    <div className="space-y-2.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-100">
+    <div className="space-y-2">
+      {/* action buttons row */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-100">
           <input type="file" accept="image/*" className="hidden" onChange={onUpload} />
           {uploading ? '上传中...' : uploadLabel}
         </label>
@@ -557,50 +573,55 @@ function QuizImageField({
             <button
               type="button"
               onClick={onPreview}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
+              className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
             >
               全屏查看
             </button>
             <button
               type="button"
               onClick={onRemove}
-              className="rounded-lg border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100"
+              className="rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100"
             >
-              移除图片
+              移除
             </button>
           </>
         ) : null}
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-[#f4f5f6] px-3 py-3">
-        {normalizedImageUrl ? (
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onPreview}
-              className="shrink-0 overflow-hidden rounded-md border border-gray-200 bg-white transition hover:opacity-90"
-              aria-label="打开大图预览"
-              title="点击查看大图"
+      {/* image preview box */}
+      {normalizedImageUrl ? (
+        <div className="flex items-start gap-2.5 overflow-hidden rounded-xl border border-gray-200 bg-[#f4f5f6] p-2.5">
+          {/* thumbnail */}
+          <button
+            type="button"
+            onClick={onPreview}
+            className="shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-white transition hover:opacity-90"
+            aria-label="打开大图预览"
+            title="点击查看大图"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={normalizedImageUrl} alt={alt} className="h-14 w-14 object-contain" />
+          </button>
+          {/* info */}
+          <div className="min-w-0 flex-1 overflow-hidden py-0.5">
+            <div
+              className="truncate text-[11px] text-gray-500 leading-snug"
+              title={normalizedImageUrl}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={normalizedImageUrl} alt={alt} className="h-12 w-12 object-cover" />
-            </button>
-            <div className="min-w-0 flex-1">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">Read Only URL</div>
-              <div className="mt-1 truncate text-xs text-gray-500" title={normalizedImageUrl}>
-                {normalizedImageUrl}
-              </div>
-              {uploadSummary ? (
-                <div className="mt-1 text-[11px] text-gray-400">
-                  {buildCompressionSummaryText(uploadSummary)}
-                </div>
-              ) : null}
+              {normalizedImageUrl.split('/').pop()?.split('?')[0] || normalizedImageUrl}
             </div>
+            {uploadSummary ? (
+              <div className="mt-1 text-[10px] text-gray-400">
+                {buildCompressionSummaryText(uploadSummary)}
+              </div>
+            ) : null}
           </div>
-        ) : (
-          <div className="text-xs text-gray-400">{emptyMessage}</div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-gray-200 bg-[#f4f5f6] px-3 py-2.5 text-xs text-gray-400">
+          {emptyMessage}
+        </div>
+      )}
     </div>
   );
 }
@@ -1094,17 +1115,18 @@ export default function AdminQuizPage() {
   return (
     <AdminAppShell title="答题系统" description="围绕主线维护题库、全局配置与用户级答题次数覆盖。" hidePageHeader>
       <div className="flex min-h-full flex-col bg-gray-50">
+
         {/* ── top header bar ── */}
         <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
           <div>
             <h1 className="text-xl font-bold text-gray-900">答题系统</h1>
             <p className="mt-0.5 text-sm text-gray-500">围绕主线维护题库、全局配置与用户级答题次数覆盖。</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => { void loadConfig(); void loadQuestions(); void loadOverrides(); void loadDebugSet(); }}
-              className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+              className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3.5 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
             >
               <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M1 8a7 7 0 1 1 .6 2.8M1 8V3m0 5H6" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1119,7 +1141,7 @@ export default function AdminQuizPage() {
                   form?.requestSubmit();
                 }}
                 disabled={!canWrite || questionSaving}
-                className="rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
+                className="rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
               >
                 {questionSaving ? '保存中...' : editorMode === 'edit' ? '保存题目' : '创建题目'}
               </button>
@@ -1132,7 +1154,7 @@ export default function AdminQuizPage() {
                   form?.requestSubmit();
                 }}
                 disabled={!canWrite || configSaving || configLoading}
-                className="rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
+                className="rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
               >
                 {configSaving ? '保存中...' : '保存配置'}
               </button>
@@ -1142,7 +1164,7 @@ export default function AdminQuizPage() {
                 type="button"
                 onClick={() => { void saveDebugSet(); }}
                 disabled={!canWrite || debugSetSaving}
-                className="rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
+                className="rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
               >
                 {debugSetSaving ? '保存中...' : '保存调试套题'}
               </button>
@@ -1151,7 +1173,7 @@ export default function AdminQuizPage() {
         </div>
 
         {/* ── tab bar ── */}
-        <div className="flex items-center gap-1 border-b border-gray-200 bg-white px-6 pt-3">
+        <div className="flex items-center gap-0.5 border-b border-gray-200 bg-white px-6 pt-2">
           {([
             ['config', '配置'],
             ['debug_set', '调试套题'],
@@ -1174,342 +1196,305 @@ export default function AdminQuizPage() {
         </div>
 
         {/* ── page body ── */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-5">
           {/* banners */}
-          {error ? <Banner type="error" message={error} /> : null}
+          {error ? <div className="mb-4"><Banner type="error" message={error} /></div> : null}
           {notice ? <div className="mb-4"><Banner type="notice" message={notice} /></div> : null}
 
-        {/* ══ CONFIG TAB ══ */}
-        {tab === 'config' ? (
-          <div className="mx-auto max-w-3xl">
-            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-              <div className="border-b border-gray-100 px-6 py-4">
-                <div className="text-xs font-semibold uppercase tracking-widest text-gray-400">Quiz Config</div>
-                <p className="mt-1 text-sm text-gray-500">控制答题系统的开关、抽题规模、通过标准和每日次数规则。</p>
-              </div>
-              <form id="config-form" onSubmit={submitConfig} className="p-6">
-                <div className="grid gap-5 sm:grid-cols-2">
-                  {/* toggles */}
-                  <Field label="系统启用">
-                    <label className="flex items-center gap-2.5 cursor-pointer">
-                      <div
-                        onClick={() => setConfigDraft((c) => ({ ...c, isEnabled: !c.isEnabled }))}
-                        className={`relative h-5 w-9 rounded-full transition-colors ${
-                          configDraft.isEnabled ? 'bg-gray-900' : 'bg-gray-300'
-                        }`}
-                      >
-                        <span
-                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                            configDraft.isEnabled ? 'translate-x-4' : 'translate-x-0.5'
-                          }`}
+          {/* ══ CONFIG TAB ══ */}
+          {tab === 'config' ? (
+            <div className="mx-auto max-w-2xl">
+              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <div className="border-b border-gray-100 px-6 py-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Quiz Config</div>
+                  <p className="mt-1 text-sm text-gray-500">控制答题系统的开关、抽题规模、通过标准和每日次数规则。</p>
+                </div>
+                <form id="config-form" onSubmit={submitConfig} className="p-6 space-y-6">
+                  {/* toggles section */}
+                  <div>
+                    <div className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-gray-300">开关</div>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      {([
+                        ['isEnabled', '系统启用'] as const,
+                        ['allowRetakeAfterPass', '通过后可重答'] as const,
+                        ['allowRestartDuringSession', '答题中可重启'] as const,
+                      ]).map(([key, label]) => (
+                        <label key={key} className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                          <span className="text-sm text-gray-700">{label}</span>
+                          <div
+                            onClick={() => setConfigDraft((c) => ({ ...c, [key]: !c[key] }))}
+                            className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${
+                              configDraft[key] ? 'bg-gray-900' : 'bg-gray-300'
+                            }`}
+                          >
+                            <span
+                              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                                configDraft[key] ? 'translate-x-4' : 'translate-x-0.5'
+                              }`}
+                            />
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* numbers section */}
+                  <div>
+                    <div className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-gray-300">参数</div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="答题数量">
+                        <input
+                          type="number"
+                          value={String(configDraft.questionCount ?? '')}
+                          onChange={(e) => setConfigDraft((c) => ({ ...c, questionCount: Number(e.target.value || 0) }))}
+                          className={inputCls()}
                         />
-                      </div>
-                      <span className="text-sm text-gray-700">{configDraft.isEnabled ? '已启用' : '未启用'}</span>
-                    </label>
-                  </Field>
-
-                  <Field label="通过后允许再次答题">
-                    <label className="flex items-center gap-2.5 cursor-pointer">
-                      <div
-                        onClick={() => setConfigDraft((c) => ({ ...c, allowRetakeAfterPass: !c.allowRetakeAfterPass }))}
-                        className={`relative h-5 w-9 rounded-full transition-colors ${
-                          configDraft.allowRetakeAfterPass ? 'bg-gray-900' : 'bg-gray-300'
-                        }`}
-                      >
-                        <span
-                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                            configDraft.allowRetakeAfterPass ? 'translate-x-4' : 'translate-x-0.5'
-                          }`}
+                      </Field>
+                      <Field label="通过所需正确题数">
+                        <input
+                          type="number"
+                          value={String(configDraft.passCorrectCount ?? '')}
+                          onChange={(e) => setConfigDraft((c) => ({ ...c, passCorrectCount: Number(e.target.value || 0) }))}
+                          className={inputCls()}
                         />
-                      </div>
-                      <span className="text-sm text-gray-700">{configDraft.allowRetakeAfterPass ? '允许' : '不允许'}</span>
-                    </label>
-                  </Field>
-
-                  <Field label="允许答题中重启">
-                    <label className="flex items-center gap-2.5 cursor-pointer">
-                      <div
-                        onClick={() => setConfigDraft((c) => ({ ...c, allowRestartDuringSession: !c.allowRestartDuringSession }))}
-                        className={`relative h-5 w-9 rounded-full transition-colors ${
-                          configDraft.allowRestartDuringSession ? 'bg-gray-900' : 'bg-gray-300'
-                        }`}
-                      >
-                        <span
-                          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                            configDraft.allowRestartDuringSession ? 'translate-x-4' : 'translate-x-0.5'
-                          }`}
+                      </Field>
+                      <Field label="默认每日次数">
+                        <input
+                          type="number"
+                          value={String(configDraft.dailyAttemptLimit ?? '')}
+                          onChange={(e) => setConfigDraft((c) => ({ ...c, dailyAttemptLimit: Number(e.target.value || 0) }))}
+                          className={inputCls()}
                         />
-                      </div>
-                      <span className="text-sm text-gray-700">{configDraft.allowRestartDuringSession ? '允许' : '不允许'}</span>
-                    </label>
-                  </Field>
+                      </Field>
+                      <Field label="默认单题时长（秒）">
+                        <input
+                          type="number"
+                          value={String(configDraft.defaultTimeLimitSec ?? '')}
+                          onChange={(e) => setConfigDraft((c) => ({ ...c, defaultTimeLimitSec: Number(e.target.value || 0) }))}
+                          className={inputCls()}
+                        />
+                      </Field>
+                      <Field label="日限额时区" hint="sm:col-span-2">
+                        <input
+                          value={String(configDraft.dailyLimitTimeZone ?? '')}
+                          onChange={(e) => setConfigDraft((c) => ({ ...c, dailyLimitTimeZone: e.target.value }))}
+                          className={inputCls()}
+                        />
+                      </Field>
+                    </div>
+                  </div>
 
-                  {/* number fields */}
-                  <Field label="答题数量">
-                    <input
-                      type="number"
-                      value={String(configDraft.questionCount ?? '')}
-                      onChange={(e) => setConfigDraft((c) => ({ ...c, questionCount: Number(e.target.value || 0) }))}
-                      className={inputCls()}
-                    />
-                  </Field>
-
-                  <Field label="通过所需正确题数">
-                    <input
-                      type="number"
-                      value={String(configDraft.passCorrectCount ?? '')}
-                      onChange={(e) => setConfigDraft((c) => ({ ...c, passCorrectCount: Number(e.target.value || 0) }))}
-                      className={inputCls()}
-                    />
-                  </Field>
-
-                  <Field label="默认每日次数">
-                    <input
-                      type="number"
-                      value={String(configDraft.dailyAttemptLimit ?? '')}
-                      onChange={(e) => setConfigDraft((c) => ({ ...c, dailyAttemptLimit: Number(e.target.value || 0) }))}
-                      className={inputCls()}
-                    />
-                  </Field>
-
-                  <Field label="默认单题时长（秒）">
-                    <input
-                      type="number"
-                      value={String(configDraft.defaultTimeLimitSec ?? '')}
-                      onChange={(e) => setConfigDraft((c) => ({ ...c, defaultTimeLimitSec: Number(e.target.value || 0) }))}
-                      className={inputCls()}
-                    />
-                  </Field>
-
-                  <Field label="日限额时区">
-                    <input
-                      value={String(configDraft.dailyLimitTimeZone ?? '')}
-                      onChange={(e) => setConfigDraft((c) => ({ ...c, dailyLimitTimeZone: e.target.value }))}
-                      className={inputCls()}
-                    />
-                  </Field>
-                </div>
-
-                <div className="mt-6 flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                  <span className="text-xs text-gray-400">
-                    最后更新：{config ? formatTime(config.updatedAt) : configLoading ? '加载中...' : '-'}
-                  </span>
-                  <button
-                    type="submit"
-                    disabled={!canWrite || configSaving || configLoading}
-                    className="rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
-                  >
-                    {configSaving ? '保存中...' : '保存配置'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        ) : null}
-
-        {/* ══ DEBUG SET TAB ══ */}
-        {tab === 'debug_set' ? (
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-widest text-gray-400">Debug Question Picker</div>
-                  <p className="mt-0.5 text-sm text-gray-500">从现有题库中挑选题目组成 admin-only 调试套题，用于排版验证。</p>
-                </div>
-                <div className="text-xs text-gray-400">
-                  已选 {debugSetQuestionIds.length} 题
-                </div>
-              </div>
-
-              <div className="border-b border-gray-100 px-5 py-4">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    setQuestionPage(1);
-                    setQuestionQuery(questionQueryInput);
-                  }}
-                  className="flex flex-wrap gap-2"
-                >
-                  <input
-                    value={questionQueryInput}
-                    onChange={(e) => setQuestionQueryInput(e.target.value)}
-                    placeholder="搜索题干 / 难度 / 题目 ID"
-                    className={inputCls() + ' min-w-[220px] flex-1'}
-                  />
-                  <select
-                    value={questionStatus}
-                    onChange={(e) => {
-                      setQuestionPage(1);
-                      setQuestionStatus(e.target.value as QuizQuestionStatus | '');
-                    }}
-                    className={selectCls() + ' max-w-[160px]'}
-                  >
-                    <option value="">全部状态</option>
-                    <option value="draft">draft</option>
-                    <option value="active">active</option>
-                    <option value="archived">archived</option>
-                  </select>
-                  <button
-                    type="submit"
-                    className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100"
-                  >
-                    搜索
-                  </button>
+                  <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                    <span className="text-xs text-gray-400">
+                      最后更新：{config ? formatTime(config.updatedAt) : configLoading ? '加载中...' : '-'}
+                    </span>
+                    <button
+                      type="submit"
+                      disabled={!canWrite || configSaving || configLoading}
+                      className="rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
+                    >
+                      {configSaving ? '保存中...' : '保存配置'}
+                    </button>
+                  </div>
                 </form>
               </div>
+            </div>
+          ) : null}
 
-              <div className="divide-y divide-gray-100">
-                {questionLoading ? (
-                  <div className="px-5 py-8 text-center text-sm text-gray-400">加载题库中...</div>
-                ) : questions.length === 0 ? (
-                  <div className="px-5 py-8 text-center text-sm text-gray-400">当前筛选条件下没有题目</div>
-                ) : (
-                  questions.map((item) => {
-                    const inDebugSet = debugSetQuestionIds.includes(item.id);
-                    return (
-                      <div key={`debug-library-${item.id}`} className="flex items-start justify-between gap-4 px-5 py-4">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadgeClass(item.status)}`}>
-                              {item.status}
-                            </span>
-                            <span className="font-mono text-[10px] text-gray-400">{item.id}</span>
+          {/* ══ DEBUG SET TAB ══ */}
+          {tab === 'debug_set' ? (
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+              {/* left: question picker */}
+              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Debug Question Picker</div>
+                    <p className="mt-0.5 text-sm text-gray-500">从现有题库中挑选题目组成 admin-only 调试套题。</p>
+                  </div>
+                  <span className="text-xs text-gray-400">已选 {debugSetQuestionIds.length} 题</span>
+                </div>
+
+                <div className="border-b border-gray-100 px-5 py-3">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      setQuestionPage(1);
+                      setQuestionQuery(questionQueryInput);
+                    }}
+                    className="flex flex-wrap gap-2"
+                  >
+                    <input
+                      value={questionQueryInput}
+                      onChange={(e) => setQuestionQueryInput(e.target.value)}
+                      placeholder="搜索题干 / 难度 / 题目 ID"
+                      className={inputCls() + ' min-w-[180px] flex-1'}
+                    />
+                    <select
+                      value={questionStatus}
+                      onChange={(e) => {
+                        setQuestionPage(1);
+                        setQuestionStatus(e.target.value as QuizQuestionStatus | '');
+                      }}
+                      className={selectCls() + ' max-w-[140px]'}
+                    >
+                      <option value="">全部状态</option>
+                      <option value="draft">draft</option>
+                      <option value="active">active</option>
+                      <option value="archived">archived</option>
+                    </select>
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100"
+                    >
+                      搜索
+                    </button>
+                  </form>
+                </div>
+
+                <div className="divide-y divide-gray-100">
+                  {questionLoading ? (
+                    <div className="px-5 py-8 text-center text-sm text-gray-400">加载题库中...</div>
+                  ) : questions.length === 0 ? (
+                    <div className="px-5 py-8 text-center text-sm text-gray-400">当前筛选条件下没有题目</div>
+                  ) : (
+                    questions.map((item) => {
+                      const inDebugSet = debugSetQuestionIds.includes(item.id);
+                      return (
+                        <div key={`debug-library-${item.id}`} className="flex items-center justify-between gap-4 px-5 py-3.5">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadgeClass(item.status)}`}>
+                                {item.status}
+                              </span>
+                              <IdTooltip id={item.id} />
+                            </div>
+                            <div className="line-clamp-2 text-sm font-medium text-gray-900">
+                              {item.stemText || '未填写题干'}
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-gray-400">
+                              <span>{item.options.length} 个选项</span>
+                              <span>·</span>
+                              <span>{item.timeLimitSec ?? '-'} 秒</span>
+                              {item.difficulty ? <><span>·</span><span>{item.difficulty}</span></> : null}
+                            </div>
                           </div>
-                          <div className="mt-2 line-clamp-2 text-sm font-medium text-gray-900">
-                            {item.stemText || '未填写题干'}
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-gray-400">
-                            <span>{item.options.length} 个选项</span>
-                            <span>•</span>
-                            <span>时长 {item.timeLimitSec ?? '-'} 秒</span>
-                            <span>•</span>
-                            <span>难度 {item.difficulty || '-'}</span>
-                          </div>
+                          <button
+                            type="button"
+                            disabled={!canWrite || inDebugSet}
+                            onClick={() => addQuestionToDebugSet(item)}
+                            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                              inDebugSet
+                                ? 'cursor-not-allowed border border-emerald-200 bg-emerald-50 text-emerald-600'
+                                : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            {inDebugSet ? '✓ 已加入' : '加入'}
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          disabled={!canWrite || inDebugSet}
-                          onClick={() => addQuestionToDebugSet(item)}
-                          className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                            inDebugSet
-                              ? 'cursor-not-allowed border border-emerald-200 bg-emerald-50 text-emerald-600'
-                              : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
-                          {inDebugSet ? '已加入' : '加入调试套题'}
-                        </button>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+                      );
+                    })
+                  )}
+                </div>
 
-              <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 text-sm text-gray-500">
-                <span>
-                  第 {questionPage} / {totalQuestionPages} 页，共 {questionTotal} 题
-                </span>
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    disabled={questionPage <= 1}
-                    onClick={() => setQuestionPage((page) => Math.max(1, page - 1))}
-                    className="rounded-full border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-40"
-                  >
-                    上一页
-                  </button>
-                  <button
-                    type="button"
-                    disabled={questionPage >= totalQuestionPages}
-                    onClick={() => setQuestionPage((page) => Math.min(totalQuestionPages, page + 1))}
-                    className="rounded-full border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-40"
-                  >
-                    下一页
-                  </button>
+                <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 text-xs text-gray-500">
+                  <span>第 {questionPage} / {totalQuestionPages} 页 · 共 {questionTotal} 题</span>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      disabled={questionPage <= 1}
+                      onClick={() => setQuestionPage((page) => Math.max(1, page - 1))}
+                      className="rounded-full border border-gray-200 px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40"
+                    >
+                      上一页
+                    </button>
+                    <button
+                      type="button"
+                      disabled={questionPage >= totalQuestionPages}
+                      onClick={() => setQuestionPage((page) => Math.min(totalQuestionPages, page + 1))}
+                      className="rounded-full border border-gray-200 px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40"
+                    >
+                      下一页
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-              <div className="border-b border-gray-100 px-5 py-4">
-                <div className="text-xs font-semibold uppercase tracking-widest text-gray-400">Current Debug Set</div>
-                <p className="mt-0.5 text-sm text-gray-500">iOS admin 开始页会读取这一套题，按这里保存的顺序出题。</p>
-              </div>
+              {/* right: current debug set */}
+              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <div className="border-b border-gray-100 px-5 py-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Current Debug Set</div>
+                  <p className="mt-0.5 text-sm text-gray-500">iOS admin 开始页会按此顺序出题。</p>
+                </div>
 
-              <div className="divide-y divide-gray-100">
-                {debugSetLoading ? (
-                  <div className="px-5 py-8 text-center text-sm text-gray-400">加载调试套题中...</div>
-                ) : debugSetItems.length === 0 ? (
-                  <div className="px-5 py-8 text-center text-sm text-gray-400">还没有加入任何调试题目</div>
-                ) : (
-                  debugSetItems.map((item, index) => (
-                    <div key={`debug-selected-${item.id}`} className="px-5 py-4">
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-900 text-[11px] font-semibold text-white">
+                <div className="divide-y divide-gray-100">
+                  {debugSetLoading ? (
+                    <div className="px-5 py-8 text-center text-sm text-gray-400">加载调试套题中...</div>
+                  ) : debugSetItems.length === 0 ? (
+                    <div className="px-5 py-8 text-center text-sm text-gray-400">还没有加入任何调试题目</div>
+                  ) : (
+                    debugSetItems.map((item, index) => (
+                      <div key={`debug-selected-${item.id}`} className="flex items-start gap-3 px-4 py-3.5">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-900 text-[11px] font-semibold text-white mt-0.5">
                           {index + 1}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="line-clamp-2 text-sm font-medium text-gray-900">{item.stemText || '未填写题干'}</div>
-                          <div className="mt-1 font-mono text-[10px] text-gray-400">{item.id}</div>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              disabled={!canWrite || index === 0}
+                              onClick={() => moveDebugSetQuestion(item.id, 'up')}
+                              className="rounded-full border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!canWrite || index === debugSetItems.length - 1}
+                              onClick={() => moveDebugSetQuestion(item.id, 'down')}
+                              className="rounded-full border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                            >
+                              ↓
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!canWrite}
+                              onClick={() => removeQuestionFromDebugSet(item.id)}
+                              className="rounded-full border border-red-100 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
+                            >
+                              移除
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          disabled={!canWrite || index === 0}
-                          onClick={() => moveDebugSetQuestion(item.id, 'up')}
-                          className="rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40"
-                        >
-                          上移
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!canWrite || index === debugSetItems.length - 1}
-                          onClick={() => moveDebugSetQuestion(item.id, 'down')}
-                          className="rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40"
-                        >
-                          下移
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!canWrite}
-                          onClick={() => removeQuestionFromDebugSet(item.id)}
-                          className="rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
-                        >
-                          移除
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+                    ))
+                  )}
+                </div>
 
-              <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 text-sm text-gray-500">
-                <span>共 {debugSetQuestionIds.length} 题</span>
-                <button
-                  type="button"
-                  disabled={!canWrite || debugSetSaving}
-                  onClick={() => void saveDebugSet()}
-                  className="rounded-full bg-gray-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
-                >
-                  {debugSetSaving ? '保存中...' : '保存调试套题'}
-                </button>
+                <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 text-xs text-gray-500">
+                  <span>共 {debugSetQuestionIds.length} 题</span>
+                  <button
+                    type="button"
+                    disabled={!canWrite || debugSetSaving}
+                    onClick={() => void saveDebugSet()}
+                    className="rounded-full bg-gray-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
+                  >
+                    {debugSetSaving ? '保存中...' : '保存'}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {/* ══ QUESTIONS TAB ══ */}
-        {tab === 'questions' ? (
-          <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_340px]">
+          {/* ══ QUESTIONS TAB ══ */}
+          {tab === 'questions' ? (
+            <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)_320px]">
 
-            {/* ── col 1: question list ── */}
-            <div className="flex flex-col gap-3">
-              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+              {/* ── col 1: question list ── */}
+              <div className="flex flex-col gap-0 rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                {/* header */}
                 <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-widest text-gray-400">Question Library</div>
-                    <p className="mt-0.5 text-xs text-gray-400">搜索、筛选题目并进入右侧编辑器。</p>
-                  </div>
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">题库</div>
                   <button
                     type="button"
                     onClick={() => {
@@ -1520,56 +1505,54 @@ export default function AdminQuizPage() {
                     }}
                     className="rounded-full bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 transition"
                   >
-                    新建题目
+                    新建
                   </button>
                 </div>
 
-                <div className="p-3">
-                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                {/* toolbar */}
+                <div className="border-b border-gray-100 px-3 py-2.5 space-y-2">
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => {
                         setImportFeedback(null);
                         setShowImportOverlay(true);
                       }}
-                      className="rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-500 transition hover:border-gray-400 hover:text-gray-700"
+                      className="rounded-full border border-dashed border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-500 transition hover:border-gray-400 hover:text-gray-700"
                     >
                       ＋ 批量导入
                     </button>
                     <button
                       type="button"
                       onClick={() => {
-                        if (multiSelectMode) {
-                          exitMultiSelectMode();
-                          return;
-                        }
+                        if (multiSelectMode) { exitMultiSelectMode(); return; }
                         setMultiSelectMode(true);
                         setSelectedQuestionIds([]);
                       }}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                      className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
                         multiSelectMode
                           ? 'border-gray-900 bg-gray-900 text-white'
                           : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
                       }`}
                     >
-                      {multiSelectMode ? '退出多选' : '多选操作'}
+                      {multiSelectMode ? '退出多选' : '多选'}
                     </button>
                     {multiSelectMode ? (
                       <>
                         <button
                           type="button"
                           onClick={handleToggleQuestionSelectAll}
-                          className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
+                          className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
                         >
-                          当前页全选
+                          全选
                         </button>
                         <button
                           type="button"
                           onClick={() => setShowBulkDeleteConfirm(true)}
                           disabled={!canWrite || selectedQuestionIds.length === 0 || bulkDeletingQuestions}
-                          className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+                          className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
                         >
-                          {bulkDeletingQuestions ? '删除中...' : `删除已选 ${selectedQuestionIds.length}`}
+                          {bulkDeletingQuestions ? '删除中...' : `删 ${selectedQuestionIds.length}`}
                         </button>
                       </>
                     ) : null}
@@ -1578,7 +1561,7 @@ export default function AdminQuizPage() {
                   {/* search */}
                   <form
                     onSubmit={(e) => { e.preventDefault(); setQuestionPage(1); setQuestionQuery(questionQueryInput); }}
-                    className="space-y-2"
+                    className="space-y-1.5"
                   >
                     <input
                       value={questionQueryInput}
@@ -1586,11 +1569,11 @@ export default function AdminQuizPage() {
                       placeholder="搜索题干 / 难度 / id"
                       className={inputCls()}
                     />
-                    <div className="flex gap-2">
+                    <div className="flex gap-1.5">
                       <select
                         value={questionStatus}
                         onChange={(e) => { setQuestionStatus(e.target.value as QuizQuestionStatus | ''); setQuestionPage(1); }}
-                        className={selectCls() + ' flex-1'}
+                        className={selectCls() + ' flex-1 text-xs'}
                       >
                         <option value="">全部状态</option>
                         <option value="draft">draft</option>
@@ -1605,20 +1588,17 @@ export default function AdminQuizPage() {
                       </button>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-gray-400">每页展示数量</span>
+                      <span className="text-[11px] text-gray-400">每页</span>
                       <select
                         value={String(questionPageSize)}
                         onChange={(e) => {
-                          const next = Number(e.target.value || 10);
-                          setQuestionPageSize(next);
+                          setQuestionPageSize(Number(e.target.value || 10));
                           setQuestionPage(1);
                         }}
-                        className="w-[112px] rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 outline-none transition focus:border-gray-900"
+                        className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 outline-none focus:border-gray-900"
                       >
                         {QUESTION_PAGE_SIZE_OPTIONS.map((size) => (
-                          <option key={size} value={size}>
-                            {size} / 页
-                          </option>
+                          <option key={size} value={size}>{size} 条</option>
                         ))}
                       </select>
                     </div>
@@ -1626,7 +1606,7 @@ export default function AdminQuizPage() {
                 </div>
 
                 {/* question cards */}
-                <div className="divide-y divide-gray-100">
+                <div className="flex-1 divide-y divide-gray-100 overflow-y-auto">
                   {questionLoading ? (
                     <div className="px-4 py-6 text-center text-xs text-gray-400">加载中...</div>
                   ) : questions.length === 0 ? (
@@ -1640,10 +1620,7 @@ export default function AdminQuizPage() {
                           key={item.id}
                           type="button"
                           onClick={() => {
-                            if (multiSelectMode) {
-                              toggleQuestionMultiSelect(item.id);
-                              return;
-                            }
+                            if (multiSelectMode) { toggleQuestionMultiSelect(item.id); return; }
                             setSelectedQuestionId(item.id);
                             setEditorMode('edit');
                             setQuestionDraft(createDraftFromQuestion(item));
@@ -1654,37 +1631,34 @@ export default function AdminQuizPage() {
                         >
                           <div className="flex items-start justify-between gap-2">
                             {multiSelectMode ? (
-                              <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border border-gray-300 bg-white">
+                              <div className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border border-gray-300 bg-white">
                                 {isChecked ? (
-                                  <svg className="h-3.5 w-3.5 text-red-600" viewBox="0 0 12 12" fill="none">
+                                  <svg className="h-3 w-3 text-red-600" viewBox="0 0 12 12" fill="none">
                                     <path d="M2 6l2.5 2.5L10 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                                   </svg>
                                 ) : null}
                               </div>
                             ) : null}
                             <div className="min-w-0 flex-1">
-                              <div className="line-clamp-2 text-sm font-semibold text-gray-900">{item.stemText}</div>
-                              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusBadgeClass(item.status)}`}>
+                              <div className="line-clamp-2 text-sm font-medium text-gray-900 leading-snug">{item.stemText}</div>
+                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusBadgeClass(item.status)}`}>
                                   {item.status}
                                 </span>
-                                <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] text-gray-500">
-                                  选项 {item.options.length}
-                                </span>
-                                <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] text-gray-500">
-                                  限时 {item.timeLimitSec ?? '-'}
-                                </span>
+                                <span className="text-[10px] text-gray-400">{item.options.length}选 · {item.timeLimitSec ?? '-'}s</span>
+                                <IdTooltip id={item.id} />
                               </div>
-                              <div className="mt-1.5 truncate font-mono text-[10px] text-gray-400">{item.id}</div>
                             </div>
-                            {!multiSelectMode && isSelected ? (
-                              <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500">
-                                <svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none">
-                                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
+                            {!multiSelectMode ? (
+                              <div className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full ${
+                                isSelected ? 'bg-emerald-500' : 'border-2 border-gray-200'
+                              }`}>
+                                {isSelected ? (
+                                  <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 12 12" fill="none">
+                                    <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                ) : null}
                               </div>
-                            ) : !multiSelectMode ? (
-                              <div className="mt-0.5 h-5 w-5 flex-shrink-0 rounded-full border-2 border-gray-200" />
                             ) : null}
                           </div>
                         </button>
@@ -1694,104 +1668,86 @@ export default function AdminQuizPage() {
                 </div>
 
                 {/* pagination */}
-                <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3 text-xs text-gray-500">
-                  <span>
-                    {questionPage} / {totalQuestionPages} · 共 {questionTotal} 条 · 当前每页 {questionPageSize} 条
-                  </span>
+                <div className="flex items-center justify-between border-t border-gray-100 px-4 py-2.5 text-[11px] text-gray-500">
+                  <span>{questionPage}/{totalQuestionPages} · {questionTotal} 条</span>
                   <div className="flex gap-1">
                     <button
                       type="button"
                       disabled={questionPage <= 1}
                       onClick={() => setQuestionPage((p) => Math.max(1, p - 1))}
-                      className="rounded border border-gray-200 px-2.5 py-1 disabled:opacity-40 hover:bg-gray-50"
-                    >
-                      ‹
-                    </button>
+                      className="rounded border border-gray-200 px-2 py-1 disabled:opacity-40 hover:bg-gray-50"
+                    >‹</button>
                     <button
                       type="button"
                       disabled={questionPage >= totalQuestionPages}
                       onClick={() => setQuestionPage((p) => Math.min(totalQuestionPages, p + 1))}
-                      className="rounded border border-gray-200 px-2.5 py-1 disabled:opacity-40 hover:bg-gray-50"
+                      className="rounded border border-gray-200 px-2 py-1 disabled:opacity-40 hover:bg-gray-50"
+                    >›</button>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── col 2: question editor ── */}
+              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3.5">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+                      {editorMode === 'edit' ? 'Question Editor' : 'New Question'}
+                    </div>
+                    <p className="mt-0.5 text-xs text-gray-400">单选题 · 正确答案从右侧选项列表设置</p>
+                  </div>
+                  {editorMode === 'edit' && selectedQuestionId ? (
+                    <button
+                      type="button"
+                      onClick={archiveQuestion}
+                      disabled={!canWrite || questionSaving}
+                      className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-50"
                     >
-                      ›
+                      归档
                     </button>
-                  </div>
+                  ) : null}
                 </div>
-              </div>
-            </div>
 
-            {/* ── col 2: question editor ── */}
-            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-widest text-gray-400">
-                    {editorMode === 'edit' ? 'Question Editor' : 'Create Question'}
+                <form id="question-form" onSubmit={submitQuestion} className="p-5 space-y-4">
+                  {/* row 1: status + time */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="状态">
+                      <select
+                        value={questionDraft.status}
+                        onChange={(e) => setQuestionDraft((c) => ({ ...c, status: e.target.value as QuizQuestionStatus }))}
+                        className={selectCls()}
+                      >
+                        <option value="draft">draft</option>
+                        <option value="active">active</option>
+                        <option value="archived">archived</option>
+                      </select>
+                    </Field>
+                    <Field label="时长（秒）">
+                      <input
+                        type="number"
+                        value={questionDraft.timeLimitSec}
+                        onChange={(e) => setQuestionDraft((c) => ({ ...c, timeLimitSec: e.target.value }))}
+                        placeholder={configDraft.defaultTimeLimitSec ? `默认 ${configDraft.defaultTimeLimitSec}` : undefined}
+                        className={inputCls()}
+                      />
+                    </Field>
                   </div>
-                  <p className="mt-0.5 text-xs text-gray-400">当前版本只支持单选题。正确答案从右侧选项列表点击设置，排序值由系统自动维护。</p>
-                </div>
-                {editorMode === 'edit' && selectedQuestionId ? (
-                  <button
-                    type="button"
-                    onClick={archiveQuestion}
-                    disabled={!canWrite || questionSaving}
-                    className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-50"
-                  >
-                    归档
-                  </button>
-                ) : null}
-              </div>
 
-              <form id="question-form" onSubmit={submitQuestion} className="p-5 space-y-5">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="题目状态">
-                    <select
-                      value={questionDraft.status}
-                      onChange={(e) => setQuestionDraft((c) => ({ ...c, status: e.target.value as QuizQuestionStatus }))}
-                      className={selectCls()}
-                    >
-                      <option value="draft">draft</option>
-                      <option value="active">active</option>
-                      <option value="archived">archived</option>
-                    </select>
-                  </Field>
-
-                  <Field label="正确答案 optionId" hint="通过右侧选项列表点击设置">
-                    <input
-                      value={questionDraft.correctOptionId}
-                      readOnly
-                      className={readOnlyInputCls()}
+                  {/* stem text */}
+                  <Field label="题干">
+                    <textarea
+                      value={questionDraft.stemText}
+                      onChange={(e) => setQuestionDraft((c) => ({ ...c, stemText: e.target.value }))}
+                      className={inputCls(true)}
                     />
                   </Field>
 
-                  <Field label="单题时长（秒）">
-                    <input
-                      type="number"
-                      value={questionDraft.timeLimitSec}
-                      onChange={(e) => setQuestionDraft((c) => ({ ...c, timeLimitSec: e.target.value }))}
-                      placeholder={
-                        configDraft.defaultTimeLimitSec
-                          ? `默认 ${configDraft.defaultTimeLimitSec} 秒`
-                          : undefined
-                      }
-                      className={inputCls()}
-                    />
-                  </Field>
-                </div>
-
-                <Field label="题干文本">
-                  <textarea
-                    value={questionDraft.stemText}
-                    onChange={(e) => setQuestionDraft((c) => ({ ...c, stemText: e.target.value }))}
-                    className={inputCls(true)}
-                  />
-                </Field>
-
-                <div className="grid gap-4 sm:grid-cols-2">
+                  {/* stem image */}
                   <Field label="题干图片">
                     <QuizImageField
                       imageUrl={questionDraft.stemImageUrl}
                       alt="题干图片"
-                      uploadLabel="上传题干图片"
+                      uploadLabel="上传图片"
                       uploading={uploadingTarget === 'stem'}
                       uploadSummary={uploadCompressionByTarget.stem ?? null}
                       onUpload={(e) => void uploadImage(e, 'stem')}
@@ -1801,407 +1757,417 @@ export default function AdminQuizPage() {
                     />
                   </Field>
 
-                  <Field label="标签" hint="逗号分隔">
-                    <input
-                      value={questionDraft.tags}
-                      onChange={(e) => setQuestionDraft((c) => ({ ...c, tags: e.target.value }))}
-                      className={inputCls()}
+                  {/* row: tags + difficulty */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="标签" hint="逗号分隔">
+                      <input
+                        value={questionDraft.tags}
+                        onChange={(e) => setQuestionDraft((c) => ({ ...c, tags: e.target.value }))}
+                        className={inputCls()}
+                      />
+                    </Field>
+                    <Field label="难度">
+                      <select
+                        value={questionDraft.difficulty}
+                        onChange={(e) => setQuestionDraft((c) => ({ ...c, difficulty: e.target.value }))}
+                        className={selectCls()}
+                      >
+                        <option value="">不设置</option>
+                        <option value="easy">easy</option>
+                        <option value="medium">medium</option>
+                        <option value="hard">hard</option>
+                      </select>
+                    </Field>
+                  </div>
+
+                  {/* correct option id — read only, subtle */}
+                  <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                    <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide shrink-0">正确答案</span>
+                    <span className="font-mono text-[11px] text-gray-500 truncate">{questionDraft.correctOptionId || '—'}</span>
+                  </div>
+
+                  {/* explanation */}
+                  <Field label="解释" hint="后台维护，答题中不展示">
+                    <textarea
+                      value={questionDraft.explanation}
+                      onChange={(e) => setQuestionDraft((c) => ({ ...c, explanation: e.target.value }))}
+                      placeholder="请输入解释说明"
+                      className={inputCls(true)}
                     />
                   </Field>
-                </div>
 
-                <Field label="难度">
-                  <select
-                    value={questionDraft.difficulty}
-                    onChange={(e) => setQuestionDraft((c) => ({ ...c, difficulty: e.target.value }))}
-                    className={selectCls()}
-                  >
-                    <option value="">请选择难度</option>
-                    <option value="easy">easy</option>
-                    <option value="medium">medium</option>
-                    <option value="hard">hard</option>
-                  </select>
-                </Field>
-
-                <Field label="解释说明" hint="后台可维护，答题过程中不显示">
-                  <textarea
-                    value={questionDraft.explanation}
-                    onChange={(e) => setQuestionDraft((c) => ({ ...c, explanation: e.target.value }))}
-                    placeholder="请输入解释说明"
-                    className={inputCls(true)}
-                  />
-                </Field>
-
-                <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                  <span className="text-xs text-gray-400">
-                    {editorMode === 'edit' && selectedQuestion
-                      ? `最后更新：${formatTime(selectedQuestion.updatedAt)}`
-                      : '新建题目后会自动进入编辑状态'}
-                  </span>
-                  <button
-                    type="submit"
-                    disabled={!canWrite || questionSaving}
-                    className="rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
-                  >
-                    {questionSaving ? '保存中...' : editorMode === 'edit' ? '保存题目' : '创建题目'}
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* ── col 3: options + preview ── */}
-            <div className="flex flex-col gap-4">
-              {/* options panel */}
-              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-                  <div>
-                    <div className="text-sm font-semibold text-gray-900">选项列表</div>
-                    <div className="mt-0.5 text-xs text-gray-400">至少 2 个，最多 6 个。每个选项可文字、图片或图文同时存在。</div>
+                  <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                    <span className="text-xs text-gray-400">
+                      {editorMode === 'edit' && selectedQuestion
+                        ? `更新于 ${formatTime(selectedQuestion.updatedAt)}`
+                        : '创建后自动进入编辑状态'}
+                    </span>
+                    <button
+                      type="submit"
+                      disabled={!canWrite || questionSaving}
+                      className="rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
+                    >
+                      {questionSaving ? '保存中...' : editorMode === 'edit' ? '保存' : '创建'}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    disabled={questionDraft.options.length >= 6}
-                    onClick={() =>
-                      setQuestionDraft((c) => ({
-                        ...c,
-                        options: [...c.options, buildDraftOption(c.options.length)],
-                      }))
-                    }
-                    className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"
-                  >
-                    新增选项
-                  </button>
-                </div>
-
-                <div className="divide-y divide-gray-100">
-                  {questionDraft.options.map((option, index) => {
-                    const isCorrect = questionDraft.correctOptionId === option.id;
-                    const letter = OPTION_LETTERS[index] || String(index + 1);
-                    return (
-                      <div key={option.id} className="p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div
-                              className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-                                isCorrect
-                                  ? 'bg-emerald-500 text-white'
-                                  : 'border-2 border-gray-300 text-gray-500'
-                              }`}
-                            >
-                              {letter}
-                            </div>
-                            <span className="font-mono text-[10px] text-gray-400 truncate max-w-[180px]">{option.id}</span>
-                          </div>
-                          <button
-                            type="button"
-                            disabled={questionDraft.options.length <= 2}
-                            onClick={() =>
-                              setQuestionDraft((c) => {
-                                const nextOptions = c.options.filter((o) => o.id !== option.id);
-                                const nextCorrect =
-                                  c.correctOptionId === option.id
-                                    ? nextOptions[0]?.id || ''
-                                    : c.correctOptionId;
-                                return {
-                                  ...c,
-                                  correctOptionId: nextCorrect,
-                                  options: nextOptions.map((o, i) => ({ ...o, sortOrder: i })),
-                                };
-                              })
-                            }
-                            className="text-xs font-medium text-red-500 hover:text-red-700 disabled:opacity-40"
-                          >
-                            删除
-                          </button>
-                        </div>
-
-                        <div className="grid gap-2">
-                          <Field label="选项文本">
-                            <input
-                              value={option.text}
-                              onChange={(e) =>
-                                setQuestionDraft((c) => ({
-                                  ...c,
-                                  options: c.options.map((o) =>
-                                    o.id === option.id ? { ...o, text: e.target.value } : o
-                                  ),
-                                }))
-                              }
-                              className={inputCls()}
-                            />
-                          </Field>
-
-                          <Field label="选项图片">
-                            <QuizImageField
-                              imageUrl={option.imageUrl}
-                              alt={option.text || `选项 ${letter}`}
-                              uploadLabel="上传选项图片"
-                              uploading={uploadingTarget === option.id}
-                              uploadSummary={uploadCompressionByTarget[option.id] ?? null}
-                              onUpload={(e) => void uploadImage(e, option.id)}
-                              onRemove={() => clearImage(option.id)}
-                              onPreview={() =>
-                                openImagePreview(
-                                  option.imageUrl,
-                                  `选项 ${letter} 图片`,
-                                  option.text.trim() || `Option ${letter}`
-                                )
-                              }
-                              emptyMessage="未上传选项图片"
-                            />
-                          </Field>
-                        </div>
-
-                        <label className="flex cursor-pointer items-center gap-2">
-                          <div
-                            className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${
-                              isCorrect ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300'
-                            }`}
-                            onClick={() => setQuestionDraft((c) => ({ ...c, correctOptionId: option.id }))}
-                          >
-                            {isCorrect ? <div className="h-1.5 w-1.5 rounded-full bg-white" /> : null}
-                          </div>
-                          <span className="text-xs text-gray-500">设为正确答案</span>
-                        </label>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* preview panel */}
-              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-                  <div>
-                    <div className="text-sm font-semibold text-gray-900">题目预览</div>
-                    <div className="mt-0.5 text-xs text-gray-400">按当前草稿实时预览最终答题展示结构。</div>
-                  </div>
-                  <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] text-gray-500">
-                    单选题 · {questionDraft.options.length} 个选项
-                  </span>
-                </div>
-
-                <div className="p-4 space-y-3">
-                  <div className="text-[15px] font-semibold leading-6 text-gray-900">
-                    {questionDraft.stemText.trim() || '题干预览将在这里显示'}
-                  </div>
-
-                  {questionDraft.stemImageUrl.trim() ? (
-                    <div className="flex">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={questionDraft.stemImageUrl.trim()}
-                        alt="题干预览"
-                        className="max-h-56 w-[70%] rounded-[14px] border border-gray-100 bg-gray-50 object-contain"
-                      />
-                    </div>
-                  ) : null}
-
-                  {usesImageGridPreview(questionDraft.options) ? (
-                    <div className="grid grid-cols-2 gap-3">
-                      {questionDraft.options.map((option, index) => {
-                        const letter = OPTION_LETTERS[index] || String(index + 1);
-                        return (
-                          <div
-                            key={`preview-${option.id}`}
-                            className="relative overflow-hidden rounded-[16px] border border-gray-200 bg-gray-50"
-                          >
-                            {option.imageUrl.trim() ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={option.imageUrl.trim()}
-                                alt={`选项 ${letter}`}
-                                className="h-40 w-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-40 items-center justify-center text-xs text-gray-400">图片缺失</div>
-                            )}
-                            <div className="absolute left-3 top-3 rounded-full bg-black/55 px-2 py-1 text-[10px] font-bold text-white">
-                              {letter}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {questionDraft.options.map((option, index) => {
-                        const letter = OPTION_LETTERS[index] || String(index + 1);
-                        return (
-                          <div
-                            key={`preview-${option.id}`}
-                            className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5"
-                          >
-                            <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-300 bg-white text-xs font-bold text-gray-600">
-                              {letter}
-                            </div>
-                            <span className="text-[13px] text-gray-700">
-                              {previewOptionLabel(option.text, option.imageUrl)}
-                            </span>
-                            {option.imageUrl.trim() ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={option.imageUrl.trim()}
-                                alt={previewOptionLabel(option.text, option.imageUrl)}
-                                className="ml-auto h-10 w-10 rounded-lg border border-gray-200 object-cover"
-                              />
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {/* ══ OVERRIDES TAB ══ */}
-        {tab === 'overrides' ? (
-          <div className="mx-auto max-w-5xl">
-            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-              <div className="border-b border-gray-100 px-6 py-4">
-                <div className="text-xs font-semibold uppercase tracking-widest text-gray-400">User Attempt Overrides</div>
-                <p className="mt-1 text-sm text-gray-500">
-                  按用户设置 quiz 次数策略。<code className="rounded bg-gray-100 px-1 text-xs">default</code> 继承全局默认；
-                  <code className="rounded bg-gray-100 px-1 text-xs">custom_limit</code> 使用专属次数；
-                  <code className="rounded bg-gray-100 px-1 text-xs">unlimited</code> 供官方测试或特殊用户使用。
-                </p>
-              </div>
-
-              <div className="p-5">
-                <form
-                  onSubmit={(e) => { e.preventDefault(); setOverridePage(1); setOverrideQuery(overrideQueryInput); }}
-                  className="flex gap-2"
-                >
-                  <input
-                    value={overrideQueryInput}
-                    onChange={(e) => setOverrideQueryInput(e.target.value)}
-                    placeholder="搜索邮箱 / 用户名 / displayName / userId"
-                    className={inputCls() + ' flex-1'}
-                  />
-                  <button
-                    type="submit"
-                    className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition"
-                  >
-                    搜索
-                  </button>
                 </form>
               </div>
 
-              <div className="divide-y divide-gray-100">
-                {overrideLoading ? (
-                  <div className="px-6 py-8 text-center text-sm text-gray-400">加载用户覆盖中...</div>
-                ) : overrides.length === 0 ? (
-                  <div className="px-6 py-8 text-center text-sm text-gray-400">暂无用户覆盖数据</div>
-                ) : (
-                  overrides.map((item) => {
-                    const draft = overrideDrafts[item.userId] || {
-                      attemptMode: item.attemptMode,
-                      dailyAttemptLimitOverride: item.dailyAttemptLimitOverride ? String(item.dailyAttemptLimitOverride) : '',
-                      note: item.note || '',
-                    };
-                    return (
-                      <div key={item.id} className="px-5 py-4">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-                          {/* user info */}
-                          <div className="min-w-[200px]">
-                            <div className="text-sm font-semibold text-gray-900">
-                              {item.user.displayName || item.user.username}
+              {/* ── col 3: options + preview ── */}
+              <div className="flex flex-col gap-4">
+                {/* options panel */}
+                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">选项</div>
+                      <div className="mt-0.5 text-xs text-gray-400">2–6 个 · 可文字、图片或图文</div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={questionDraft.options.length >= 6}
+                      onClick={() =>
+                        setQuestionDraft((c) => ({
+                          ...c,
+                          options: [...c.options, buildDraftOption(c.options.length)],
+                        }))
+                      }
+                      className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"
+                    >
+                      + 新增
+                    </button>
+                  </div>
+
+                  <div className="divide-y divide-gray-100">
+                    {questionDraft.options.map((option, index) => {
+                      const isCorrect = questionDraft.correctOptionId === option.id;
+                      const letter = OPTION_LETTERS[index] || String(index + 1);
+                      return (
+                        <div key={option.id} className="p-3.5 space-y-2.5">
+                          {/* option header */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                                  isCorrect ? 'bg-emerald-500 text-white' : 'border-2 border-gray-300 text-gray-500'
+                                }`}
+                              >
+                                {letter}
+                              </div>
+                              <IdTooltip id={option.id} />
+                              {isCorrect ? (
+                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 border border-emerald-200">
+                                  正确答案
+                                </span>
+                              ) : null}
                             </div>
-                            <div className="text-sm text-gray-500">{item.user.email}</div>
-                            <div className="mt-0.5 font-mono text-[10px] text-gray-400">{item.userId}</div>
-                            <div className="mt-1 text-xs text-gray-400">更新：{formatTime(item.updatedAt)}</div>
-                          </div>
-
-                          {/* controls */}
-                          <div className="flex flex-1 flex-wrap items-center gap-2">
-                            <select
-                              value={draft.attemptMode}
-                              onChange={(e) =>
-                                setOverrideDrafts((c) => ({
-                                  ...c,
-                                  [item.userId]: { ...draft, attemptMode: e.target.value as QuizAttemptMode },
-                                }))
-                              }
-                              className={selectCls() + ' max-w-[160px]'}
-                            >
-                              <option value="default">default</option>
-                              <option value="custom_limit">custom_limit</option>
-                              <option value="unlimited">unlimited</option>
-                            </select>
-
-                            <input
-                              value={draft.dailyAttemptLimitOverride}
-                              disabled={draft.attemptMode !== 'custom_limit'}
-                              onChange={(e) =>
-                                setOverrideDrafts((c) => ({
-                                  ...c,
-                                  [item.userId]: { ...draft, dailyAttemptLimitOverride: e.target.value },
-                                }))
-                              }
-                              placeholder="专属次数"
-                              className={inputCls() + ' max-w-[120px]'}
-                            />
-
-                            <input
-                              value={draft.note}
-                              onChange={(e) =>
-                                setOverrideDrafts((c) => ({
-                                  ...c,
-                                  [item.userId]: { ...draft, note: e.target.value },
-                                }))
-                              }
-                              placeholder="备注，例如官方测试 / 白名单"
-                              className={inputCls() + ' flex-1 min-w-[180px]'}
-                            />
-
                             <button
                               type="button"
-                              onClick={() => void saveOverride(item.userId)}
-                              disabled={!canWrite || overrideSavingUserId === item.userId}
-                              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
+                              disabled={questionDraft.options.length <= 2}
+                              onClick={() =>
+                                setQuestionDraft((c) => {
+                                  const nextOptions = c.options.filter((o) => o.id !== option.id);
+                                  const nextCorrect =
+                                    c.correctOptionId === option.id ? nextOptions[0]?.id || '' : c.correctOptionId;
+                                  return {
+                                    ...c,
+                                    correctOptionId: nextCorrect,
+                                    options: nextOptions.map((o, i) => ({ ...o, sortOrder: i })),
+                                  };
+                                })
+                              }
+                              className="text-xs text-gray-400 hover:text-red-500 transition disabled:opacity-30"
                             >
-                              {overrideSavingUserId === item.userId ? '保存中...' : '保存'}
+                              删除
                             </button>
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
 
-              {/* pagination */}
-              <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 text-sm text-gray-500">
-                <span>
-                  第 {overridePage} / {totalOverridePages} 页，共 {overrideTotal} 条
-                </span>
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    disabled={overridePage <= 1}
-                    onClick={() => setOverridePage((p) => Math.max(1, p - 1))}
-                    className="rounded-full border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-40"
-                  >
-                    上一页
-                  </button>
-                  <button
-                    type="button"
-                    disabled={overridePage >= totalOverridePages}
-                    onClick={() => setOverridePage((p) => Math.min(totalOverridePages, p + 1))}
-                    className="rounded-full border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-40"
-                  >
-                    下一页
-                  </button>
+                          {/* text */}
+                          <input
+                            value={option.text}
+                            placeholder={`选项 ${letter} 文本`}
+                            onChange={(e) =>
+                              setQuestionDraft((c) => ({
+                                ...c,
+                                options: c.options.map((o) =>
+                                  o.id === option.id ? { ...o, text: e.target.value } : o
+                                ),
+                              }))
+                            }
+                            className={inputCls()}
+                          />
+
+                          {/* image */}
+                          <QuizImageField
+                            imageUrl={option.imageUrl}
+                            alt={option.text || `选项 ${letter}`}
+                            uploadLabel="上传图片"
+                            uploading={uploadingTarget === option.id}
+                            uploadSummary={uploadCompressionByTarget[option.id] ?? null}
+                            onUpload={(e) => void uploadImage(e, option.id)}
+                            onRemove={() => clearImage(option.id)}
+                            onPreview={() =>
+                              openImagePreview(
+                                option.imageUrl,
+                                `选项 ${letter} 图片`,
+                                option.text.trim() || `Option ${letter}`
+                              )
+                            }
+                            emptyMessage="未上传图片"
+                          />
+
+                          {/* set correct */}
+                          {!isCorrect ? (
+                            <button
+                              type="button"
+                              onClick={() => setQuestionDraft((c) => ({ ...c, correctOptionId: option.id }))}
+                              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-emerald-600 transition"
+                            >
+                              <div className="h-3.5 w-3.5 rounded-full border-2 border-gray-300" />
+                              设为正确答案
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* preview panel */}
+                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">预览</div>
+                      <div className="mt-0.5 text-xs text-gray-400">实时预览答题展示效果</div>
+                    </div>
+                    <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] text-gray-500">
+                      {questionDraft.options.length} 选项
+                    </span>
+                  </div>
+
+                  <div className="p-4 space-y-3">
+                    <div className="text-[15px] font-semibold leading-snug text-gray-900">
+                      {questionDraft.stemText.trim() || <span className="text-gray-300">题干预览</span>}
+                    </div>
+
+                    {questionDraft.stemImageUrl.trim() ? (
+                      <div className="flex">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={questionDraft.stemImageUrl.trim()}
+                          alt="题干预览"
+                          className="max-h-48 w-[70%] rounded-[12px] border border-gray-100 bg-gray-50 object-contain"
+                        />
+                      </div>
+                    ) : null}
+
+                    {usesImageGridPreview(questionDraft.options) ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        {questionDraft.options.map((option, index) => {
+                          const letter = OPTION_LETTERS[index] || String(index + 1);
+                          return (
+                            <div
+                              key={`preview-${option.id}`}
+                              className="relative overflow-hidden rounded-[14px] border border-gray-200 bg-gray-50"
+                            >
+                              {option.imageUrl.trim() ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={option.imageUrl.trim()} alt={`选项 ${letter}`} className="h-36 w-full object-cover" />
+                              ) : (
+                                <div className="flex h-36 items-center justify-center text-xs text-gray-400">图片缺失</div>
+                              )}
+                              <div className="absolute left-2.5 top-2.5 rounded-full bg-black/55 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                {letter}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {questionDraft.options.map((option, index) => {
+                          const letter = OPTION_LETTERS[index] || String(index + 1);
+                          const isCorrect = questionDraft.correctOptionId === option.id;
+                          return (
+                            <div
+                              key={`preview-${option.id}`}
+                              className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${
+                                isCorrect ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'
+                              }`}
+                            >
+                              <div className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border text-[10px] font-bold ${
+                                isCorrect ? 'border-emerald-400 bg-emerald-500 text-white' : 'border-gray-300 bg-white text-gray-600'
+                              }`}>
+                                {letter}
+                              </div>
+                              <span className="text-[13px] text-gray-700 flex-1">
+                                {previewOptionLabel(option.text, option.imageUrl)}
+                              </span>
+                              {option.imageUrl.trim() ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={option.imageUrl.trim()}
+                                  alt={previewOptionLabel(option.text, option.imageUrl)}
+                                  className="ml-auto h-9 w-9 rounded-lg border border-gray-200 object-contain bg-white"
+                                />
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+
+          {/* ══ OVERRIDES TAB ══ */}
+          {tab === 'overrides' ? (
+            <div className="mx-auto max-w-5xl">
+              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <div className="border-b border-gray-100 px-6 py-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">User Attempt Overrides</div>
+                  <p className="mt-1 text-sm text-gray-500">
+                    按用户设置 quiz 次数策略。
+                    <code className="mx-1 rounded bg-gray-100 px-1 text-xs">default</code>继承全局；
+                    <code className="mx-1 rounded bg-gray-100 px-1 text-xs">custom_limit</code>专属次数；
+                    <code className="mx-1 rounded bg-gray-100 px-1 text-xs">unlimited</code>不限次数。
+                  </p>
+                </div>
+
+                <div className="border-b border-gray-100 px-5 py-3">
+                  <form
+                    onSubmit={(e) => { e.preventDefault(); setOverridePage(1); setOverrideQuery(overrideQueryInput); }}
+                    className="flex gap-2"
+                  >
+                    <input
+                      value={overrideQueryInput}
+                      onChange={(e) => setOverrideQueryInput(e.target.value)}
+                      placeholder="搜索邮箱 / 用户名 / displayName / userId"
+                      className={inputCls() + ' flex-1'}
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition"
+                    >
+                      搜索
+                    </button>
+                  </form>
+                </div>
+
+                <div className="divide-y divide-gray-100">
+                  {overrideLoading ? (
+                    <div className="px-6 py-8 text-center text-sm text-gray-400">加载用户覆盖中...</div>
+                  ) : overrides.length === 0 ? (
+                    <div className="px-6 py-8 text-center text-sm text-gray-400">暂无用户覆盖数据</div>
+                  ) : (
+                    overrides.map((item) => {
+                      const draft = overrideDrafts[item.userId] || {
+                        attemptMode: item.attemptMode,
+                        dailyAttemptLimitOverride: item.dailyAttemptLimitOverride ? String(item.dailyAttemptLimitOverride) : '',
+                        note: item.note || '',
+                      };
+                      return (
+                        <div key={item.id} className="px-5 py-4">
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                            {/* user info */}
+                            <div className="min-w-[200px]">
+                              <div className="text-sm font-semibold text-gray-900">
+                                {item.user.displayName || item.user.username}
+                              </div>
+                              <div className="text-sm text-gray-500">{item.user.email}</div>
+                              <div className="mt-0.5 flex items-center gap-1.5">
+                                <IdTooltip id={item.userId} />
+                                <span className="text-[11px] text-gray-400">更新 {formatTime(item.updatedAt)}</span>
+                              </div>
+                            </div>
+
+                            {/* controls */}
+                            <div className="flex flex-1 flex-wrap items-center gap-2">
+                              <select
+                                value={draft.attemptMode}
+                                onChange={(e) =>
+                                  setOverrideDrafts((c) => ({
+                                    ...c,
+                                    [item.userId]: { ...draft, attemptMode: e.target.value as QuizAttemptMode },
+                                  }))
+                                }
+                                className={selectCls() + ' max-w-[150px]'}
+                              >
+                                <option value="default">default</option>
+                                <option value="custom_limit">custom_limit</option>
+                                <option value="unlimited">unlimited</option>
+                              </select>
+
+                              <input
+                                value={draft.dailyAttemptLimitOverride}
+                                disabled={draft.attemptMode !== 'custom_limit'}
+                                onChange={(e) =>
+                                  setOverrideDrafts((c) => ({
+                                    ...c,
+                                    [item.userId]: { ...draft, dailyAttemptLimitOverride: e.target.value },
+                                  }))
+                                }
+                                placeholder="专属次数"
+                                className={inputCls() + ' max-w-[100px]'}
+                              />
+
+                              <input
+                                value={draft.note}
+                                onChange={(e) =>
+                                  setOverrideDrafts((c) => ({
+                                    ...c,
+                                    [item.userId]: { ...draft, note: e.target.value },
+                                  }))
+                                }
+                                placeholder="备注"
+                                className={inputCls() + ' flex-1 min-w-[140px]'}
+                              />
+
+                              <button
+                                type="button"
+                                onClick={() => void saveOverride(item.userId)}
+                                disabled={!canWrite || overrideSavingUserId === item.userId}
+                                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
+                              >
+                                {overrideSavingUserId === item.userId ? '保存中...' : '保存'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* pagination */}
+                <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 text-sm text-gray-500">
+                  <span>第 {overridePage} / {totalOverridePages} 页 · {overrideTotal} 条</span>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      disabled={overridePage <= 1}
+                      onClick={() => setOverridePage((p) => Math.max(1, p - 1))}
+                      className="rounded-full border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-40"
+                    >
+                      上一页
+                    </button>
+                    <button
+                      type="button"
+                      disabled={overridePage >= totalOverridePages}
+                      onClick={() => setOverridePage((p) => Math.min(totalOverridePages, p + 1))}
+                      className="rounded-full border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-40"
+                    >
+                      下一页
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
+
       <QuizImportOverlay
         open={showImportOverlay}
         value={importText}

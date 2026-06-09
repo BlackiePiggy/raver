@@ -5008,54 +5008,58 @@ struct QuizFlowView: View {
                 Button {
                     viewModel.selectOption(option.optionId)
                 } label: {
-                    ZStack(alignment: .topLeading) {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(RaverTheme.card)
+                    GeometryReader { geometry in
+                        let size = geometry.size.width
 
-                        if let imageUrl = option.imageUrl,
-                           !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            AsyncImage(url: URL(string: imageUrl)) { phase in
-                                switch phase {
-                                case .empty:
-                                    ProgressView()
-                                        .frame(maxWidth: .infinity, minHeight: 156)
-                                case .success(let image):
-                                    image
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(maxWidth: .infinity, minHeight: 156, maxHeight: 156)
-                                        .clipped()
-                                case .failure:
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .fill(RaverTheme.background)
-                                        .frame(maxWidth: .infinity, minHeight: 156)
-                                        .overlay(
-                                            Text(LT("图片加载失败", "Image failed to load", "画像を読み込めませんでした"))
-                                                .font(.caption2)
-                                                .foregroundStyle(RaverTheme.secondaryText)
-                                                .padding(.horizontal, 10)
-                                        )
-                                @unknown default:
-                                    EmptyView()
+                        ZStack(alignment: .topLeading) {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(RaverTheme.card)
+
+                            if let imageUrl = option.imageUrl,
+                               !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                AsyncImage(url: URL(string: imageUrl)) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        ProgressView()
+                                            .frame(width: size, height: size)
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: size, height: size)
+                                            .clipped()
+                                    case .failure:
+                                        Color(RaverTheme.background)
+                                            .frame(width: size, height: size)
+                                            .overlay(
+                                                Text(LT("图片加载失败", "Image failed to load", "画像を読み込めませんでした"))
+                                                    .font(.caption2)
+                                                    .foregroundStyle(RaverTheme.secondaryText)
+                                                    .padding(.horizontal, 10)
+                                            )
+                                    @unknown default:
+                                        EmptyView()
+                                    }
                                 }
                             }
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        }
 
-                        Text(optionLetters.indices.contains(index) ? optionLetters[index] : "\(index + 1)")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 5)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(Color.black.opacity(0.52))
-                            )
-                            .padding(10)
+                            Text(optionLetters.indices.contains(index) ? optionLetters[index] : "\(index + 1)")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(Color.black.opacity(0.52))
+                                )
+                                .padding(10)
+                        }
+                        .frame(width: size, height: size)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(optionSelectionBorder(questionId: question.questionId, optionId: option.optionId))
+                        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
-                    .frame(maxWidth: .infinity, minHeight: 156)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(optionSelectionBorder(questionId: question.questionId, optionId: option.optionId))
+                    .aspectRatio(1, contentMode: .fit)
                 }
                 .buttonStyle(.plain)
             }
