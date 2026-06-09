@@ -613,7 +613,7 @@ export const adminQuizService = {
         include: {
           options: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
         },
-        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         skip,
         take: limit,
       }),

@@ -5285,52 +5285,66 @@ struct QuizFlowView: View {
     private var quizQuestionView: some View {
         VStack(spacing: 0) {
             if viewModel.isPreparingSession || viewModel.isPreparingQuestion {
-                VStack(spacing: 0) {
+                if viewModel.session?.mode == .debugSet {
+                    VStack(spacing: 0) {
+                        VStack(spacing: 18) {
+                            Spacer()
+                            ProgressView()
+                                .controlSize(.large)
+                            Text(
+                                viewModel.isPreparingSession
+                                    ? LT("正在出题", "Preparing Quiz", "出題を準備中")
+                                    : LT("正在准备题目", "Preparing Question", "問題を準備中")
+                            )
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                            Text(viewModel.isPreparingSession ? viewModel.sessionPreparationProgressText : viewModel.progressText)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(RaverTheme.accent)
+                            if let preparationMessage = viewModel.isPreparingSession
+                                ? viewModel.sessionPreparationMessage
+                                : viewModel.preparationMessage {
+                                Text(preparationMessage)
+                                    .font(.subheadline)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                    .multilineTextAlignment(.center)
+                            }
+                            if viewModel.preparationAttempt > 0 {
+                                Text(
+                                    LT(
+                                        "媒体加载重试：\(viewModel.preparationAttempt)/3",
+                                        "Media retry: \(viewModel.preparationAttempt)/3",
+                                        "メディア再試行：\(viewModel.preparationAttempt)/3"
+                                    )
+                                )
+                                .font(.caption)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                            Spacer()
+                        }
+                        .padding(16)
+
+                        bottomActionBar(
+                            secondaryTitle: LT("放弃", "Abandon", "放棄"),
+                            primaryTitle: viewModel.isPreparingSession
+                                ? LT("重新出题", "Restart", "再開始")
+                                : LT("重新开始", "Restart", "再開始"),
+                            onSecondary: { viewModel.requestAbandon() },
+                            onPrimary: { viewModel.requestRestart() }
+                        )
+                    }
+                } else {
                     VStack(spacing: 18) {
                         Spacer()
                         ProgressView()
                             .controlSize(.large)
-                        Text(
-                            viewModel.isPreparingSession
-                                ? LT("正在出题", "Preparing Quiz", "出題を準備中")
-                                : LT("正在准备题目", "Preparing Question", "問題を準備中")
-                        )
+                        Text(LT("正在出题", "Preparing Quiz", "出題を準備中"))
                             .font(.title3.weight(.semibold))
                             .foregroundStyle(RaverTheme.primaryText)
-                        Text(viewModel.isPreparingSession ? viewModel.sessionPreparationProgressText : viewModel.progressText)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(RaverTheme.accent)
-                        if let preparationMessage = viewModel.isPreparingSession
-                            ? viewModel.sessionPreparationMessage
-                            : viewModel.preparationMessage {
-                            Text(preparationMessage)
-                                .font(.subheadline)
-                                .foregroundStyle(RaverTheme.secondaryText)
-                                .multilineTextAlignment(.center)
-                        }
-                        if viewModel.preparationAttempt > 0 {
-                            Text(
-                                LT(
-                                    "媒体加载重试：\(viewModel.preparationAttempt)/3",
-                                    "Media retry: \(viewModel.preparationAttempt)/3",
-                                    "メディア再試行：\(viewModel.preparationAttempt)/3"
-                                )
-                            )
-                            .font(.caption)
-                            .foregroundStyle(RaverTheme.secondaryText)
-                        }
                         Spacer()
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(16)
-
-                    bottomActionBar(
-                        secondaryTitle: LT("放弃", "Abandon", "放棄"),
-                        primaryTitle: viewModel.isPreparingSession
-                            ? LT("重新出题", "Restart", "再開始")
-                            : LT("重新开始", "Restart", "再開始"),
-                        onSecondary: { viewModel.requestAbandon() },
-                        onPrimary: { viewModel.requestRestart() }
-                    )
                 }
             } else if let question = viewModel.currentQuestion {
                 ScrollView {
