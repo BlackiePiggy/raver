@@ -140,6 +140,8 @@ model User {
   quizSessions                     QuizSession[]
   quizAttemptLedgers               QuizAttemptLedger[]
   quizPolicyOverride               QuizUserPolicyOverride?
+  personalitySessions              PersonalitySession[]
+  personalityRecord                PersonalityUserRecord?
   accountEnforcements              AccountEnforcement[]
   enforcementAppeals               EnforcementAppeal[]
   accountDeletionRequests          AccountDeletionRequest[]
@@ -3190,4 +3192,122 @@ model QuizUserPolicyOverride {
   @@index([attemptMode])
   @@index([updatedBy])
   @@map("quiz_user_policy_overrides")
+}
+
+model PersonalityConfig {
+  id                    String   @id @default("default")
+  isEnabled             Boolean  @default(false) @map("is_enabled")
+  questionCount         Int      @default(16) @map("question_count")
+  axisThreshold         Int      @default(9) @map("axis_threshold")
+  resultTypeCapacity    Int      @default(32) @map("result_type_capacity")
+  standardQuestionIds   String[] @default([]) @map("standard_question_ids")
+  debugQuestionIds      String[] @default([]) @map("debug_question_ids")
+  easterEggQuestionId   String?  @map("easter_egg_question_id")
+  hiddenResultPriority  String[] @default(["PHOENIX", "CPDD", "DRUNK", "HHHH"]) @map("hidden_result_priority")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("personality_config")
+}
+
+model PersonalityQuestion {
+  id           String             @id @default(uuid())
+  status       QuizQuestionStatus @default(draft)
+  stemText     String             @map("stem_text") @db.Text
+  stemImageUrl String?            @map("stem_image_url") @db.Text
+  sortOrder    Int                @default(0) @map("sort_order")
+  isEasterEgg  Boolean            @default(false) @map("is_easter_egg")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+
+  options PersonalityQuestionOption[]
+
+  @@index([status, sortOrder])
+  @@index([isEasterEgg])
+  @@map("personality_questions")
+}
+
+model PersonalityQuestionOption {
+  id               String   @id @default(uuid())
+  questionId       String   @map("question_id")
+  text             String?  @db.Text
+  imageUrl         String?  @map("image_url") @db.Text
+  sortOrder        Int      @default(0) @map("sort_order")
+  scorePayload     Json?    @map("score_payload")
+  directResultCode String?  @map("direct_result_code")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  question PersonalityQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, sortOrder])
+  @@index([questionId])
+  @@index([directResultCode])
+  @@map("personality_question_options")
+}
+
+model PersonalityResultType {
+  id           String   @id @default(uuid())
+  code         String   @unique
+  title        String
+  subtitle     String?  @db.Text
+  slangTagline String?  @map("slang_tagline") @db.Text
+  genreMapping String?  @map("genre_mapping") @db.Text
+  description  String   @db.Text
+  imageUrl     String?  @map("image_url") @db.Text
+  sortOrder    Int      @default(0) @map("sort_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  isHidden     Boolean  @default(false) @map("is_hidden")
+  mbtiCode     String?  @map("mbti_code")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([isActive, sortOrder])
+  @@index([isHidden])
+  @@map("personality_result_types")
+}
+
+model PersonalitySession {
+  id                   String            @id @default(uuid())
+  userId               String            @map("user_id")
+  mode                 String
+  status               QuizSessionStatus @default(in_progress)
+  configSnapshot       Json              @map("config_snapshot")
+  questionSnapshot     Json              @map("question_snapshot")
+  answersSnapshot      Json?             @map("answers_snapshot")
+  currentQuestionIndex Int               @default(0) @map("current_question_index")
+  startedAt            DateTime          @default(now()) @map("started_at")
+  submittedAt          DateTime?         @map("submitted_at")
+  resultCode           String?           @map("result_code")
+  resultSnapshot       Json?             @map("result_snapshot")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userRecords   PersonalityUserRecord[]
+
+  @@index([userId, status])
+  @@index([userId, startedAt])
+  @@index([mode, status])
+  @@map("personality_sessions")
+}
+
+model PersonalityUserRecord {
+  id             String    @id @default(uuid())
+  userId         String    @unique @map("user_id")
+  hasCompleted   Boolean   @default(false) @map("has_completed")
+  completedAt    DateTime? @map("completed_at")
+  resultCode     String?   @map("result_code")
+  resultSnapshot Json?     @map("result_snapshot")
+  lastSessionId  String?   @map("last_session_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastSession PersonalitySession? @relation(fields: [lastSessionId], references: [id], onDelete: SetNull)
+
+  @@index([hasCompleted])
+  @@index([resultCode])
+  @@index([lastSessionId])
+  @@map("personality_user_records")
 }

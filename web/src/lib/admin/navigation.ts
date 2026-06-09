@@ -219,6 +219,14 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         matchMode: 'prefix',
       },
       {
+        href: '/admin/personality',
+        label: 'EDMTI 人格',
+        description: '人格结果、题目与调试套题',
+        icon: BrainCircuit,
+        visible: opsVisible,
+        matchMode: 'prefix',
+      },
+      {
         href: '/admin/account-deletions',
         label: '账号删除请求',
         description: '删除与重试',

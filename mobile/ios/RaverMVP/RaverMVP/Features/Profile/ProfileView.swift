@@ -281,6 +281,9 @@ struct ProfileView: View {
                     quickActionTile(title: LT("答题系统", "Quiz", "クイズ"), icon: "checklist") {
                         profilePush(.quiz)
                     }
+                    quickActionTile(title: "MBTI", icon: "brain") {
+                        profilePush(.personality)
+                    }
                     quickActionTile(title: LT("我的收藏", "My Saves", "保存済み"), icon: "star.fill") {
                         profilePush(.mySaves)
                     }
@@ -4819,7 +4822,7 @@ final class QuizFlowViewModel: ObservableObject {
         }
     }
 
-    private static func defaultMediaPreloader(_ urls: [URL]) async throws {
+    static func defaultMediaPreloader(_ urls: [URL]) async throws {
         try await withThrowingTaskGroup(of: Void.self) { group in
             for url in urls {
                 group.addTask {
@@ -5497,6 +5500,893 @@ struct QuizFlowView: View {
             return LT("当前已有进行中的答题。", "A quiz session is already in progress.", "進行中のクイズセッションがあります。")
         default:
             return LT("当前暂时无法开始答题。", "Unable to start quiz right now.", "現在クイズを開始できません。")
+        }
+    }
+
+    private func formatTime(_ isoString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        guard let date = formatter.date(from: isoString) else { return isoString }
+        return date.formatted(date: .abbreviated, time: .shortened)
+    }
+}
+
+@MainActor
+final class PersonalityFlowViewModel: ObservableObject {
+    typealias MediaPreloader = @Sendable ([URL]) async throws -> Void
+
+    enum Phase {
+        case loading
+        case ready(PersonalityStatusSummary)
+        case inSession
+        case result(PersonalitySessionSubmitResponse)
+        case failure(String)
+    }
+
+    enum SessionExitReason {
+        case backgrounded
+        case completed
+    }
+
+    @Published private(set) var phase: Phase = .loading
+    @Published private(set) var summary: PersonalityStatusSummary?
+    @Published private(set) var session: PersonalitySessionCreateResponse?
+    @Published var answers: [String: String] = [:]
+    @Published var currentQuestionIndex: Int = 0
+    @Published var isSubmitting = false
+    @Published private(set) var isPreparingSession = false
+    @Published private(set) var sessionPreparationCompletedCount = 0
+    @Published private(set) var sessionPreparationTargetCount = 0
+    @Published private(set) var sessionPreparationMessage: String?
+    @Published var feedbackMessage: String?
+    @Published var activeAlert: QuizAlert?
+
+    private let service: WebFeatureService
+    private let mediaPreloader: MediaPreloader
+    private var preloadedMediaURLs = Set<String>()
+
+    init(
+        service: WebFeatureService,
+        mediaPreloader: @escaping MediaPreloader = QuizFlowViewModel.defaultMediaPreloader
+    ) {
+        self.service = service
+        self.mediaPreloader = mediaPreloader
+    }
+
+    var currentQuestion: PersonalityQuestionPayload? {
+        guard let session, session.questions.indices.contains(currentQuestionIndex) else { return nil }
+        return session.questions[currentQuestionIndex]
+    }
+
+    var progressText: String {
+        guard let session else { return "第0/0题" }
+        return "第\(min(currentQuestionIndex + 1, session.questions.count))/\(session.questions.count)题"
+    }
+
+    var isSessionLocked: Bool {
+        session != nil && !isSubmitting
+    }
+
+    func showExistingResult(_ result: PersonalityResultPayload, questionCount: Int) {
+        let synthetic = PersonalitySessionSubmitResponse(
+            mode: .standard,
+            sessionId: "personality-result-view",
+            questionCount: questionCount,
+            answeredCount: questionCount,
+            axisScores: [:],
+            result: result
+        )
+        phase = .result(synthetic)
+    }
+
+    func load() async {
+        feedbackMessage = nil
+        do {
+            phase = .loading
+            let summary = try await service.fetchPersonalityStatus()
+            self.summary = summary
+            phase = .ready(summary)
+        } catch {
+            phase = .failure(
+                error.userFacingMessage
+                    ?? LT("人格测试信息加载失败，请稍后重试。", "Failed to load personality test info. Please try again later.", "人格テスト情報の読み込みに失敗しました。時間をおいて再試行してください。")
+            )
+        }
+    }
+
+    func startSession(mode: PersonalitySessionMode = .standard) async {
+        do {
+            feedbackMessage = nil
+            let createdSession = try await service.createPersonalitySession(mode: mode)
+            self.session = createdSession
+            self.answers = [:]
+            self.currentQuestionIndex = 0
+            self.preloadedMediaURLs = []
+            phase = .inSession
+            let prepared = try await prepareSessionForPlayback(createdSession)
+            self.session = prepared
+        } catch {
+            feedbackMessage = error.userFacingMessage ?? LT("开始测试失败，请稍后重试。", "Failed to start test. Please try again later.", "テストを開始できませんでした。時間をおいて再試行してください。")
+            if let summary = try? await service.fetchPersonalityStatus() {
+                self.summary = summary
+                phase = .ready(summary)
+            } else {
+                phase = .failure(
+                    error.userFacingMessage
+                        ?? LT("人格测试信息加载失败，请稍后重试。", "Failed to load personality test info. Please try again later.", "人格テスト情報の読み込みに失敗しました。時間をおいて再試行してください。")
+                )
+            }
+        }
+    }
+
+    func selectOption(_ optionId: String) {
+        guard let question = currentQuestion else { return }
+        answers[question.questionId] = optionId
+        Task {
+            await persistAnswers()
+        }
+    }
+
+    func goPrevious() {
+        guard currentQuestionIndex > 0, !isSubmitting else { return }
+        withAnimation(.easeInOut(duration: 0.24)) {
+            currentQuestionIndex -= 1
+        }
+        Task {
+            await persistAnswers()
+        }
+    }
+
+    func goNext() {
+        guard let session, !isSubmitting else { return }
+        if currentQuestionIndex < session.questions.count - 1 {
+            withAnimation(.easeInOut(duration: 0.24)) {
+                currentQuestionIndex += 1
+            }
+            Task {
+                await persistAnswers()
+            }
+        } else {
+            Task {
+                await submitSession()
+            }
+        }
+    }
+
+    func requestAbandon() {
+        activeAlert = .abandon
+    }
+
+    func requestRestart() {
+        activeAlert = .restart
+    }
+
+    func confirmAlert(_ alert: QuizAlert) async {
+        activeAlert = nil
+        switch alert {
+        case .restart:
+            let mode = session?.mode ?? .standard
+            await abandonCurrentSessionSilently()
+            await startSession(mode: mode)
+        case .abandon:
+            await abandonCurrentSessionSilently()
+            await load()
+        }
+    }
+
+    func submitSession() async {
+        guard let session, !isSubmitting else { return }
+        isSubmitting = true
+        defer { isSubmitting = false }
+        do {
+            let payload = session.questions.map { question in
+                PersonalityAnswerPayload(questionId: question.questionId, optionId: answers[question.questionId])
+            }
+            let result = try await service.submitPersonalitySession(
+                sessionId: session.sessionId,
+                answers: payload
+            )
+            self.session = nil
+            phase = .result(result)
+            summary = try? await service.fetchPersonalityStatus()
+        } catch {
+            feedbackMessage = error.userFacingMessage ?? LT("提交测试失败，请稍后重试。", "Failed to submit test. Please try again later.", "テストの送信に失敗しました。時間をおいて再試行してください。")
+        }
+    }
+
+    func handleScenePhaseChange(_ scenePhase: ScenePhase) async {
+        guard scenePhase == .background else { return }
+        await terminateCurrentSession(reason: .backgrounded)
+    }
+
+    private func prepareSessionForPlayback(_ session: PersonalitySessionCreateResponse) async throws -> PersonalitySessionCreateResponse {
+        isPreparingSession = true
+        sessionPreparationCompletedCount = 0
+        sessionPreparationTargetCount = session.questions.count
+        sessionPreparationMessage = LT("正在准备题目资源…", "Preparing media…", "問題メディアを準備中…")
+        defer {
+            isPreparingSession = false
+            sessionPreparationMessage = nil
+        }
+
+        for question in session.questions {
+            let mediaURLs = questionMediaURLs(question)
+            if !mediaURLs.isEmpty {
+                try await preloadMediaAssets(mediaURLs)
+            }
+            sessionPreparationCompletedCount += 1
+        }
+        return session
+    }
+
+    private func persistAnswers() async {
+        guard let session else { return }
+        let payload = session.questions.map { question in
+            PersonalityAnswerPayload(questionId: question.questionId, optionId: answers[question.questionId])
+        }
+        _ = try? await service.savePersonalitySessionAnswer(
+            sessionId: session.sessionId,
+            answers: payload,
+            currentQuestionIndex: currentQuestionIndex
+        )
+    }
+
+    private func terminateCurrentSession(reason: SessionExitReason) async {
+        guard session != nil else { return }
+        await abandonCurrentSessionSilently()
+        switch reason {
+        case .backgrounded:
+            feedbackMessage = LT(
+                "测试过程中切到后台，本次测试已自动作废，需要重新开始。",
+                "The test was sent to the background and has been abandoned. Please restart.",
+                "テスト中にアプリがバックグラウンドへ移動したため、この回は破棄されました。再度開始してください。"
+            )
+            await load()
+        case .completed:
+            break
+        }
+    }
+
+    private func abandonCurrentSessionSilently() async {
+        guard let sessionId = session?.sessionId else { return }
+        session = nil
+        isPreparingSession = false
+        sessionPreparationCompletedCount = 0
+        sessionPreparationTargetCount = 0
+        sessionPreparationMessage = nil
+        _ = try? await service.abandonPersonalitySession(sessionId: sessionId)
+    }
+
+    private func preloadMediaAssets(_ urls: [URL]) async throws {
+        let pending = urls.filter { !preloadedMediaURLs.contains($0.absoluteString) }
+        guard !pending.isEmpty else { return }
+        try await mediaPreloader(pending)
+        for url in pending {
+            preloadedMediaURLs.insert(url.absoluteString)
+        }
+    }
+
+    private static func defaultMediaPreloader(_ urls: [URL]) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for url in urls {
+                group.addTask {
+                    let request = URLRequest(
+                        url: url,
+                        cachePolicy: .returnCacheDataElseLoad,
+                        timeoutInterval: 20
+                    )
+                    let (data, response) = try await URLSession.shared.data(for: request)
+                    guard let http = response as? HTTPURLResponse,
+                          (200..<300).contains(http.statusCode),
+                          !data.isEmpty else {
+                        throw URLError(.badServerResponse)
+                    }
+                }
+            }
+
+            try await group.waitForAll()
+        }
+    }
+
+    private func questionMediaURLs(_ question: PersonalityQuestionPayload) -> [URL] {
+        var seen = Set<String>()
+        let candidates = ([question.stemImageUrl] + question.options.map(\.imageUrl))
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return candidates.compactMap { raw in
+            guard seen.insert(raw).inserted else { return nil }
+            return URL(string: raw)
+        }
+    }
+}
+
+struct PersonalityFlowView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var viewModel: PersonalityFlowViewModel
+    private let optionLetters = ["A", "B", "C", "D", "E", "F"]
+
+    init(service: WebFeatureService) {
+        _viewModel = StateObject(wrappedValue: PersonalityFlowViewModel(service: service))
+    }
+
+    private func bottomActionBar(
+        tertiaryTitle: String? = nil,
+        secondaryTitle: String,
+        primaryTitle: String,
+        isPrimaryBusy: Bool = false,
+        isPrimaryDisabled: Bool = false,
+        isSecondaryDisabled: Bool = false,
+        onTertiary: (() -> Void)? = nil,
+        onSecondary: @escaping () -> Void,
+        onPrimary: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 12) {
+            if let tertiaryTitle, let onTertiary {
+                Button(action: onTertiary) {
+                    Text(tertiaryTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(RaverTheme.card)
+                )
+                .foregroundStyle(RaverTheme.secondaryText)
+            }
+
+            Button(action: onSecondary) {
+                Text(secondaryTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(RaverTheme.background)
+            )
+            .foregroundStyle(RaverTheme.secondaryText)
+            .disabled(isSecondaryDisabled)
+
+            Button(action: onPrimary) {
+                if isPrimaryBusy {
+                    ProgressView()
+                        .tint(.white)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                } else {
+                    Text(primaryTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+            }
+            .background(
+                LinearGradient(
+                    colors: [RaverTheme.accent, RaverTheme.accent.opacity(0.8)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            )
+            .foregroundStyle(.white)
+            .disabled(isPrimaryDisabled)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(
+            RaverTheme.card
+                .ignoresSafeArea(edges: .bottom)
+        )
+    }
+
+    private func normalizedOptionText(_ option: PersonalityQuestionOptionPayload) -> String? {
+        let trimmed = option.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func hasOptionImage(_ option: PersonalityQuestionOptionPayload) -> Bool {
+        let trimmed = option.imageUrl?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !trimmed.isEmpty
+    }
+
+    private func usesImageGridLayout(for question: PersonalityQuestionPayload) -> Bool {
+        question.options.count == 4 && question.options.allSatisfy { normalizedOptionText($0) == nil && hasOptionImage($0) }
+    }
+
+    private func optionSelectionBorder(
+        questionId: String,
+        optionId: String
+    ) -> some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(
+                viewModel.answers[questionId] == optionId ? RaverTheme.accent : RaverTheme.cardBorder,
+                lineWidth: viewModel.answers[questionId] == optionId ? 2 : 1
+            )
+    }
+
+    private func imageOptionGrid(question: PersonalityQuestionPayload) -> some View {
+        LazyVGrid(columns: [
+            GridItem(.flexible(), spacing: 12),
+            GridItem(.flexible(), spacing: 12)
+        ], spacing: 12) {
+            ForEach(Array(question.options.enumerated()), id: \.element.id) { index, option in
+                Button {
+                    viewModel.selectOption(option.optionId)
+                } label: {
+                    GeometryReader { geometry in
+                        let size = geometry.size.width
+                        ZStack(alignment: .topLeading) {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(RaverTheme.card)
+
+                            if let imageUrl = option.imageUrl,
+                               !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                AsyncImage(url: URL(string: imageUrl)) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        ProgressView()
+                                            .frame(width: size, height: size)
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: size, height: size)
+                                            .clipped()
+                                    case .failure:
+                                        Color(RaverTheme.background)
+                                            .frame(width: size, height: size)
+                                    @unknown default:
+                                        EmptyView()
+                                    }
+                                }
+                            }
+
+                            Text(optionLetters.indices.contains(index) ? optionLetters[index] : "\(index + 1)")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(Color.black.opacity(0.52))
+                                )
+                                .padding(10)
+                        }
+                        .frame(width: size, height: size)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(optionSelectionBorder(questionId: question.questionId, optionId: option.optionId))
+                    }
+                    .aspectRatio(1, contentMode: .fit)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func listOptionCard(question: PersonalityQuestionPayload, option: PersonalityQuestionOptionPayload) -> some View {
+        Button {
+            viewModel.selectOption(option.optionId)
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    Circle()
+                        .stroke(viewModel.answers[question.questionId] == option.optionId ? RaverTheme.accent : RaverTheme.secondaryText, lineWidth: 2)
+                        .frame(width: 18, height: 18)
+                        .overlay {
+                            if viewModel.answers[question.questionId] == option.optionId {
+                                Circle()
+                                    .fill(RaverTheme.accent)
+                                    .frame(width: 8, height: 8)
+                            }
+                        }
+                    Text(normalizedOptionText(option) ?? LT("图片选项", "Image Option", "画像オプション"))
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Spacer()
+                }
+                if let imageUrl = option.imageUrl,
+                   !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    AsyncImage(url: URL(string: imageUrl)) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView()
+                                .frame(maxWidth: .infinity, minHeight: 140)
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: .infinity)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        case .failure:
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(RaverTheme.card)
+                                .frame(maxWidth: .infinity, minHeight: 140)
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(RaverTheme.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(viewModel.answers[question.questionId] == option.optionId ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    var body: some View {
+        Group {
+            switch viewModel.phase {
+            case .loading:
+                ProgressView(LT("正在加载 EDMTI", "Loading EDMTI", "EDMTI を読み込み中"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.background)
+            case .failure(let message):
+                VStack(spacing: 16) {
+                    ScreenErrorCard(message: message) {
+                        Task { await viewModel.load() }
+                    }
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RaverTheme.background)
+            case .ready(let summary):
+                personalityStartView(summary)
+            case .inSession:
+                personalityQuestionView
+            case .result(let result):
+                personalityResultView(result)
+            }
+        }
+        .navigationTitle("MBTI")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            if viewModel.summary == nil && viewModel.session == nil {
+                await viewModel.load()
+            }
+        }
+        .onChange(of: scenePhase) { _, newValue in
+            Task {
+                await viewModel.handleScenePhaseChange(newValue)
+            }
+        }
+        .navigationBarBackButtonHidden(viewModel.isSessionLocked)
+        .alert(item: $viewModel.activeAlert) { alert in
+            switch alert {
+            case .restart:
+                return Alert(
+                    title: Text(LT("重新开始测试", "Restart Test", "テストを再開始")),
+                    message: Text(LT("当前作答会被放弃，并立即重新开始。", "The current session will be abandoned and restarted immediately.", "現在のセッションは破棄され、すぐに再開始されます。")),
+                    primaryButton: .destructive(Text(LT("确认重启", "Restart", "再開始"))) {
+                        Task { await viewModel.confirmAlert(.restart) }
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .abandon:
+                return Alert(
+                    title: Text(LT("放弃本次测试", "Abandon Test", "今回のテストを放棄")),
+                    message: Text(LT("退出后不会保留本次进度，需要重新开始整场测试。", "Progress will not be preserved. You will need to restart the whole test next time.", "進捗は保存されず、次回は最初からやり直しになります。")),
+                    primaryButton: .destructive(Text(LT("确认放弃", "Abandon", "放棄する"))) {
+                        Task { await viewModel.confirmAlert(.abandon) }
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
+        }
+    }
+
+    private func summaryRow(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title)
+                .foregroundStyle(RaverTheme.secondaryText)
+            Spacer()
+            Text(value)
+                .foregroundStyle(RaverTheme.primaryText)
+        }
+        .font(.subheadline)
+    }
+
+    private func personalityStartView(_ summary: PersonalityStatusSummary) -> some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("EDMTI")
+                            .font(.headline)
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Text(
+                            LT(
+                                "16 道题，约 3 分钟。没有心理学依据，主打一个离谱但精准。正式测试只能完成一次，但完成后可以随时回来查看结果。",
+                                "16 questions in about 3 minutes. Purely for fun, wildly inaccurate but weirdly precise. The formal test can only be completed once, but you can come back anytime to view your result.",
+                                "16問で約3分。心理学的根拠はなく、ネタ寄りだけど妙に当たるテストです。正式テストは1回だけですが、結果はいつでも見返せます。"
+                            )
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(RaverTheme.secondaryText)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            summaryRow(LT("正式题数", "Question Count", "問題数"), "\(summary.questionCount)")
+                            summaryRow(LT("人格容量", "Result Capacity", "結果容量"), "\(summary.resultTypeCapacity)")
+                            summaryRow(LT("调试套题题数", "Debug Set Count", "デバッグ問題数"), "\(summary.debugQuestionSetCount)")
+                        }
+                    }
+                }
+
+                if let feedbackMessage = viewModel.feedbackMessage, !feedbackMessage.isEmpty {
+                    ScreenStatusBanner(message: feedbackMessage, style: .error)
+                }
+
+                if summary.hasCompleted, let result = summary.result {
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(LT("你的人格结果", "Your Result", "あなたの結果"))
+                                .font(.headline)
+                            Text("\(result.code) · \(result.title)")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                            if let slang = result.slangTagline, !slang.isEmpty {
+                                Text(slang)
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                            if let completedAt = summary.completedAt {
+                                Text("\(LT("完成时间", "Completed At", "完了日時")): \(formatTime(completedAt))")
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                        }
+                    }
+                }
+
+                if summary.hasCompleted {
+                    Button {
+                        if let result = summary.result {
+                            viewModel.showExistingResult(result, questionCount: summary.questionCount)
+                        }
+                    } label: {
+                        Text(LT("查看结果", "View Result", "結果を見る"))
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(RaverTheme.accent)
+                } else {
+                    Button {
+                        Task { await viewModel.startSession(mode: .standard) }
+                    } label: {
+                        Text(LT("开始测试", "Start Test", "テストを開始"))
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(RaverTheme.accent)
+                    .disabled(!summary.canStart)
+                }
+
+                if summary.canUseDebugQuestionSet {
+                    Button {
+                        Task { await viewModel.startSession(mode: .debugSet) }
+                    } label: {
+                        Text(LT("进入调试模式", "Open Debug Mode", "デバッグモードを開始"))
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(RaverTheme.accent)
+                    .disabled(!summary.canStartDebugQuestionSet)
+                }
+
+                if !summary.canStart && !summary.hasCompleted {
+                    Text(disabledReasonText(summary.disabledReason))
+                        .font(.footnote)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(16)
+        }
+        .background(RaverTheme.background)
+    }
+
+    private var personalityQuestionView: some View {
+        VStack(spacing: 0) {
+            if viewModel.isPreparingSession {
+                VStack(spacing: 18) {
+                    Spacer()
+                    ProgressView()
+                        .controlSize(.large)
+                    Text(LT("正在准备测试", "Preparing Test", "テストを準備中"))
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Text("第\(viewModel.sessionPreparationCompletedCount)/\(viewModel.sessionPreparationTargetCount)题")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.accent)
+                    if let message = viewModel.sessionPreparationMessage {
+                        Text(message)
+                            .font(.subheadline)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .multilineTextAlignment(.center)
+                    }
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(16)
+            } else if let question = viewModel.currentQuestion {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text(viewModel.progressText)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.accent)
+                                Spacer()
+                                if question.isEasterEgg {
+                                    Text(LT("彩蛋题", "Bonus", "ボーナス"))
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                }
+                            }
+                            Text(question.stemText)
+                                .font(.headline.weight(.semibold))
+                                .foregroundStyle(RaverTheme.primaryText)
+                            if let imageUrl = question.stemImageUrl,
+                               !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                AsyncImage(url: URL(string: imageUrl)) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        ProgressView()
+                                            .frame(maxWidth: .infinity, minHeight: 180)
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(maxWidth: .infinity)
+                                    case .failure:
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .fill(RaverTheme.card)
+                                            .frame(maxWidth: .infinity, minHeight: 180)
+                                    @unknown default:
+                                        EmptyView()
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            }
+                        }
+
+                        Group {
+                            if usesImageGridLayout(for: question) {
+                                imageOptionGrid(question: question)
+                            } else {
+                                VStack(spacing: 12) {
+                                    ForEach(question.options) { option in
+                                        listOptionCard(question: question, option: option)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(16)
+                    .id(question.questionId)
+                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
+                }
+                .animation(.easeInOut(duration: 0.24), value: viewModel.currentQuestionIndex)
+
+                bottomActionBar(
+                    tertiaryTitle: LT("放弃", "Abandon", "放棄"),
+                    secondaryTitle: LT("上一步", "Previous", "前へ"),
+                    primaryTitle: viewModel.currentQuestionIndex == (viewModel.session?.questions.count ?? 1) - 1
+                        ? LT("查看结果", "See Result", "結果を見る")
+                        : LT("下一步", "Next", "次へ"),
+                    isPrimaryBusy: viewModel.isSubmitting,
+                    isSecondaryDisabled: viewModel.currentQuestionIndex == 0,
+                    onTertiary: { viewModel.requestAbandon() },
+                    onSecondary: { viewModel.goPrevious() },
+                    onPrimary: { viewModel.goNext() }
+                )
+            }
+        }
+        .background(RaverTheme.background)
+    }
+
+    private func personalityResultView(_ result: PersonalitySessionSubmitResponse) -> some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 18) {
+                    Spacer(minLength: 24)
+                    Image(systemName: result.result.isHidden ? "sparkles.square.filled.on.square" : "brain.head.profile")
+                        .font(.system(size: 54, weight: .semibold))
+                        .foregroundStyle(RaverTheme.accent)
+                    Text("\(result.result.code) · \(result.result.title)")
+                        .font(.largeTitle.weight(.bold))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(RaverTheme.primaryText)
+                    if let subtitle = result.result.subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    if let slang = result.result.slangTagline, !slang.isEmpty {
+                        Text(slang)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(RaverTheme.accent)
+                    }
+                    if let imageUrl = result.result.imageUrl,
+                       !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        AsyncImage(url: URL(string: imageUrl)) { phase in
+                            switch phase {
+                            case .empty:
+                                ProgressView()
+                                    .frame(maxWidth: .infinity, minHeight: 220)
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxWidth: .infinity)
+                            case .failure:
+                                EmptyView()
+                            @unknown default:
+                                EmptyView()
+                            }
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    }
+                    if let genre = result.result.genreMapping, !genre.isEmpty {
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(LT("曲风对标", "Genre Match", "ジャンル対応"))
+                                    .font(.headline)
+                                Text(genre)
+                                    .font(.subheadline)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                        }
+                    }
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(LT("人格解读", "Description", "解説"))
+                                .font(.headline)
+                            Text(result.result.description)
+                                .font(.subheadline)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                        }
+                    }
+                    Spacer(minLength: 24)
+                }
+                .padding(16)
+            }
+
+            bottomActionBar(
+                secondaryTitle: LT("完成", "Done", "完了"),
+                primaryTitle: LT("返回测试首页", "Back to Test Home", "テストホームへ戻る"),
+                onSecondary: { dismiss() },
+                onPrimary: {
+                    Task { await viewModel.load() }
+                }
+            )
+        }
+        .background(RaverTheme.background)
+    }
+
+    private func disabledReasonText(_ code: String?) -> String {
+        switch code {
+        case "personality_disabled":
+            return LT("当前 EDMTI 测试暂未开启。", "EDMTI is currently disabled.", "現在 EDMTI は無効です。")
+        case "already_completed":
+            return LT("你已经完成正式测试，可以直接查看结果。", "You have already completed the formal test and can view your result directly.", "正式テストはすでに完了しており、結果を直接確認できます。")
+        case "session_in_progress":
+            return LT("当前已有进行中的测试。", "A personality session is already in progress.", "進行中のテストセッションがあります。")
+        default:
+            return LT("当前暂时无法开始测试。", "Unable to start the test right now.", "現在テストを開始できません。")
         }
     }
 

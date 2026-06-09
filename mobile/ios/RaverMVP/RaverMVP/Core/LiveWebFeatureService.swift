@@ -14,6 +14,11 @@ final class LiveWebFeatureService: WebFeatureService {
         let reason: String?
     }
 
+    private struct SavePersonalitySessionAnswerRequest: Encodable {
+        let answers: [PersonalityAnswerPayload]
+        let currentQuestionIndex: Int?
+    }
+
     private struct DeleteEventImagesRequest: Encodable {
         let eventId: String?
         let draftId: String?
@@ -106,6 +111,52 @@ final class LiveWebFeatureService: WebFeatureService {
             path: "/v1/quiz/sessions/\(sessionId)/abandon",
             method: "POST",
             body: AbandonQuizSessionRequest(reason: reason?.rawValue)
+        )
+    }
+
+    func fetchPersonalityStatus() async throws -> PersonalityStatusSummary {
+        try await request(path: "/v1/personality/status", method: "GET")
+    }
+
+    func fetchPersonalityResult() async throws -> PersonalityResultEnvelope {
+        try await request(path: "/v1/personality/result", method: "GET")
+    }
+
+    func createPersonalitySession(mode: PersonalitySessionMode) async throws -> PersonalitySessionCreateResponse {
+        try await request(path: "/v1/personality/sessions", method: "POST", body: ["mode": mode.rawValue])
+    }
+
+    func savePersonalitySessionAnswer(
+        sessionId: String,
+        answers: [PersonalityAnswerPayload],
+        currentQuestionIndex: Int?
+    ) async throws -> PersonalitySessionAnswerSaveResponse {
+        try await request(
+            path: "/v1/personality/sessions/\(sessionId)/answer",
+            method: "POST",
+            body: SavePersonalitySessionAnswerRequest(
+                answers: answers,
+                currentQuestionIndex: currentQuestionIndex
+            )
+        )
+    }
+
+    func submitPersonalitySession(
+        sessionId: String,
+        answers: [PersonalityAnswerPayload]
+    ) async throws -> PersonalitySessionSubmitResponse {
+        try await request(
+            path: "/v1/personality/sessions/\(sessionId)/submit",
+            method: "POST",
+            body: ["answers": answers]
+        )
+    }
+
+    func abandonPersonalitySession(sessionId: String) async throws -> PersonalitySessionAbandonResponse {
+        try await request(
+            path: "/v1/personality/sessions/\(sessionId)/abandon",
+            method: "POST",
+            body: [String: String?]()
         )
     }
 

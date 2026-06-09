@@ -83,6 +83,100 @@ actor MockWebFeatureService: WebFeatureService {
         }
     }
 
+    struct PersonalityScenario {
+        var status: PersonalityStatusSummary
+        var result: PersonalityResultPayload?
+        var sessionFactory: @Sendable (_ mode: PersonalitySessionMode) -> PersonalitySessionCreateResponse
+        var saveAnswerHandler: @Sendable (_ sessionId: String, _ answers: [PersonalityAnswerPayload], _ currentQuestionIndex: Int?) -> PersonalitySessionAnswerSaveResponse
+        var submitHandler: @Sendable (_ sessionId: String, _ answers: [PersonalityAnswerPayload]) -> PersonalitySessionSubmitResponse
+        var abandonHandler: @Sendable (_ sessionId: String) -> PersonalitySessionAbandonResponse
+
+        static func `default`() -> PersonalityScenario {
+            let sampleResult = PersonalityResultPayload(
+                code: "SUNNY",
+                title: "阳光小太阳",
+                subtitle: "全中国最稀有的电音人格",
+                slangTagline: "永远的气氛组、新鲜感追逐者",
+                genreMapping: "Sunny EDM、Light Bounce、清新 Progressive House",
+                description: "电音一响，我就是全场最亮的崽。永远充满活力，永远对新鲜事物充满好奇。",
+                imageUrl: nil,
+                isHidden: false,
+                mbtiCode: "ENFP"
+            )
+            return PersonalityScenario(
+                status: PersonalityStatusSummary(
+                    isEnabled: true,
+                    questionCount: 16,
+                    axisThreshold: 9,
+                    resultTypeCapacity: 32,
+                    hasCompleted: false,
+                    completedAt: nil,
+                    result: nil,
+                    canStart: true,
+                    activeSessionId: nil,
+                    disabledReason: nil,
+                    canUseDebugQuestionSet: true,
+                    debugQuestionSetCount: 6,
+                    canStartDebugQuestionSet: true
+                ),
+                result: sampleResult,
+                sessionFactory: { mode in
+                    let normalQuestions: [PersonalityQuestionPayload] = (1...16).map { index in
+                        PersonalityQuestionPayload(
+                            questionId: "mock-personality-question-\(index)",
+                            stemText: "第 \(index) 题：以下哪一种更像你的电音人格？",
+                            stemImageUrl: nil,
+                            options: [
+                                PersonalityQuestionOptionPayload(optionId: "p\(index)-a", text: "社牛外放", imageUrl: nil, sortOrder: 0),
+                                PersonalityQuestionOptionPayload(optionId: "p\(index)-b", text: "独处沉浸", imageUrl: nil, sortOrder: 1),
+                                PersonalityQuestionOptionPayload(optionId: "p\(index)-c", text: "经典稳妥", imageUrl: nil, sortOrder: 2),
+                                PersonalityQuestionOptionPayload(optionId: "p\(index)-d", text: "先锋小众", imageUrl: nil, sortOrder: 3)
+                            ],
+                            isEasterEgg: false
+                        )
+                    }
+                    let easterEgg = PersonalityQuestionPayload(
+                        questionId: "mock-personality-question-17",
+                        stemText: "彩蛋题：去电音节/夜店，你的核心终极目的是？",
+                        stemImageUrl: nil,
+                        options: [
+                            PersonalityQuestionOptionPayload(optionId: "p17-a", text: "滴酒不沾", imageUrl: nil, sortOrder: 0),
+                            PersonalityQuestionOptionPayload(optionId: "p17-b", text: "微醺就好", imageUrl: nil, sortOrder: 1),
+                            PersonalityQuestionOptionPayload(optionId: "p17-c", text: "必须喝到断片", imageUrl: nil, sortOrder: 2),
+                            PersonalityQuestionOptionPayload(optionId: "p17-d", text: "主打一个 CPDD", imageUrl: nil, sortOrder: 3)
+                        ],
+                        isEasterEgg: true
+                    )
+                    let questions = mode == .debugSet ? Array(normalQuestions.prefix(4)) : (normalQuestions + [easterEgg])
+                    return PersonalitySessionCreateResponse(
+                        mode: mode,
+                        sessionId: "mock-personality-session-\(UUID().uuidString)",
+                        questionCount: questions.count,
+                        axisThreshold: 9,
+                        questions: questions,
+                        startedAt: ISO8601DateFormatter().string(from: Date())
+                    )
+                },
+                saveAnswerHandler: { sessionId, _, _ in
+                    PersonalitySessionAnswerSaveResponse(sessionId: sessionId, status: "saved")
+                },
+                submitHandler: { sessionId, answers in
+                    PersonalitySessionSubmitResponse(
+                        mode: answers.count <= 4 ? .debugSet : .standard,
+                        sessionId: sessionId,
+                        questionCount: max(answers.count, 1),
+                        answeredCount: answers.filter { $0.optionId != nil }.count,
+                        axisScores: ["E": 10, "I": 6, "S": 7, "N": 9, "T": 6, "F": 10, "J": 5, "P": 11],
+                        result: sampleResult
+                    )
+                },
+                abandonHandler: { sessionId in
+                    PersonalitySessionAbandonResponse(sessionId: sessionId, status: "abandoned")
+                }
+            )
+        }
+    }
+
     private static func seededAvatarURL(for seed: String) -> String {
         let encoded = seed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? seed
         return "https://api.dicebear.com/9.x/adventurer-neutral/png?seed=\(encoded)&backgroundType=gradientLinear"
@@ -115,9 +209,11 @@ actor MockWebFeatureService: WebFeatureService {
     private var ratingEvents: [WebRatingEvent]
     private var learnFestivals: [WebLearnFestival]
     private var quizScenario: QuizScenario
+    private var personalityScenario: PersonalityScenario
 
     init() {
         quizScenario = .default()
+        personalityScenario = .default()
         let now = Date()
         let contributorAna = WebUserLite(
             id: "u_ana",
@@ -813,6 +909,41 @@ actor MockWebFeatureService: WebFeatureService {
 
     func setQuizScenario(_ scenario: QuizScenario) {
         quizScenario = scenario
+    }
+
+    func fetchPersonalityStatus() async throws -> PersonalityStatusSummary {
+        personalityScenario.status
+    }
+
+    func fetchPersonalityResult() async throws -> PersonalityResultEnvelope {
+        PersonalityResultEnvelope(result: personalityScenario.result)
+    }
+
+    func createPersonalitySession(mode: PersonalitySessionMode) async throws -> PersonalitySessionCreateResponse {
+        personalityScenario.sessionFactory(mode)
+    }
+
+    func savePersonalitySessionAnswer(
+        sessionId: String,
+        answers: [PersonalityAnswerPayload],
+        currentQuestionIndex: Int?
+    ) async throws -> PersonalitySessionAnswerSaveResponse {
+        personalityScenario.saveAnswerHandler(sessionId, answers, currentQuestionIndex)
+    }
+
+    func submitPersonalitySession(
+        sessionId: String,
+        answers: [PersonalityAnswerPayload]
+    ) async throws -> PersonalitySessionSubmitResponse {
+        personalityScenario.submitHandler(sessionId, answers)
+    }
+
+    func abandonPersonalitySession(sessionId: String) async throws -> PersonalitySessionAbandonResponse {
+        personalityScenario.abandonHandler(sessionId)
+    }
+
+    func setPersonalityScenario(_ scenario: PersonalityScenario) {
+        personalityScenario = scenario
     }
 
     func fetchMyEvents() async throws -> [WebEvent] {

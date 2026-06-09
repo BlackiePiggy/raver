@@ -10,6 +10,7 @@ enum ProfileRoute: Hashable {
     case myPublishes
     case contributionCenter
     case quiz
+    case personality
     case contentSubmissionDetail(submissionID: String)
     case mySaves
     case myRoutes

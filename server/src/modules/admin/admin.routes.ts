@@ -11,6 +11,7 @@ import { adminAuditService } from './admin-audit.service';
 import { requireAdmin, requireAdminOrOperator } from './admin-auth.policy';
 import { adminMediaAssetsService } from './admin-media-assets.service';
 import { adminQuizService, AdminQuizError } from './admin-quiz.service';
+import adminPersonalityRoutes from './admin-personality.routes';
 import { adminStatusService } from './admin-status.service';
 import { accountEnforcementService } from '../../services/account-enforcement.service';
 import { accountDeletionService } from '../../services/account-deletion.service';
@@ -2472,6 +2473,7 @@ router.post('/content-reports/:id/decision', authenticate, requireAdminOrOperato
 });
 
 router.use('/notifications', forwardToLegacyRouter('/admin', notificationCenterRoutes));
+router.use('/personality', adminPersonalityRoutes);
 router.use('/pre-registrations', forwardToLegacyRouter('/admin/pre-registrations', preRegistrationRoutes));
 router.use('/pre-registration-batches', forwardToLegacyRouter('/admin/pre-registration-batches', preRegistrationRoutes));
 router.use('/pre-registration-notifications', forwardToLegacyRouter('/admin/pre-registration-notifications', preRegistrationRoutes));

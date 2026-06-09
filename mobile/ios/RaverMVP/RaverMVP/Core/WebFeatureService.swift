@@ -12,6 +12,19 @@ protocol WebFeatureService {
         presentedQuestionIds: [String]?
     ) async throws -> QuizSessionSubmitResponse
     func abandonQuizSession(sessionId: String, reason: QuizSessionAbandonReason?) async throws -> QuizSessionAbandonResponse
+    func fetchPersonalityStatus() async throws -> PersonalityStatusSummary
+    func fetchPersonalityResult() async throws -> PersonalityResultEnvelope
+    func createPersonalitySession(mode: PersonalitySessionMode) async throws -> PersonalitySessionCreateResponse
+    func savePersonalitySessionAnswer(
+        sessionId: String,
+        answers: [PersonalityAnswerPayload],
+        currentQuestionIndex: Int?
+    ) async throws -> PersonalitySessionAnswerSaveResponse
+    func submitPersonalitySession(
+        sessionId: String,
+        answers: [PersonalityAnswerPayload]
+    ) async throws -> PersonalitySessionSubmitResponse
+    func abandonPersonalitySession(sessionId: String) async throws -> PersonalitySessionAbandonResponse
     func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?, wikiFestivalId: String?) async throws -> EventListPage
     func fetchEventsBootstrap(limit: Int, search: String?, eventType: String?) async throws -> EventsBootstrapResponse
     func fetchFestivalEventFeed(wikiFestivalId: String, upcomingPage: Int, upcomingLimit: Int, endedPage: Int, endedLimit: Int) async throws -> FestivalEventFeedResponse
@@ -342,6 +355,95 @@ struct QuizSessionAbandonResponse: Decodable {
     let status: String
 }
 
+enum PersonalitySessionMode: String, Codable, Hashable {
+    case standard = "standard"
+    case debugSet = "debug_set"
+}
+
+struct PersonalityResultPayload: Decodable, Hashable {
+    let code: String
+    let title: String
+    let subtitle: String?
+    let slangTagline: String?
+    let genreMapping: String?
+    let description: String
+    let imageUrl: String?
+    let isHidden: Bool
+    let mbtiCode: String?
+}
+
+struct PersonalityStatusSummary: Decodable {
+    let isEnabled: Bool
+    let questionCount: Int
+    let axisThreshold: Int
+    let resultTypeCapacity: Int
+    let hasCompleted: Bool
+    let completedAt: String?
+    let result: PersonalityResultPayload?
+    let canStart: Bool
+    let activeSessionId: String?
+    let disabledReason: String?
+    let canUseDebugQuestionSet: Bool
+    let debugQuestionSetCount: Int
+    let canStartDebugQuestionSet: Bool
+}
+
+struct PersonalityQuestionOptionPayload: Decodable, Identifiable, Hashable {
+    let optionId: String
+    let text: String?
+    let imageUrl: String?
+    let sortOrder: Int
+
+    var id: String { optionId }
+}
+
+struct PersonalityQuestionPayload: Decodable, Identifiable, Hashable {
+    let questionId: String
+    let stemText: String
+    let stemImageUrl: String?
+    let options: [PersonalityQuestionOptionPayload]
+    let isEasterEgg: Bool
+
+    var id: String { questionId }
+}
+
+struct PersonalitySessionCreateResponse: Decodable {
+    let mode: PersonalitySessionMode
+    let sessionId: String
+    let questionCount: Int
+    let axisThreshold: Int
+    let questions: [PersonalityQuestionPayload]
+    let startedAt: String
+}
+
+struct PersonalityAnswerPayload: Codable {
+    let questionId: String
+    let optionId: String?
+}
+
+struct PersonalitySessionAnswerSaveResponse: Decodable {
+    let sessionId: String
+    let status: String
+}
+
+struct PersonalitySessionSubmitResponse: Decodable {
+    let mode: PersonalitySessionMode
+    let sessionId: String
+    let questionCount: Int
+    let answeredCount: Int
+    let axisScores: [String: Int]
+    let result: PersonalityResultPayload
+}
+
+struct PersonalitySessionAbandonResponse: Decodable {
+    let sessionId: String
+    let status: String
+}
+
+struct PersonalityResultEnvelope: Decodable {
+    let result: PersonalityResultPayload?
+}
+
 extension WebFeatureService {
     func submitQuizSession(sessionId: String, answers: [QuizSubmitAnswerPayload]) async throws -> QuizSessionSubmitResponse {
         try await submitQuizSession(sessionId: sessionId, answers: answers, presentedQuestionIds: nil)
@@ -349,5 +451,12 @@ extension WebFeatureService {
 
     func abandonQuizSession(sessionId: String) async throws -> QuizSessionAbandonResponse {
         try await abandonQuizSession(sessionId: sessionId, reason: nil)
+    }
+
+    func savePersonalitySessionAnswer(
+        sessionId: String,
+        answers: [PersonalityAnswerPayload]
+    ) async throws -> PersonalitySessionAnswerSaveResponse {
+        try await savePersonalitySessionAnswer(sessionId: sessionId, answers: answers, currentQuestionIndex: nil)
     }
 }
