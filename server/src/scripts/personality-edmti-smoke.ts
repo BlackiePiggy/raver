@@ -54,16 +54,17 @@ const ensureTempUser = async (prisma: any, suffix: string): Promise<{ id: string
   return created;
 };
 
-const buildAnswerBySortOrder = (
+const buildAnswerByStemMap = (
   questions: Array<{
     questionId: string;
+    stemText: string;
     isEasterEgg: boolean;
     options: Array<{ optionId: string; text: string | null }>;
   }>,
-  mapping: Record<number, number>
+  mapping: Record<string, number>
 ): SessionAnswer[] => {
-  return questions.map((question, index) => {
-    const optionIndex = mapping[index + 1];
+  return questions.map((question) => {
+    const optionIndex = mapping[question.stemText];
     const option = typeof optionIndex === 'number' ? question.options[optionIndex] : question.options[0];
     return {
       questionId: question.questionId,
@@ -103,7 +104,7 @@ const main = async (): Promise<void> => {
     const runCase = async (
       suffix: string,
       input: {
-        mapping: Record<number, number>;
+        mapping: Record<string, number>;
         expectedCode: string;
       }
     ) => {
@@ -112,7 +113,7 @@ const main = async (): Promise<void> => {
 
       const session = await createPersonalitySession(user.id, { mode: 'standard', userRole: 'user' });
       assert(session.questions.length === 17, `${suffix}: expected 17 questions in session`);
-      const answers = buildAnswerBySortOrder(session.questions, input.mapping);
+      const answers = buildAnswerByStemMap(session.questions, input.mapping);
       const result = await submitPersonalitySession(user.id, session.sessionId, answers);
       assert(result.result.code === input.expectedCode, `${suffix}: expected ${input.expectedCode}, got ${result.result.code}`);
       log(`case:${suffix}:passed`, {
@@ -125,92 +126,92 @@ const main = async (): Promise<void> => {
     await runCase('bomb', {
       expectedCode: 'BOMB',
       mapping: {
-        1: 2,
-        2: 2,
-        3: 0,
-        4: 2,
-        5: 2,
-        6: 2,
-        7: 0,
-        8: 2,
-        9: 2,
-        10: 0,
-        11: 2,
-        12: 0,
-        13: 2,
-        14: 0,
-        15: 0,
-        16: 0,
-        17: 0,
+        '深夜独处放空时，你的耳机专属 BGM 会偏向哪种？': 2,
+        '去电音节，你最真实的状态是？': 2,
+        '关于你的私人歌单，日常状态更贴合？': 0,
+        '刷到爆红的网红电音曲目，你的第一反应是？': 2,
+        '生活压力爆棚、情绪烦躁时，电音对你而言是？': 2,
+        '挖到一首本命神仙电音，你会如何分享这份快乐？': 2,
+        '对待听歌审美，你的一贯态度是？': 0,
+        '挑选常驻单曲的核心标准，你更看重？': 2,
+        '线下奔赴电音现场，你的核心诉求是？': 2,
+        '聆听一首完整电音，你最偏爱哪个段落？': 0,
+        '周末松弛休憩，你的电音放松模式是？': 2,
+        '长期听歌习惯里，你更倾向于？': 0,
+        '你的歌单主力曲风更贴近？': 2,
+        '电音带给你的核心情绪价值是？': 0,
+        '播放模式的常年选择是？': 0,
+        '面对全新电音作品，你的接纳姿态是？': 0,
+        '去电音节/夜店，你的核心终极目的是？': 0,
       },
     });
 
     await runCase('phoenix', {
       expectedCode: 'PHOENIX',
       mapping: {
-        1: 2,
-        2: 2,
-        3: 0,
-        4: 2,
-        5: 2,
-        6: 2,
-        7: 4,
-        8: 2,
-        9: 2,
-        10: 0,
-        11: 2,
-        12: 0,
-        13: 2,
-        14: 0,
-        15: 0,
-        16: 0,
-        17: 0,
+        '深夜独处放空时，你的耳机专属 BGM 会偏向哪种？': 2,
+        '去电音节，你最真实的状态是？': 2,
+        '关于你的私人歌单，日常状态更贴合？': 0,
+        '刷到爆红的网红电音曲目，你的第一反应是？': 2,
+        '生活压力爆棚、情绪烦躁时，电音对你而言是？': 2,
+        '挖到一首本命神仙电音，你会如何分享这份快乐？': 2,
+        '对待听歌审美，你的一贯态度是？': 4,
+        '挑选常驻单曲的核心标准，你更看重？': 2,
+        '线下奔赴电音现场，你的核心诉求是？': 2,
+        '聆听一首完整电音，你最偏爱哪个段落？': 0,
+        '周末松弛休憩，你的电音放松模式是？': 2,
+        '长期听歌习惯里，你更倾向于？': 0,
+        '你的歌单主力曲风更贴近？': 2,
+        '电音带给你的核心情绪价值是？': 0,
+        '播放模式的常年选择是？': 0,
+        '面对全新电音作品，你的接纳姿态是？': 0,
+        '去电音节/夜店，你的核心终极目的是？': 0,
       },
     });
 
     await runCase('drunk', {
       expectedCode: 'DRUNK',
       mapping: {
-        1: 2,
-        2: 2,
-        3: 0,
-        4: 2,
-        5: 2,
-        6: 2,
-        7: 0,
-        8: 2,
-        9: 2,
-        10: 0,
-        11: 2,
-        12: 0,
-        13: 2,
-        14: 0,
-        15: 0,
-        16: 0,
-        17: 2,
+        '深夜独处放空时，你的耳机专属 BGM 会偏向哪种？': 2,
+        '去电音节，你最真实的状态是？': 2,
+        '关于你的私人歌单，日常状态更贴合？': 0,
+        '刷到爆红的网红电音曲目，你的第一反应是？': 2,
+        '生活压力爆棚、情绪烦躁时，电音对你而言是？': 2,
+        '挖到一首本命神仙电音，你会如何分享这份快乐？': 2,
+        '对待听歌审美，你的一贯态度是？': 0,
+        '挑选常驻单曲的核心标准，你更看重？': 2,
+        '线下奔赴电音现场，你的核心诉求是？': 2,
+        '聆听一首完整电音，你最偏爱哪个段落？': 0,
+        '周末松弛休憩，你的电音放松模式是？': 2,
+        '长期听歌习惯里，你更倾向于？': 0,
+        '你的歌单主力曲风更贴近？': 2,
+        '电音带给你的核心情绪价值是？': 0,
+        '播放模式的常年选择是？': 0,
+        '面对全新电音作品，你的接纳姿态是？': 0,
+        '去电音节/夜店，你的核心终极目的是？': 2,
       },
     });
 
     await runCase('cpdd', {
       expectedCode: 'CPDD',
       mapping: {
-        1: 2,
-        2: 2,
-        3: 0,
-        4: 2,
-        5: 2,
-        6: 2,
-        7: 0,
-        8: 2,
-        9: 2,
-        10: 0,
-        11: 2,
-        12: 0,
-        13: 2,
-        14: 0,
-        15: 0,
-        16: 0,
-        17: 3,
+        '深夜独处放空时，你的耳机专属 BGM 会偏向哪种？': 2,
+        '去电音节，你最真实的状态是？': 2,
+        '关于你的私人歌单，日常状态更贴合？': 0,
+        '刷到爆红的网红电音曲目，你的第一反应是？': 2,
+        '生活压力爆棚、情绪烦躁时，电音对你而言是？': 2,
+        '挖到一首本命神仙电音，你会如何分享这份快乐？': 2,
+        '对待听歌审美，你的一贯态度是？': 0,
+        '挑选常驻单曲的核心标准，你更看重？': 2,
+        '线下奔赴电音现场，你的核心诉求是？': 2,
+        '聆听一首完整电音，你最偏爱哪个段落？': 0,
+        '周末松弛休憩，你的电音放松模式是？': 2,
+        '长期听歌习惯里，你更倾向于？': 0,
+        '你的歌单主力曲风更贴近？': 2,
+        '电音带给你的核心情绪价值是？': 0,
+        '播放模式的常年选择是？': 0,
+        '面对全新电音作品，你的接纳姿态是？': 0,
+        '去电音节/夜店，你的核心终极目的是？': 3,
       },
     });
 

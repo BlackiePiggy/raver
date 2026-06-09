@@ -731,7 +731,7 @@ export const createPersonalitySession = async (
       startedAt: session.startedAt.toISOString(),
     };
   }, {
-    timeout: 15000,
+    timeout: 60000,
   });
 };
 
@@ -856,6 +856,8 @@ export const submitPersonalitySession = async (
       balanceScores,
       result,
     };
+  }, {
+    timeout: 60000,
   });
 };
 
