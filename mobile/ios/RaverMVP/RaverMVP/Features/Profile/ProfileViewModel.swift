@@ -449,7 +449,13 @@ final class ProfileViewModel: ObservableObject {
         } catch {
             if restoreOfflineSnapshot() {
                 phase = .success
-                bannerMessage = LT("当前离线，已显示上次同步的个人主页数据。", "You're offline. Showing your latest synced profile snapshot.", "現在オフラインです。最後に同期したプロフィールデータを表示しています。")
+                bannerMessage = isOfflineRecoverableError(error)
+                    ? LT(
+                        "当前离线，已显示上次同步的个人主页数据。",
+                        "You're offline. Showing your latest synced profile snapshot.",
+                        "現在オフラインです。最後に同期したプロフィールデータを表示しています。"
+                    )
+                    : nil
                 self.error = nil
             } else if hadContent {
                 bannerMessage = error.userFacingMessage ?? LT("个人主页更新失败，请稍后重试", "Failed to refresh profile. Please try again later.", "プロフィールを更新できませんでした。時間をおいて再試行してください。")
@@ -770,5 +776,42 @@ final class ProfileViewModel: ObservableObject {
 
     private func makeRecentCheckinPreviews(from overview: MyCheckinsOverviewResponse) -> [ProfileRecentCheckinPreview] {
         Array(overview.timeline.items.prefix(3)).map(ProfileRecentCheckinPreview.init(item:))
+    }
+
+    private func isOfflineRecoverableError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut,
+                 .notConnectedToInternet,
+                 .networkConnectionLost,
+                 .cannotFindHost,
+                 .cannotConnectToHost,
+                 .dnsLookupFailed,
+                 .internationalRoamingOff,
+                 .callIsActive,
+                 .dataNotAllowed:
+                return true
+            default:
+                break
+            }
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            let recoverableCodes: Set<Int> = [
+                NSURLErrorTimedOut,
+                NSURLErrorNotConnectedToInternet,
+                NSURLErrorNetworkConnectionLost,
+                NSURLErrorCannotFindHost,
+                NSURLErrorCannotConnectToHost,
+                NSURLErrorDNSLookupFailed,
+                NSURLErrorInternationalRoamingOff,
+                NSURLErrorCallIsActive,
+                NSURLErrorDataNotAllowed,
+            ]
+            return recoverableCodes.contains(nsError.code)
+        }
+
+        return false
     }
 }
