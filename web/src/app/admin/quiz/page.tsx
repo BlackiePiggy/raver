@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import AdminAppShell from '@/components/admin/AdminAppShell';
+import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
 import {
@@ -18,6 +19,8 @@ import {
 
 type TabKey = 'config' | 'questions' | 'overrides';
 type EditorMode = 'create' | 'edit';
+
+const QUESTION_PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
 const QUIZ_IMPORT_EXAMPLE = `[
   {
@@ -64,8 +67,6 @@ type QuestionDraft = {
   explanation: string;
   options: QuestionDraftOption[];
 };
-
-const PAGE_SIZE = 20;
 
 const buildDraftOption = (sortOrder: number, seed?: Partial<QuestionDraftOption>): QuestionDraftOption => ({
   id: seed?.id || `opt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -166,6 +167,167 @@ function Banner({ type, message }: { type: 'error' | 'notice'; message: string }
   );
 }
 
+function QuizImportOverlay({
+  open,
+  value,
+  importing,
+  onChange,
+  onClose,
+  onFillExample,
+  onSubmit,
+}: {
+  open: boolean;
+  value: string;
+  importing: boolean;
+  onChange: (value: string) => void;
+  onClose: () => void;
+  onFillExample: () => void;
+  onSubmit: (e: FormEvent<HTMLFormElement>) => void;
+}) {
+  useOverlayBodyLock(open);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[140] bg-black/45 p-4 md:p-8" onClick={onClose}>
+      <div
+        className="mx-auto flex h-full max-w-4xl flex-col overflow-hidden rounded-[28px] border border-white/65 bg-[#f6f7f8] shadow-[0_30px_80px_rgba(15,23,42,0.22)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-black/8 bg-white px-6 py-4">
+          <div>
+            <div className="text-lg font-semibold tracking-[-0.03em] text-gray-900">批量导入题库</div>
+            <p className="mt-1 text-sm text-gray-500">
+              粘贴 JSON 数组，支持 `correctOptionId`、`correctOptionIndex`、`options[].isCorrect` 指定正确答案。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-50"
+          >
+            关闭
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col gap-4 p-6">
+          <textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="min-h-0 flex-1 resize-none rounded-[24px] border border-gray-200 bg-white px-4 py-4 font-mono text-[12px] leading-6 text-gray-800 outline-none transition focus:border-gray-900"
+            spellCheck={false}
+          />
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={onFillExample}
+              className="rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-600 transition hover:bg-gray-50"
+            >
+              填入示例
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-600 transition hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                disabled={importing}
+                className="rounded-full bg-gray-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50"
+              >
+                {importing ? '导入中...' : '确认导入'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function QuizDeleteConfirmOverlay({
+  open,
+  count,
+  deleting,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  count: number;
+  deleting: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  useOverlayBodyLock(open);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !deleting) onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [deleting, onClose, open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[145] bg-black/48 p-4 md:p-8" onClick={() => (!deleting ? onClose() : undefined)}>
+      <div
+        className="mx-auto mt-[10vh] w-full max-w-[520px] overflow-hidden rounded-[28px] border border-white/65 bg-[#f6f7f8] shadow-[0_30px_80px_rgba(15,23,42,0.24)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="border-b border-black/8 bg-white px-6 py-5">
+          <div className="text-lg font-semibold tracking-[-0.03em] text-gray-900">确认批量删除</div>
+          <p className="mt-1 text-sm leading-6 text-gray-500">
+            你当前选中了 <span className="font-semibold text-gray-900">{count}</span> 道题目。删除后将无法恢复，请确认这次操作。
+          </p>
+        </div>
+
+        <div className="px-6 py-5">
+          <div className="rounded-[22px] border border-red-100 bg-red-50/80 px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-red-500">Danger Zone</div>
+            <p className="mt-2 text-sm leading-6 text-red-700">
+              这会直接删除已选题目及其选项数据，不会进入归档，也不会保留恢复入口。
+            </p>
+          </div>
+
+          <div className="mt-5 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={deleting}
+              className="rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={deleting}
+              className="rounded-full bg-[#b42318] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#9f1f15] disabled:opacity-50"
+            >
+              {deleting ? '删除中...' : `确认删除 ${count} 道`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main page ─── */
 export default function AdminQuizPage() {
   const { user, isLoading } = useAuth();
@@ -188,6 +350,7 @@ export default function AdminQuizPage() {
   const [questionQuery, setQuestionQuery] = useState('');
   const [questionStatus, setQuestionStatus] = useState<QuizQuestionStatus | ''>('');
   const [questionPage, setQuestionPage] = useState(1);
+  const [questionPageSize, setQuestionPageSize] = useState<number>(10);
   const [questions, setQuestions] = useState<AdminQuizQuestion[]>([]);
   const [questionTotal, setQuestionTotal] = useState(0);
   const [questionLoading, setQuestionLoading] = useState(false);
@@ -196,9 +359,13 @@ export default function AdminQuizPage() {
   const [questionDraft, setQuestionDraft] = useState<QuestionDraft>(createDefaultQuestionDraft());
   const [questionSaving, setQuestionSaving] = useState(false);
   const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
-  const [showImportPanel, setShowImportPanel] = useState(false);
+  const [showImportOverlay, setShowImportOverlay] = useState(false);
   const [importText, setImportText] = useState(QUIZ_IMPORT_EXAMPLE);
   const [importingQuestions, setImportingQuestions] = useState(false);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
+  const [bulkDeletingQuestions, setBulkDeletingQuestions] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
   /* overrides */
   const [overrideQueryInput, setOverrideQueryInput] = useState('');
@@ -240,10 +407,11 @@ export default function AdminQuizPage() {
         q: questionQuery.trim() || undefined,
         status: questionStatus,
         page: questionPage,
-        limit: PAGE_SIZE,
+        limit: questionPageSize,
       });
       setQuestions(result.items);
       setQuestionTotal(result.pagination.total);
+      setSelectedQuestionIds((current) => current.filter((id) => result.items.some((item) => item.id === id)));
       setSelectedQuestionId((cur) =>
         cur && result.items.some((i) => i.id === cur) ? cur : result.items[0]?.id || null
       );
@@ -252,7 +420,7 @@ export default function AdminQuizPage() {
     } finally {
       setQuestionLoading(false);
     }
-  }, [canOperate, questionPage, questionQuery, questionStatus]);
+  }, [canOperate, questionPage, questionPageSize, questionQuery, questionStatus]);
 
   const loadOverrides = useCallback(async () => {
     if (!canOperate) return;
@@ -261,7 +429,7 @@ export default function AdminQuizPage() {
       const result = await adminQuizApi.listUserOverrides({
         q: overrideQuery.trim() || undefined,
         page: overridePage,
-        limit: PAGE_SIZE,
+        limit: 20,
       });
       setOverrides(result.items);
       setOverrideTotal(result.pagination.total);
@@ -293,8 +461,8 @@ export default function AdminQuizPage() {
     }
   }, [editorMode, selectedQuestion]);
 
-  const totalQuestionPages = Math.max(1, Math.ceil(questionTotal / PAGE_SIZE));
-  const totalOverridePages = Math.max(1, Math.ceil(overrideTotal / PAGE_SIZE));
+  const totalQuestionPages = Math.max(1, Math.ceil(questionTotal / questionPageSize));
+  const totalOverridePages = Math.max(1, Math.ceil(overrideTotal / 20));
 
   /* ── submit handlers ── */
   const submitConfig = async (e: FormEvent<HTMLFormElement>) => {
@@ -443,7 +611,7 @@ export default function AdminQuizPage() {
       if (!Array.isArray(parsed)) throw new Error('导入内容必须是 JSON 数组');
       const result = await adminQuizApi.importQuestions({ questions: parsed as AdminQuizQuestionImportInput[] });
       setNotice(`成功导入 ${result.count} 道题目`);
-      setShowImportPanel(false);
+      setShowImportOverlay(false);
       setQuestionPage(1);
       await loadQuestions();
     } catch (e) {
@@ -451,6 +619,47 @@ export default function AdminQuizPage() {
       else setError(e instanceof Error ? e.message : '批量导入题目失败');
     } finally {
       setImportingQuestions(false);
+    }
+  };
+
+  const toggleQuestionMultiSelect = (id: string) => {
+    setSelectedQuestionIds((current) =>
+      current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]
+    );
+  };
+
+  const handleToggleQuestionSelectAll = () => {
+    const pageIds = questions.map((item) => item.id);
+    const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedQuestionIds.includes(id));
+    setSelectedQuestionIds((current) => {
+      if (allSelected) {
+        return current.filter((id) => !pageIds.includes(id));
+      }
+      return Array.from(new Set([...current, ...pageIds]));
+    });
+  };
+
+  const exitMultiSelectMode = () => {
+    setMultiSelectMode(false);
+    setSelectedQuestionIds([]);
+  };
+
+  const deleteSelectedQuestions = async () => {
+    if (!canWrite || selectedQuestionIds.length === 0) return;
+    try {
+      setBulkDeletingQuestions(true);
+      setError(null);
+      setNotice(null);
+      await adminQuizApi.bulkDeleteQuestions(selectedQuestionIds);
+      setNotice(`已删除 ${selectedQuestionIds.length} 道题目`);
+      setSelectedQuestionId((current) => (current && selectedQuestionIds.includes(current) ? null : current));
+      setShowBulkDeleteConfirm(false);
+      exitMultiSelectMode();
+      await loadQuestions();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '批量删除题目失败');
+    } finally {
+      setBulkDeletingQuestions(false);
     }
   };
 
@@ -485,80 +694,81 @@ export default function AdminQuizPage() {
      RENDER
   ════════════════════════════════════════════ */
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
-      {/* ── top header bar ── */}
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">答题系统</h1>
-          <p className="mt-0.5 text-sm text-gray-500">围绕主线维护题库、全局配置与用户级答题次数覆盖。</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => { void loadConfig(); void loadQuestions(); void loadOverrides(); }}
-            className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M1 8a7 7 0 1 1 .6 2.8M1 8V3m0 5H6" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            刷新
-          </button>
-          {tab === 'questions' ? (
+    <AdminAppShell title="答题系统" description="围绕主线维护题库、全局配置与用户级答题次数覆盖。" hidePageHeader>
+      <div className="flex min-h-full flex-col bg-gray-50">
+        {/* ── top header bar ── */}
+        <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">答题系统</h1>
+            <p className="mt-0.5 text-sm text-gray-500">围绕主线维护题库、全局配置与用户级答题次数覆盖。</p>
+          </div>
+          <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => {
-                const form = document.getElementById('question-form') as HTMLFormElement | null;
-                form?.requestSubmit();
-              }}
-              disabled={!canWrite || questionSaving}
-              className="rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
+              onClick={() => { void loadConfig(); void loadQuestions(); void loadOverrides(); }}
+              className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
             >
-              {questionSaving ? '保存中...' : editorMode === 'edit' ? '保存题目' : '创建题目'}
+              <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M1 8a7 7 0 1 1 .6 2.8M1 8V3m0 5H6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              刷新
             </button>
-          ) : null}
-          {tab === 'config' ? (
-            <button
-              type="button"
-              onClick={() => {
-                const form = document.getElementById('config-form') as HTMLFormElement | null;
-                form?.requestSubmit();
-              }}
-              disabled={!canWrite || configSaving || configLoading}
-              className="rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
-            >
-              {configSaving ? '保存中...' : '保存配置'}
-            </button>
-          ) : null}
+            {tab === 'questions' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const form = document.getElementById('question-form') as HTMLFormElement | null;
+                  form?.requestSubmit();
+                }}
+                disabled={!canWrite || questionSaving}
+                className="rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
+              >
+                {questionSaving ? '保存中...' : editorMode === 'edit' ? '保存题目' : '创建题目'}
+              </button>
+            ) : null}
+            {tab === 'config' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const form = document.getElementById('config-form') as HTMLFormElement | null;
+                  form?.requestSubmit();
+                }}
+                disabled={!canWrite || configSaving || configLoading}
+                className="rounded-full bg-gray-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:bg-gray-800 transition"
+              >
+                {configSaving ? '保存中...' : '保存配置'}
+              </button>
+            ) : null}
+          </div>
         </div>
-      </div>
 
-      {/* ── tab bar ── */}
-      <div className="flex items-center gap-1 border-b border-gray-200 bg-white px-6 pt-3">
-        {([
-          ['config', '配置'],
-          ['questions', '题库'],
-          ['overrides', '用户次数覆盖'],
-        ] as Array<[TabKey, string]>).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            className={`rounded-t-lg px-4 py-2 text-sm font-medium transition mb-[-1px] border-b-2 ${
-              tab === key
-                ? 'border-gray-900 text-gray-900'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+        {/* ── tab bar ── */}
+        <div className="flex items-center gap-1 border-b border-gray-200 bg-white px-6 pt-3">
+          {([
+            ['config', '配置'],
+            ['questions', '题库'],
+            ['overrides', '用户次数覆盖'],
+          ] as Array<[TabKey, string]>).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={`rounded-t-lg px-4 py-2 text-sm font-medium transition mb-[-1px] border-b-2 ${
+                tab === key
+                  ? 'border-gray-900 text-gray-900'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
-      {/* ── page body ── */}
-      <div className="flex-1 overflow-auto p-6">
-        {/* banners */}
-        {error ? <Banner type="error" message={error} /> : null}
-        {notice ? <div className="mb-4"><Banner type="notice" message={notice} /></div> : null}
+        {/* ── page body ── */}
+        <div className="flex-1 overflow-auto p-6">
+          {/* banners */}
+          {error ? <Banner type="error" message={error} /> : null}
+          {notice ? <div className="mb-4"><Banner type="notice" message={notice} /></div> : null}
 
         {/* ══ CONFIG TAB ══ */}
         {tab === 'config' ? (
@@ -714,44 +924,52 @@ export default function AdminQuizPage() {
                 </div>
 
                 <div className="p-3">
-                  {/* import panel toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setShowImportPanel((c) => !c)}
-                    className="mb-3 w-full rounded-lg border border-dashed border-gray-300 py-2 text-xs font-medium text-gray-500 hover:border-gray-400 hover:text-gray-700 transition"
-                  >
-                    {showImportPanel ? '收起批量导入' : '＋ 批量导入'}
-                  </button>
-
-                  {showImportPanel ? (
-                    <form onSubmit={submitImportQuestions} className="mb-3 space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
-                      <p className="text-xs text-gray-500 leading-5">
-                        粘贴 JSON 数组，支持 correctOptionId / correctOptionIndex / options[].isCorrect 指定正确答案。
-                      </p>
-                      <textarea
-                        value={importText}
-                        onChange={(e) => setImportText(e.target.value)}
-                        className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-2 font-mono text-[11px] leading-5 text-gray-800 outline-none min-h-[160px] resize-y focus:border-gray-900"
-                        spellCheck={false}
-                      />
-                      <div className="flex items-center justify-between gap-2">
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowImportOverlay(true)}
+                      className="rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-500 transition hover:border-gray-400 hover:text-gray-700"
+                    >
+                      ＋ 批量导入
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (multiSelectMode) {
+                          exitMultiSelectMode();
+                          return;
+                        }
+                        setMultiSelectMode(true);
+                        setSelectedQuestionIds([]);
+                      }}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                        multiSelectMode
+                          ? 'border-gray-900 bg-gray-900 text-white'
+                          : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {multiSelectMode ? '退出多选' : '多选操作'}
+                    </button>
+                    {multiSelectMode ? (
+                      <>
                         <button
                           type="button"
-                          onClick={() => setImportText(QUIZ_IMPORT_EXAMPLE)}
-                          className="text-xs text-gray-500 underline"
+                          onClick={handleToggleQuestionSelectAll}
+                          className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
                         >
-                          填入示例
+                          当前页全选
                         </button>
                         <button
-                          type="submit"
-                          disabled={!canWrite || importingQuestions}
-                          className="rounded-full bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                          type="button"
+                          onClick={() => setShowBulkDeleteConfirm(true)}
+                          disabled={!canWrite || selectedQuestionIds.length === 0 || bulkDeletingQuestions}
+                          className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
                         >
-                          {importingQuestions ? '导入中...' : '开始导入'}
+                          {bulkDeletingQuestions ? '删除中...' : `删除已选 ${selectedQuestionIds.length}`}
                         </button>
-                      </div>
-                    </form>
-                  ) : null}
+                      </>
+                    ) : null}
+                  </div>
 
                   {/* search */}
                   <form
@@ -782,6 +1000,24 @@ export default function AdminQuizPage() {
                         搜索
                       </button>
                     </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-gray-400">每页展示数量</span>
+                      <select
+                        value={String(questionPageSize)}
+                        onChange={(e) => {
+                          const next = Number(e.target.value || 10);
+                          setQuestionPageSize(next);
+                          setQuestionPage(1);
+                        }}
+                        className="w-[112px] rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 outline-none transition focus:border-gray-900"
+                      >
+                        {QUESTION_PAGE_SIZE_OPTIONS.map((size) => (
+                          <option key={size} value={size}>
+                            {size} / 页
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </form>
                 </div>
 
@@ -794,20 +1030,34 @@ export default function AdminQuizPage() {
                   ) : (
                     questions.map((item) => {
                       const isSelected = selectedQuestionId === item.id;
+                      const isChecked = selectedQuestionIds.includes(item.id);
                       return (
                         <button
                           key={item.id}
                           type="button"
                           onClick={() => {
+                            if (multiSelectMode) {
+                              toggleQuestionMultiSelect(item.id);
+                              return;
+                            }
                             setSelectedQuestionId(item.id);
                             setEditorMode('edit');
                             setQuestionDraft(createDraftFromQuestion(item));
                           }}
                           className={`w-full px-4 py-3 text-left transition hover:bg-gray-50 ${
-                            isSelected ? 'bg-emerald-50' : ''
+                            multiSelectMode ? (isChecked ? 'bg-red-50' : 'bg-white') : isSelected ? 'bg-emerald-50' : ''
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
+                            {multiSelectMode ? (
+                              <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border border-gray-300 bg-white">
+                                {isChecked ? (
+                                  <svg className="h-3.5 w-3.5 text-red-600" viewBox="0 0 12 12" fill="none">
+                                    <path d="M2 6l2.5 2.5L10 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                ) : null}
+                              </div>
+                            ) : null}
                             <div className="min-w-0 flex-1">
                               <div className="line-clamp-2 text-sm font-semibold text-gray-900">{item.stemText}</div>
                               <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -823,15 +1073,15 @@ export default function AdminQuizPage() {
                               </div>
                               <div className="mt-1.5 truncate font-mono text-[10px] text-gray-400">{item.id}</div>
                             </div>
-                            {isSelected ? (
+                            {!multiSelectMode && isSelected ? (
                               <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500">
                                 <svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none">
                                   <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                                 </svg>
                               </div>
-                            ) : (
+                            ) : !multiSelectMode ? (
                               <div className="mt-0.5 h-5 w-5 flex-shrink-0 rounded-full border-2 border-gray-200" />
-                            )}
+                            ) : null}
                           </div>
                         </button>
                       );
@@ -842,7 +1092,7 @@ export default function AdminQuizPage() {
                 {/* pagination */}
                 <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3 text-xs text-gray-500">
                   <span>
-                    {questionPage} / {totalQuestionPages} · 共 {questionTotal} 条
+                    {questionPage} / {totalQuestionPages} · 共 {questionTotal} 条 · 当前每页 {questionPageSize} 条
                   </span>
                   <div className="flex gap-1">
                     <button
@@ -1347,7 +1597,24 @@ export default function AdminQuizPage() {
             </div>
           </div>
         ) : null}
+        </div>
       </div>
-    </div>
+      <QuizImportOverlay
+        open={showImportOverlay}
+        value={importText}
+        importing={importingQuestions}
+        onChange={setImportText}
+        onClose={() => setShowImportOverlay(false)}
+        onFillExample={() => setImportText(QUIZ_IMPORT_EXAMPLE)}
+        onSubmit={submitImportQuestions}
+      />
+      <QuizDeleteConfirmOverlay
+        open={showBulkDeleteConfirm}
+        count={selectedQuestionIds.length}
+        deleting={bulkDeletingQuestions}
+        onClose={() => setShowBulkDeleteConfirm(false)}
+        onConfirm={() => void deleteSelectedQuestions()}
+      />
+    </AdminAppShell>
   );
 }

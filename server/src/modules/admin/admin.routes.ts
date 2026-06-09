@@ -1704,6 +1704,32 @@ router.post('/quiz/questions/:id/archive', authenticate, requireAdmin, async (re
   }
 });
 
+router.post('/quiz/questions/bulk-delete', authenticate, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const ids = Array.isArray(body.ids) ? body.ids.map((item) => String(item || '').trim()) : [];
+    const result = await adminQuizService.deleteQuestions(ids);
+    await adminAuditService.createAction({
+      actorId: req.user?.userId || 'unknown',
+      action: 'quiz.question.bulk_delete',
+      targetType: 'quiz_question_batch',
+      targetId: `count:${result.count}`,
+      detail: {
+        count: result.count,
+        itemIds: result.ids,
+      },
+    });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    if (error instanceof AdminQuizError) {
+      res.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
+    console.error('Bulk delete admin quiz question error:', error);
+    res.status(500).json({ error: 'Failed to delete quiz questions' });
+  }
+});
+
 router.get('/quiz/user-overrides', authenticate, requireAdminOrOperator, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const query = req.query as Request['query'];

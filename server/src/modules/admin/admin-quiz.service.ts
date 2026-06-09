@@ -633,6 +633,38 @@ export const adminQuizService = {
     return mapQuestion(updated);
   },
 
+  async deleteQuestions(ids: string[]) {
+    const normalizedIds = Array.from(
+      new Set(
+        ids
+          .map((value) => normalizeText(value, 128))
+          .filter((value): value is string => Boolean(value))
+      )
+    );
+
+    if (normalizedIds.length === 0) {
+      throw new AdminQuizError(400, 'QUIZ_DELETE_IDS_REQUIRED', 'ids must contain at least one question id');
+    }
+
+    const existingItems = await prisma.quizQuestion.findMany({
+      where: { id: { in: normalizedIds } },
+      select: { id: true },
+    });
+
+    if (existingItems.length !== normalizedIds.length) {
+      throw new AdminQuizError(404, 'QUIZ_QUESTION_NOT_FOUND', 'One or more quiz questions were not found');
+    }
+
+    await prisma.quizQuestion.deleteMany({
+      where: { id: { in: normalizedIds } },
+    });
+
+    return {
+      count: normalizedIds.length,
+      ids: normalizedIds,
+    };
+  },
+
   async listUserOverrides(params: { q?: string; page?: number; limit?: number }) {
     const page = typeof params.page === 'number' && Number.isFinite(params.page) && params.page > 0 ? Math.floor(params.page) : 1;
     const limit =

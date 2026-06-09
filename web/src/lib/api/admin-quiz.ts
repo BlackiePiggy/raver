@@ -189,6 +189,16 @@ export const adminQuizApi = {
     );
   },
 
+  async bulkDeleteQuestions(ids: string[]): Promise<{ success: true; count: number; ids: string[] }> {
+    return authenticatedJsonFetch<{ success: true; count: number; ids: string[] }>(
+      '/api/admin/v1/quiz/questions/bulk-delete',
+      {
+        method: 'POST',
+        body: JSON.stringify({ ids }),
+      }
+    );
+  },
+
   async listUserOverrides(params?: {
     q?: string;
     page?: number;
