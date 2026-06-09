@@ -287,6 +287,12 @@
 - [x] 重新开始会放弃当前 session
 - [x] 是否计入当天次数由服务端统一控制
 
+### 主动放弃行为
+
+- [x] 用户确认放弃后，iOS 本地界面立即退出答题页并返回开始页
+- [x] 放弃 session 的服务端收尾异步完成，不阻塞本地退场反馈
+- [x] 重新开始仍保持“先关闭旧 session，再创建新 session”的顺序，避免服务端判定仍有进行中答题
+
 ### 建议的次数策略
 
 - [x] 创建 session 即占用 1 次当日机会
@@ -618,3 +624,9 @@ V1 推荐：
 - [x] 已明确 V1 不实现逐题提交接口，主线固定为 session create + session submit
 - [x] 已明确 V1 不新增独立 `UserQualification` 表，由统一 qualification service 先承接权限读取
 - [x] `quiz:qualification:smoke` 已补充验证：session payload 不下发正确答案，abandon / restart 不回退每日次数
+- [x] iOS 主动放弃答题已改为“本地立即退出 + 后端异步 abandon”，修复确认放弃后仍停留在答题页的问题
+- [x] Quiz 题干 / 选项图片上传已收敛为 OSS 正式链路，不再回退本地上传，并切换到独立 `OSS_QUIZ_PREFIX`
+- [x] Quiz 题目更新 / 删除时，已补齐未再被任何 quiz 题目引用的旧图资源回收逻辑
+- [x] Web quiz 后台题干图 / 选项图输入区已改为“缩略图 + 灰色只读 URL + 全屏查看”，不再直接暴露可编辑 URL 输入框
+- [x] Web quiz 题干图 / 选项图在上传 OSS 前已增加前端压缩，按 `stem` / `option` 不同尺寸上限缩放后再上传
+- [x] Web quiz 图片上传后会在对应字段内显示压缩前后体积对比，并在切换题目 / 新建题目时清空历史上传对比

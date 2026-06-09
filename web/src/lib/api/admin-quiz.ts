@@ -1,6 +1,11 @@
 import { authenticatedJsonFetch, authenticatedFetch } from '@/lib/auth/authenticated-fetch';
 import { getApiUrl } from '@/lib/config';
 import { uploadMediaWithFetcher } from '@/lib/api/upload-media';
+import {
+  compressQuizImageForUpload,
+  type QuizImageCompressionProfile,
+  type QuizImageCompressionResult,
+} from '@/lib/api/quiz-image-compression';
 
 export type QuizAttemptMode = 'default' | 'custom_limit' | 'unlimited';
 export type QuizQuestionStatus = 'draft' | 'active' | 'archived';
@@ -110,6 +115,14 @@ export type AdminQuizQuestionImportInput = {
         isCorrect?: boolean;
       }
   >;
+};
+
+export type AdminQuizUploadedImage = {
+  url: string;
+  originalUrl: string | null;
+  fileName: string | null;
+  mimeType: string | null;
+  compression: Pick<QuizImageCompressionResult, 'originalBytes' | 'uploadedBytes' | 'compressed'>;
 };
 
 const buildQuery = (params?: Record<string, string | number | boolean | undefined>): string => {
@@ -228,13 +241,27 @@ export const adminQuizApi = {
     );
   },
 
-  async uploadImage(file: File): Promise<{ url: string; originalUrl: string | null; fileName: string | null; mimeType: string | null }> {
-    return uploadMediaWithFetcher({
+  async uploadImage(
+    file: File,
+    options?: {
+      profile?: QuizImageCompressionProfile;
+    }
+  ): Promise<AdminQuizUploadedImage> {
+    const prepared = await compressQuizImageForUpload(file, options?.profile ?? 'option');
+    const uploaded = await uploadMediaWithFetcher({
       url: getApiUrl('/api/admin/v1/quiz/upload-image'),
-      file,
+      file: prepared.file,
       fetcher: authenticatedFetch,
       fallbackError: 'Quiz 图片上传失败',
       invalidResponseError: '上传成功但未返回有效图片地址',
     });
+    return {
+      ...uploaded,
+      compression: {
+        originalBytes: prepared.originalBytes,
+        uploadedBytes: prepared.uploadedBytes,
+        compressed: prepared.compressed,
+      },
+    };
   },
 };

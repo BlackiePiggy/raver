@@ -17,14 +17,11 @@ import { accountDeletionService } from '../../services/account-deletion.service'
 import { authAuditService, type AuthAuditOutcome } from '../../services/auth-audit.service';
 import { Prisma, PrismaClient, QuizAttemptMode, QuizQuestionStatus, QuizQuestionType } from '@prisma/client';
 import crypto from 'crypto';
-import path from 'path';
 import { notificationCenterService } from '../../modules/notifications';
 import { mediaAssetService } from '../../services/media-asset.service';
 import {
   buildMediaObjectKey,
   isObjectStorageConfigured,
-  saveBufferToLocalUploads,
-  shouldAllowLocalUploadFallback,
   uploadBufferToObjectStorage,
 } from '../../services/media-storage.service';
 import { verifyReauthProof } from '../../utils/auth';
@@ -38,6 +35,7 @@ import {
 
 const router: Router = Router();
 const prisma = new PrismaClient();
+const quizOssPrefix = (process.env.OSS_QUIZ_PREFIX || 'wen-jasonlee/quiz').replace(/^\/+|\/+$/g, '');
 const quizImageUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -1798,38 +1796,30 @@ router.post(
         res.status(400).json({ error: 'Invalid upload payload' });
         return;
       }
-      if (!isObjectStorageConfigured() && !shouldAllowLocalUploadFallback()) {
+      if (!isObjectStorageConfigured()) {
         res.status(503).json({ error: 'Object storage is not configured for uploads' });
         return;
       }
 
       const ownerKey = req.user?.userId || 'admin-quiz';
-      const uploaded = isObjectStorageConfigured()
-        ? await uploadBufferToObjectStorage({
-            buffer: file.buffer,
-            mimeType: file.mimetype || 'image/jpeg',
-            objectKey: buildMediaObjectKey(
-              process.env.OSS_LEARN_RANKINGS_PREFIX || 'wen-jasonlee/quiz',
-              ownerKey,
-              'question-image',
-              file.originalname || 'quiz-image.jpg',
-              file.mimetype || 'image/jpeg'
-            ),
-          })
-        : await saveBufferToLocalUploads({
-            buffer: file.buffer,
-            localDir: path.join(process.cwd(), 'uploads', 'quiz'),
-            publicSubdir: 'quiz',
-            originalName: file.originalname || 'quiz-image.jpg',
-            mimeType: file.mimetype || 'image/jpeg',
-          });
+      const uploaded = await uploadBufferToObjectStorage({
+        buffer: file.buffer,
+        mimeType: file.mimetype || 'image/jpeg',
+        objectKey: buildMediaObjectKey(
+          quizOssPrefix,
+          ownerKey,
+          'question-image',
+          file.originalname || 'quiz-image.jpg',
+          file.mimetype || 'image/jpeg'
+        ),
+      });
 
       const asset = await mediaAssetService.register({
         ownerType: 'quiz',
         ownerId: null,
         purpose: 'question_image',
-        provider: 'objectKey' in uploaded ? 'oss' : 'local',
-        objectKey: 'objectKey' in uploaded ? uploaded.objectKey : null,
+        provider: 'oss',
+        objectKey: uploaded.objectKey,
         url: uploaded.url,
         mimeType: file.mimetype || 'image/jpeg',
         sizeBytes: file.size,
@@ -1843,10 +1833,7 @@ router.post(
       res.status(201).json({
         assetId: asset.id,
         url: uploaded.url,
-        fileName:
-          'fileName' in uploaded
-            ? uploaded.fileName
-            : uploaded.objectKey.split('/').pop() || file.originalname || 'quiz-image.jpg',
+        fileName: uploaded.objectKey.split('/').pop() || file.originalname || 'quiz-image.jpg',
         originalUrl: uploaded.url,
         originalName: file.originalname,
         size: file.size,

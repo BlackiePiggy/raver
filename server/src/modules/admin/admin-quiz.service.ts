@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import crypto from 'crypto';
 import { prisma } from '../../lib/prisma';
+import { mediaAssetService } from '../../services/media-asset.service';
 
 const QUIZ_CONFIG_ID = 'default';
 const MAX_OPTION_COUNT = 6;
@@ -223,6 +224,60 @@ const validateQuestionPayload = (input: AdminQuizQuestionUpsertInput): {
 };
 
 type ValidatedQuizQuestionInput = ReturnType<typeof validateQuestionPayload>;
+
+const collectQuizQuestionImageUrls = (question: {
+  stemImageUrl?: string | null;
+  options?: Array<{ imageUrl?: string | null }>;
+}): string[] => {
+  const urls = new Set<string>();
+  const stemImageUrl = normalizeOptionalUrl(question.stemImageUrl);
+  if (stemImageUrl) {
+    urls.add(stemImageUrl);
+  }
+  for (const option of question.options || []) {
+    const optionImageUrl = normalizeOptionalUrl(option.imageUrl);
+    if (optionImageUrl) {
+      urls.add(optionImageUrl);
+    }
+  }
+  return Array.from(urls);
+};
+
+const markQuizImageUrlInactiveIfUnused = async (
+  url: string,
+  nextStatus: 'replaced' | 'deleted'
+): Promise<void> => {
+  const normalizedUrl = normalizeOptionalUrl(url);
+  if (!normalizedUrl) return;
+
+  const [stemRefCount, optionRefCount] = await prisma.$transaction([
+    prisma.quizQuestion.count({
+      where: { stemImageUrl: normalizedUrl },
+    }),
+    prisma.quizQuestionOption.count({
+      where: { imageUrl: normalizedUrl },
+    }),
+  ]);
+
+  if (stemRefCount > 0 || optionRefCount > 0) {
+    return;
+  }
+
+  if (nextStatus === 'replaced') {
+    await mediaAssetService.markReplacedByUrl(normalizedUrl);
+    return;
+  }
+  await mediaAssetService.markDeletedByUrl(normalizedUrl);
+};
+
+const cleanupUnusedQuizImageUrls = async (
+  urls: string[],
+  nextStatus: 'replaced' | 'deleted'
+): Promise<void> => {
+  for (const url of Array.from(new Set(urls.map((item) => normalizeOptionalUrl(item)).filter((item): item is string => Boolean(item))))) {
+    await markQuizImageUrlInactiveIfUnused(url, nextStatus);
+  }
+};
 
 const createQuestionRecord = async (
   tx: Prisma.TransactionClient,
@@ -564,6 +619,11 @@ export const adminQuizService = {
     }
 
     const normalized = validateQuestionPayload(input);
+    const previousImageUrls = collectQuizQuestionImageUrls(existing);
+    const nextImageUrls = collectQuizQuestionImageUrls({
+      stemImageUrl: normalized.stemImageUrl,
+      options: normalized.options,
+    });
     const updated = await prisma.$transaction(async (tx) => {
       await tx.quizQuestion.update({
         where: { id },
@@ -614,6 +674,9 @@ export const adminQuizService = {
       });
     });
 
+    const removedImageUrls = previousImageUrls.filter((url) => !nextImageUrls.includes(url));
+    await cleanupUnusedQuizImageUrls(removedImageUrls, 'replaced');
+
     return mapQuestion(updated);
   },
 
@@ -649,16 +712,28 @@ export const adminQuizService = {
 
     const existingItems = await prisma.quizQuestion.findMany({
       where: { id: { in: normalizedIds } },
-      select: { id: true },
+      select: {
+        id: true,
+        stemImageUrl: true,
+        options: {
+          select: {
+            imageUrl: true,
+          },
+        },
+      },
     });
 
     if (existingItems.length !== normalizedIds.length) {
       throw new AdminQuizError(404, 'QUIZ_QUESTION_NOT_FOUND', 'One or more quiz questions were not found');
     }
 
+    const removedImageUrls = existingItems.flatMap((item) => collectQuizQuestionImageUrls(item));
+
     await prisma.quizQuestion.deleteMany({
       where: { id: { in: normalizedIds } },
     });
+
+    await cleanupUnusedQuizImageUrls(removedImageUrls, 'deleted');
 
     return {
       count: normalizedIds.length,

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import AdminAppShell from '@/components/admin/AdminAppShell';
+import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
@@ -126,6 +127,12 @@ type QuestionDraft = {
   options: QuestionDraftOption[];
 };
 
+type UploadCompressionSummary = {
+  originalBytes: number;
+  uploadedBytes: number;
+  compressed: boolean;
+};
+
 const buildDraftOption = (sortOrder: number, seed?: Partial<QuestionDraftOption>): QuestionDraftOption => ({
   id: seed?.id || `opt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
   text: seed?.text || '',
@@ -197,6 +204,25 @@ const hasPreviewOptionImage = (imageUrl: string): boolean => imageUrl.trim().len
 
 const usesImageGridPreview = (options: QuestionDraftOption[]): boolean =>
   options.length === 4 && options.every((option) => !normalizedPreviewOptionText(option.text) && hasPreviewOptionImage(option.imageUrl));
+
+const formatBytes = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 2 : 1)} MB`;
+};
+
+const buildCompressionSummaryText = (summary: UploadCompressionSummary): string => {
+  const savedBytes = Math.max(0, summary.originalBytes - summary.uploadedBytes);
+  const savedPercent =
+    summary.originalBytes > 0 ? Math.max(0, Math.round((savedBytes / summary.originalBytes) * 100)) : 0;
+
+  if (!summary.compressed || savedBytes <= 0) {
+    return `上传前 ${formatBytes(summary.originalBytes)} · 上传后 ${formatBytes(summary.uploadedBytes)} · 未发生压缩`;
+  }
+
+  return `上传前 ${formatBytes(summary.originalBytes)} · 上传后 ${formatBytes(summary.uploadedBytes)} · 缩减 ${savedPercent}%`;
+};
 
 /* ─── shared input style ─── */
 const inputCls = (multiline = false) =>
@@ -486,6 +512,89 @@ function QuizDeleteConfirmOverlay({
   );
 }
 
+function QuizImageField({
+  imageUrl,
+  alt,
+  uploadLabel,
+  uploading,
+  uploadSummary,
+  onUpload,
+  onRemove,
+  onPreview,
+  emptyMessage = '未上传图片',
+}: {
+  imageUrl: string;
+  alt: string;
+  uploadLabel: string;
+  uploading: boolean;
+  uploadSummary?: UploadCompressionSummary | null;
+  onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  onRemove: () => void;
+  onPreview: () => void;
+  emptyMessage?: string;
+}) {
+  const normalizedImageUrl = imageUrl.trim();
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-100">
+          <input type="file" accept="image/*" className="hidden" onChange={onUpload} />
+          {uploading ? '上传中...' : uploadLabel}
+        </label>
+        {normalizedImageUrl ? (
+          <>
+            <button
+              type="button"
+              onClick={onPreview}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
+            >
+              全屏查看
+            </button>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="rounded-lg border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100"
+            >
+              移除图片
+            </button>
+          </>
+        ) : null}
+      </div>
+
+      <div className="rounded-xl border border-gray-200 bg-[#f4f5f6] px-3 py-3">
+        {normalizedImageUrl ? (
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onPreview}
+              className="shrink-0 overflow-hidden rounded-md border border-gray-200 bg-white transition hover:opacity-90"
+              aria-label="打开大图预览"
+              title="点击查看大图"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={normalizedImageUrl} alt={alt} className="h-12 w-12 object-cover" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">Read Only URL</div>
+              <div className="mt-1 truncate text-xs text-gray-500" title={normalizedImageUrl}>
+                {normalizedImageUrl}
+              </div>
+              {uploadSummary ? (
+                <div className="mt-1 text-[11px] text-gray-400">
+                  {buildCompressionSummaryText(uploadSummary)}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs text-gray-400">{emptyMessage}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main page ─── */
 export default function AdminQuizPage() {
   const { user, isLoading } = useAuth();
@@ -526,6 +635,9 @@ export default function AdminQuizPage() {
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
   const [bulkDeletingQuestions, setBulkDeletingQuestions] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [imagePreviewAssets, setImagePreviewAssets] = useState<OverlayImageViewerAsset[]>([]);
+  const [imagePreviewIndex, setImagePreviewIndex] = useState<number | null>(null);
+  const [uploadCompressionByTarget, setUploadCompressionByTarget] = useState<Record<string, UploadCompressionSummary>>({});
 
   /* overrides */
   const [overrideQueryInput, setOverrideQueryInput] = useState('');
@@ -618,6 +730,7 @@ export default function AdminQuizPage() {
   useEffect(() => {
     if (selectedQuestion && editorMode === 'edit') {
       setQuestionDraft(createDraftFromQuestion(selectedQuestion));
+      setUploadCompressionByTarget({});
     }
   }, [editorMode, selectedQuestion]);
 
@@ -719,7 +832,10 @@ export default function AdminQuizPage() {
     try {
       setUploadingTarget(target);
       setError(null);
-      const uploaded = await adminQuizApi.uploadImage(file);
+      const uploaded = await adminQuizApi.uploadImage(file, {
+        profile: target === 'stem' ? 'stem' : 'option',
+      });
+      const compressionSummary: UploadCompressionSummary = uploaded.compression;
       if (target === 'stem') {
         setQuestionDraft((cur) => ({ ...cur, stemImageUrl: uploaded.url }));
       } else {
@@ -728,13 +844,55 @@ export default function AdminQuizPage() {
           options: cur.options.map((opt) => (opt.id === target ? { ...opt, imageUrl: uploaded.url } : opt)),
         }));
       }
-      setNotice('图片上传成功');
+      setUploadCompressionByTarget((current) => ({
+        ...current,
+        [target]: compressionSummary,
+      }));
+      setNotice(`图片上传成功 · ${buildCompressionSummaryText(compressionSummary)}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : '图片上传失败');
     } finally {
       setUploadingTarget(null);
     }
   };
+
+  const clearImage = useCallback((target: 'stem' | string) => {
+    if (target === 'stem') {
+      setQuestionDraft((current) => ({ ...current, stemImageUrl: '' }));
+      setUploadCompressionByTarget((current) => {
+        const next = { ...current };
+        delete next.stem;
+        return next;
+      });
+      return;
+    }
+
+    setQuestionDraft((current) => ({
+      ...current,
+      options: current.options.map((option) => (option.id === target ? { ...option, imageUrl: '' } : option)),
+    }));
+    setUploadCompressionByTarget((current) => {
+      const next = { ...current };
+      delete next[target];
+      return next;
+    });
+  }, []);
+
+  const openImagePreview = useCallback((url: string, title: string, subtitle?: string) => {
+    const normalizedUrl = url.trim();
+    if (!normalizedUrl) return;
+
+    const fileNameCandidate = normalizedUrl.split('/').pop()?.split('?')[0]?.trim() || title;
+    setImagePreviewAssets([
+      {
+        url: normalizedUrl,
+        title,
+        subtitle,
+        fileName: fileNameCandidate,
+      },
+    ]);
+    setImagePreviewIndex(0);
+  }, []);
 
   const saveOverride = async (userId: string) => {
     if (!canWrite) return;
@@ -1074,6 +1232,7 @@ export default function AdminQuizPage() {
                       setEditorMode('create');
                       setSelectedQuestionId(null);
                       setQuestionDraft(createDefaultQuestionDraft());
+                      setUploadCompressionByTarget({});
                     }}
                     className="rounded-full bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 transition"
                   >
@@ -1349,23 +1508,18 @@ export default function AdminQuizPage() {
                 </Field>
 
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="题干图片 URL">
-                    <div className="space-y-2">
-                      <input
-                        value={questionDraft.stemImageUrl}
-                        onChange={(e) => setQuestionDraft((c) => ({ ...c, stemImageUrl: e.target.value }))}
-                        placeholder="请输入图片 URL"
-                        className={inputCls()}
-                      />
-                      <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 transition">
-                        <input type="file" accept="image/*" className="hidden" onChange={(e) => void uploadImage(e, 'stem')} />
-                        {uploadingTarget === 'stem' ? '上传中...' : '上传题干图片'}
-                      </label>
-                      {questionDraft.stemImageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={questionDraft.stemImageUrl} alt="stem" className="h-16 w-16 rounded-lg object-cover border border-gray-200" />
-                      ) : null}
-                    </div>
+                  <Field label="题干图片">
+                    <QuizImageField
+                      imageUrl={questionDraft.stemImageUrl}
+                      alt="题干图片"
+                      uploadLabel="上传题干图片"
+                      uploading={uploadingTarget === 'stem'}
+                      uploadSummary={uploadCompressionByTarget.stem ?? null}
+                      onUpload={(e) => void uploadImage(e, 'stem')}
+                      onRemove={() => clearImage('stem')}
+                      onPreview={() => openImagePreview(questionDraft.stemImageUrl, '题干图片', 'Quiz stem image')}
+                      emptyMessage="未上传题干图片"
+                    />
                   </Field>
 
                   <Field label="标签" hint="逗号分隔">
@@ -1498,45 +1652,24 @@ export default function AdminQuizPage() {
                             />
                           </Field>
 
-                          <Field label="选项图片 URL">
-                            <div className="space-y-1.5">
-                              <input
-                                value={option.imageUrl}
-                                onChange={(e) =>
-                                  setQuestionDraft((c) => ({
-                                    ...c,
-                                    options: c.options.map((o) =>
-                                      o.id === option.id ? { ...o, imageUrl: e.target.value } : o
-                                    ),
-                                  }))
-                                }
-                                placeholder="请输入图片 URL"
-                                className={inputCls()}
-                              />
-                              <div className="flex items-center gap-2">
-                                <label
-                                  className={`inline-flex cursor-pointer items-center rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 transition ${
-                                    isCorrect ? '' : 'opacity-70'
-                                  }`}
-                                >
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={(e) => void uploadImage(e, option.id)}
-                                  />
-                                  {uploadingTarget === option.id ? '上传中...' : '上传选项图片'}
-                                </label>
-                                {option.imageUrl ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={option.imageUrl}
-                                    alt={option.text || option.id}
-                                    className="h-10 w-10 rounded-lg object-cover border border-gray-200"
-                                  />
-                                ) : null}
-                              </div>
-                            </div>
+                          <Field label="选项图片">
+                            <QuizImageField
+                              imageUrl={option.imageUrl}
+                              alt={option.text || `选项 ${letter}`}
+                              uploadLabel="上传选项图片"
+                              uploading={uploadingTarget === option.id}
+                              uploadSummary={uploadCompressionByTarget[option.id] ?? null}
+                              onUpload={(e) => void uploadImage(e, option.id)}
+                              onRemove={() => clearImage(option.id)}
+                              onPreview={() =>
+                                openImagePreview(
+                                  option.imageUrl,
+                                  `选项 ${letter} 图片`,
+                                  option.text.trim() || `Option ${letter}`
+                                )
+                              }
+                              emptyMessage="未上传选项图片"
+                            />
                           </Field>
                         </div>
 
@@ -1814,6 +1947,15 @@ export default function AdminQuizPage() {
         deleting={bulkDeletingQuestions}
         onClose={() => setShowBulkDeleteConfirm(false)}
         onConfirm={() => void deleteSelectedQuestions()}
+      />
+      <OverlayImageViewer
+        assets={imagePreviewAssets}
+        activeIndex={imagePreviewIndex}
+        onClose={() => {
+          setImagePreviewIndex(null);
+          setImagePreviewAssets([]);
+        }}
+        onChange={setImagePreviewIndex}
       />
     </AdminAppShell>
   );

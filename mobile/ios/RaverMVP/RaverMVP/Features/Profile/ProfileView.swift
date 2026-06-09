@@ -4416,7 +4416,7 @@ final class QuizFlowViewModel: ObservableObject {
             await abandonCurrentSessionSilently()
             await startQuiz()
         case .abandon:
-            await abandonCurrentSessionSilently()
+            abandonCurrentSessionLocallyAndReportInBackground()
             feedbackMessage = nil
             if let summary {
                 phase = .ready(summary)
@@ -4590,16 +4590,28 @@ final class QuizFlowViewModel: ObservableObject {
         }
     }
 
-    private func abandonCurrentSessionSilently() async {
-        guard let session else { return }
+    private func clearLocalSessionState() -> String? {
+        let sessionId = session?.sessionId
         cancelQuestionTasks()
-        _ = try? await service.abandonQuizSession(sessionId: session.sessionId)
-        self.session = nil
-        self.isPreparingQuestion = false
-        self.preparationAttempt = 0
-        self.preparationMessage = nil
-        self.secondsRemaining = 0
-        self.countdownProgress = 0
+        session = nil
+        isPreparingQuestion = false
+        preparationAttempt = 0
+        preparationMessage = nil
+        secondsRemaining = 0
+        countdownProgress = 0
+        return sessionId
+    }
+
+    private func abandonCurrentSessionSilently() async {
+        guard let sessionId = clearLocalSessionState() else { return }
+        _ = try? await service.abandonQuizSession(sessionId: sessionId)
+    }
+
+    private func abandonCurrentSessionLocallyAndReportInBackground() {
+        guard let sessionId = clearLocalSessionState() else { return }
+        Task {
+            _ = try? await service.abandonQuizSession(sessionId: sessionId)
+        }
     }
 
     private func cancelQuestionTasks() {
