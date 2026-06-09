@@ -271,7 +271,7 @@ export const adminQuizApi = {
   ): Promise<AdminQuizUploadedImage> {
     const prepared = await compressQuizImageForUpload(file, options?.profile ?? 'option');
     const uploaded = await uploadMediaWithFetcher({
-      url: getApiUrl('/api/admin/v1/quiz/upload-image'),
+      url: getApiUrl('/admin/v1/quiz/upload-image'),
       file: prepared.file,
       fetcher: authenticatedFetch,
       fallbackError: 'Quiz 图片上传失败',
