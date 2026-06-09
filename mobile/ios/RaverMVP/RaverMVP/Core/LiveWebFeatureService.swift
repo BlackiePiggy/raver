@@ -2245,6 +2245,15 @@ final class LiveWebFeatureService: WebFeatureService {
             if let apiError = try? JSONDecoder.raver.decode(BFFErrorResponse.self, from: data),
                let error = apiError.error,
                !error.isEmpty {
+                let normalizedCode = (apiError.code ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                if normalizedCode.hasPrefix("PERSONALITY_") {
+                    throw ServiceError.message(
+                        PersonalitySubmissionErrorMapper.userFacingMessage(
+                            code: apiError.code,
+                            rawMessage: error
+                        )
+                    )
+                }
                 throw ServiceError.message(
                     EventSubmissionErrorMapper.userFacingMessage(
                         code: apiError.code,

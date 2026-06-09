@@ -334,8 +334,15 @@ const buildDisabledReason = (input: {
 }): string | null => {
   if (!input.isEnabled) return 'personality_disabled';
   if (input.hasCompleted) return 'already_completed';
-  if (input.activeSessionId) return 'session_in_progress';
   return null;
+};
+
+const canAutoReplaceActiveSessions = (input: {
+  requestedMode: PersonalitySessionMode;
+  activeSessions: Array<{ mode: string | null }>;
+}): boolean => {
+  if (input.activeSessions.length === 0) return false;
+  return input.requestedMode === PERSONALITY_STANDARD_MODE || input.requestedMode === PERSONALITY_DEBUG_MODE;
 };
 
 const resolveScoringState = (answers: PersonalitySessionAnswer[], questions: PersonalityQuestionServerSnapshot[]): {
@@ -636,7 +643,7 @@ export const createPersonalitySession = async (
       }),
       tx.personalitySession.findMany({
         where: { userId, status: QuizSessionStatus.in_progress },
-        select: { id: true },
+        select: { id: true, mode: true },
       }),
       tx.personalityQuestion.findMany({
         where: {
@@ -680,7 +687,19 @@ export const createPersonalitySession = async (
       throw new PersonalityServiceError(403, 'PERSONALITY_DEBUG_FORBIDDEN', 'Only admin can start debug personality sessions');
     }
     if (activeSessions.length > 0) {
-      throw new PersonalityServiceError(409, 'PERSONALITY_SESSION_IN_PROGRESS', 'A personality session is already in progress');
+      if (canAutoReplaceActiveSessions({ requestedMode: sessionMode, activeSessions })) {
+        await tx.personalitySession.updateMany({
+          where: {
+            id: { in: activeSessions.map((session) => session.id) },
+            status: QuizSessionStatus.in_progress,
+          },
+          data: {
+            status: QuizSessionStatus.abandoned,
+          },
+        });
+      } else {
+        throw new PersonalityServiceError(409, 'PERSONALITY_SESSION_IN_PROGRESS', 'A personality session is already in progress');
+      }
     }
 
     const eligibleQuestions = allQuestions.filter(isEligibleQuestion);

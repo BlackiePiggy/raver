@@ -1,6 +1,52 @@
 import SwiftUI
 import Photos
 
+enum PersonalitySubmissionErrorMapper {
+    static func userFacingMessage(code: String?, rawMessage: String) -> String {
+        let trimmed = rawMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCode = (code ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+
+        switch normalizedCode {
+        case "PERSONALITY_SESSION_INCOMPLETE":
+            return LT(
+                "还有题目没有作答，请先完成所有题目再查看结果。",
+                "Some questions are still unanswered. Complete them all before seeing your result.",
+                "未回答の問題があります。すべて回答してから結果を表示してください。"
+            )
+        case "PERSONALITY_SESSION_IN_PROGRESS":
+            return LT(
+                "你有一个未完成的测试，本次已为你自动刷新为新的测试场次。",
+                "You had an unfinished session. A fresh test session has been prepared for you.",
+                "未完了のテストがあったため、新しいセッションに切り替えました。"
+            )
+        case "PERSONALITY_SESSION_NOT_ACTIVE":
+            return LT(
+                "当前测试已经失效，请重新开始。",
+                "This test session is no longer active. Please start again.",
+                "このテストセッションはすでに無効です。もう一度開始してください。"
+            )
+        case "PERSONALITY_ALREADY_COMPLETED":
+            return LT(
+                "正式测试你已经做完了，可以直接查看结果。",
+                "You have already completed the formal test and can view the result directly.",
+                "正式テストはすでに完了しているため、結果を直接確認できます。"
+            )
+        case "PERSONALITY_DISABLED":
+            return LT(
+                "当前 EDMTI 测试暂未开启。",
+                "EDMTI is currently disabled.",
+                "現在 EDMTI は無効です。"
+            )
+        default:
+            break
+        }
+
+        return trimmed.isEmpty
+            ? LT("测试请求失败，请稍后重试。", "Test request failed. Please try again later.", "テストのリクエストに失敗しました。後でもう一度お試しください。")
+            : trimmed
+    }
+}
+
 struct ProfileView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.appPush) private var appPush
@@ -5352,6 +5398,10 @@ struct QuizFlowView: View {
             } else if let question = viewModel.currentQuestion {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        if let feedbackMessage = viewModel.feedbackMessage, !feedbackMessage.isEmpty {
+                            ScreenStatusBanner(message: feedbackMessage, style: .error)
+                        }
+
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 Text(viewModel.progressText)
@@ -5539,10 +5589,12 @@ final class PersonalityFlowViewModel: ObservableObject {
     @Published private(set) var sessionPreparationMessage: String?
     @Published var feedbackMessage: String?
     @Published var activeAlert: QuizAlert?
+    @Published private(set) var isAbandoningSession = false
 
     private let service: WebFeatureService
     private let mediaPreloader: MediaPreloader
     private var preloadedMediaURLs = Set<String>()
+    private var hasExplicitlyExitedSession = false
 
     init(
         service: WebFeatureService,
@@ -5564,6 +5616,15 @@ final class PersonalityFlowViewModel: ObservableObject {
 
     var isSessionLocked: Bool {
         session != nil && !isSubmitting
+    }
+
+    var canAdvanceFromCurrentQuestion: Bool {
+        guard let question = currentQuestion else { return false }
+        return answers[question.questionId] != nil
+    }
+
+    var shouldAutoAbandonOnDisappear: Bool {
+        session != nil && !isSubmitting && !isAbandoningSession && !hasExplicitlyExitedSession
     }
 
     func showExistingResult(_ result: PersonalityResultPayload, questionCount: Int) {
@@ -5601,6 +5662,7 @@ final class PersonalityFlowViewModel: ObservableObject {
             self.answers = [:]
             self.currentQuestionIndex = 0
             self.preloadedMediaURLs = []
+            self.hasExplicitlyExitedSession = false
             phase = .inSession
             let prepared = try await prepareSessionForPlayback(createdSession)
             self.session = prepared
@@ -5638,6 +5700,15 @@ final class PersonalityFlowViewModel: ObservableObject {
 
     func goNext() {
         guard let session, !isSubmitting else { return }
+        guard canAdvanceFromCurrentQuestion else {
+            feedbackMessage = LT(
+                "请先选择一个答案，再继续下一题。",
+                "Choose an answer before moving on.",
+                "先に回答を選択してから次へ進んでください。"
+            )
+            return
+        }
+        feedbackMessage = nil
         if currentQuestionIndex < session.questions.count - 1 {
             withAnimation(.easeInOut(duration: 0.24)) {
                 currentQuestionIndex += 1
@@ -5675,6 +5746,14 @@ final class PersonalityFlowViewModel: ObservableObject {
 
     func submitSession() async {
         guard let session, !isSubmitting else { return }
+        guard canAdvanceFromCurrentQuestion else {
+            feedbackMessage = LT(
+                "最后一题还没有作答，选择答案后才能查看结果。",
+                "Answer the last question before seeing your result.",
+                "最後の問題に回答してから結果を表示してください。"
+            )
+            return
+        }
         isSubmitting = true
         defer { isSubmitting = false }
         do {
@@ -5685,6 +5764,7 @@ final class PersonalityFlowViewModel: ObservableObject {
                 sessionId: session.sessionId,
                 answers: payload
             )
+            hasExplicitlyExitedSession = true
             self.session = nil
             phase = .result(result)
             summary = try? await service.fetchPersonalityStatus()
@@ -5748,12 +5828,23 @@ final class PersonalityFlowViewModel: ObservableObject {
 
     private func abandonCurrentSessionSilently() async {
         guard let sessionId = session?.sessionId else { return }
+        hasExplicitlyExitedSession = true
+        isAbandoningSession = true
         session = nil
         isPreparingSession = false
         sessionPreparationCompletedCount = 0
         sessionPreparationTargetCount = 0
         sessionPreparationMessage = nil
         _ = try? await service.abandonPersonalitySession(sessionId: sessionId)
+        isAbandoningSession = false
+    }
+
+    func handleViewDisappear() {
+        guard shouldAutoAbandonOnDisappear else { return }
+        hasExplicitlyExitedSession = true
+        Task {
+            await abandonCurrentSessionSilently()
+        }
     }
 
     private func preloadMediaAssets(_ urls: [URL]) async throws {
@@ -5890,6 +5981,13 @@ struct PersonalityFlowView: View {
 
     private func usesImageGridLayout(for question: PersonalityQuestionPayload) -> Bool {
         question.options.count == 4 && question.options.allSatisfy { normalizedOptionText($0) == nil && hasOptionImage($0) }
+    }
+
+    @ViewBuilder
+    private func personalityFeedbackBanner() -> some View {
+        if let feedbackMessage = viewModel.feedbackMessage, !feedbackMessage.isEmpty {
+            ScreenStatusBanner(message: feedbackMessage, style: .error)
+        }
     }
 
     private func optionSelectionBorder(
@@ -6055,6 +6153,9 @@ struct PersonalityFlowView: View {
             Task {
                 await viewModel.handleScenePhaseChange(newValue)
             }
+        }
+        .onDisappear {
+            viewModel.handleViewDisappear()
         }
         .navigationBarBackButtonHidden(viewModel.isSessionLocked)
         .alert(item: $viewModel.activeAlert) { alert in
@@ -6223,6 +6324,7 @@ struct PersonalityFlowView: View {
             } else if let question = viewModel.currentQuestion {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        personalityFeedbackBanner()
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 Text(viewModel.progressText)
@@ -6288,6 +6390,7 @@ struct PersonalityFlowView: View {
                         ? LT("查看结果", "See Result", "結果を見る")
                         : LT("下一步", "Next", "次へ"),
                     isPrimaryBusy: viewModel.isSubmitting,
+                    isPrimaryDisabled: !viewModel.canAdvanceFromCurrentQuestion,
                     isSecondaryDisabled: viewModel.currentQuestionIndex == 0,
                     onTertiary: { viewModel.requestAbandon() },
                     onSecondary: { viewModel.goPrevious() },
@@ -6303,9 +6406,31 @@ struct PersonalityFlowView: View {
             ScrollView {
                 VStack(spacing: 18) {
                     Spacer(minLength: 24)
-                    Image(systemName: result.result.isHidden ? "sparkles.square.filled.on.square" : "brain.head.profile")
-                        .font(.system(size: 54, weight: .semibold))
-                        .foregroundStyle(RaverTheme.accent)
+                    if let imageUrl = result.result.imageUrl,
+                       !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        GeometryReader { geometry in
+                            let imageWidth = geometry.size.width * 0.45
+                            AsyncImage(url: URL(string: imageUrl)) { phase in
+                                switch phase {
+                                case .empty:
+                                    ProgressView()
+                                        .frame(width: imageWidth, height: imageWidth)
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: imageWidth)
+                                case .failure:
+                                    EmptyView()
+                                @unknown default:
+                                    EmptyView()
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .frame(height: UIScreen.main.bounds.width * 0.45)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    }
                     Text("\(result.result.code) · \(result.result.title)")
                         .font(.largeTitle.weight(.bold))
                         .multilineTextAlignment(.center)
@@ -6319,26 +6444,6 @@ struct PersonalityFlowView: View {
                         Text(slang)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(RaverTheme.accent)
-                    }
-                    if let imageUrl = result.result.imageUrl,
-                       !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        AsyncImage(url: URL(string: imageUrl)) { phase in
-                            switch phase {
-                            case .empty:
-                                ProgressView()
-                                    .frame(maxWidth: .infinity, minHeight: 220)
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(maxWidth: .infinity)
-                            case .failure:
-                                EmptyView()
-                            @unknown default:
-                                EmptyView()
-                            }
-                        }
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     }
                     if let genre = result.result.genreMapping, !genre.isEmpty {
                         GlassCard {
