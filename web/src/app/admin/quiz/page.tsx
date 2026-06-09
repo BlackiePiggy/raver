@@ -48,6 +48,64 @@ const QUIZ_IMPORT_EXAMPLE = `[
   }
 ]`;
 
+const QUIZ_IMPORT_RULE_SECTIONS: Array<{
+  title: string;
+  items: string[];
+}> = [
+  {
+    title: '整体结构',
+    items: [
+      '导入内容必须是一个 JSON 数组，数组里的每一项代表一道题。',
+      '每一项都必须是对象，不能直接传字符串、数字或其他非对象结构。',
+      '当前只支持 single_choice 单选题，题型不需要单独填写，系统会自动按单选题导入。',
+    ],
+  },
+  {
+    title: '题目字段',
+    items: [
+      '`stemText` 必填，系统会先 trim，去掉首尾空格后不能为空，最大长度 5000。',
+      '`status` 可选，允许 `draft`、`active`、`archived`；如果不填或填了无效值，会自动按 `draft` 导入。',
+      '`stemImageUrl` 可选；如果填写，必须是字符串，系统会 trim，最大长度 2000。',
+      '`timeLimitSec` 可选；只有正整数才会生效，非正数、小数会被归一化，不合法时等同于不填。',
+      '`sortOrder` 可选；会被取整，不填时默认是 `0`。',
+      '`tags` 可选；必须是字符串数组，系统会 trim、去重，最多保留 20 个标签，每个标签最大 64 字符。',
+      '`difficulty` 可选；字符串，trim 后最大长度 64。',
+      '`explanation` 可选；字符串，trim 后最大长度 5000。',
+    ],
+  },
+  {
+    title: '选项字段',
+    items: [
+      '`options` 必填，数量必须在 2 到 6 个之间。',
+      '每个选项可以直接写成字符串，也可以写成对象。',
+      '字符串写法会被自动转换为一个选项对象，文本就是这个字符串，图片为空，排序按数组顺序，id 自动生成为 `import_option_1` 这类临时值。',
+      '对象写法支持 `id`、`text`、`imageUrl`、`sortOrder`、`isCorrect`。',
+      '对象里的 `id` 如果不填，会自动按 `import_option_n` 补齐；同一道题里的 option id 不能重复。',
+      '每个选项最终必须至少有 `text` 或 `imageUrl` 其中之一，两个都没有会直接报错。',
+      '`sortOrder` 不填时默认就是当前选项在数组中的位置。',
+    ],
+  },
+  {
+    title: '正确答案判定规则',
+    items: [
+      '你必须至少提供一种正确答案指定方式，否则整道题会导入失败。',
+      '系统按这个优先级确定正确答案：`correctOptionId` > `correctOptionIndex` > 唯一一个 `options[].isCorrect === true`。',
+      '如果提供了 `correctOptionId`，它必须能匹配到导入后这道题的某个 option id。',
+      '`correctOptionIndex` 是从 0 开始计数的数组下标，超出范围会直接报错。',
+      '如果使用 `isCorrect` 方式，必须恰好只有一个选项标记为 `true`；如果多个选项都为 `true`，会直接报错。',
+      '这里填写的 option id 只用于导入时在这道题内部建立正确答案映射，最终入库后数据库会生成新的真实 option id，不会保留你写入的临时 id。',
+    ],
+  },
+  {
+    title: '失败与校验说明',
+    items: [
+      '批量导入是逐条校验、统一创建的流程；只要其中一题不合法，这次导入就会失败。',
+      '常见失败原因包括：`stemText` 为空、`options` 数量不在 2-6、option id 重复、没有正确答案、正确答案指向不存在的选项、某个选项既没有文本也没有图片。',
+      'JSON 本身如果格式错误，例如逗号、引号、括号不合法，也会在提交前直接报解析错误。',
+    ],
+  },
+];
+
 type QuestionDraftOption = {
   id: string;
   text: string;
@@ -171,6 +229,7 @@ function QuizImportOverlay({
   open,
   value,
   importing,
+  onOpenRules,
   onChange,
   onClose,
   onFillExample,
@@ -179,6 +238,7 @@ function QuizImportOverlay({
   open: boolean;
   value: string;
   importing: boolean;
+  onOpenRules: () => void;
   onChange: (value: string) => void;
   onClose: () => void;
   onFillExample: () => void;
@@ -226,6 +286,21 @@ function QuizImportOverlay({
             className="min-h-0 flex-1 resize-none rounded-[24px] border border-gray-200 bg-white px-4 py-4 font-mono text-[12px] leading-6 text-gray-800 outline-none transition focus:border-gray-900"
             spellCheck={false}
           />
+          <div className="flex items-center justify-between gap-3 rounded-[20px] border border-black/6 bg-white/80 px-4 py-3">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-black/35">Import Rules</div>
+              <p className="mt-1 text-xs leading-5 text-gray-500">
+                查看完整字段要求、正确答案判定优先级、失败条件和推荐 JSON 组织方式。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenRules}
+              className="shrink-0 rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
+            >
+              点击查看规则
+            </button>
+          </div>
           <div className="flex items-center justify-between gap-3">
             <button
               type="button"
@@ -252,6 +327,76 @@ function QuizImportOverlay({
             </div>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function QuizImportRulesOverlay({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  useOverlayBodyLock(open);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[155] bg-black/56 p-4 md:p-8" onClick={onClose}>
+      <div
+        className="mx-auto flex h-full max-w-5xl flex-col overflow-hidden rounded-[30px] border border-white/65 bg-[#f6f7f8] shadow-[0_34px_90px_rgba(15,23,42,0.28)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-black/8 bg-white px-6 py-5">
+          <div>
+            <div className="text-xl font-semibold tracking-[-0.03em] text-gray-900">批量导入规则说明</div>
+            <p className="mt-1 text-sm text-gray-500">
+              这份说明直接对齐当前后端真实校验逻辑，用来规范你整理题库文本时的字段写法。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-50"
+          >
+            关闭
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+          <div className="rounded-[24px] border border-[#d7e4dc] bg-white px-5 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-black/35">Recommended Example</div>
+            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-6 text-[#1f2937]">
+              {QUIZ_IMPORT_EXAMPLE}
+            </pre>
+          </div>
+
+          <div className="mt-5 grid gap-4">
+            {QUIZ_IMPORT_RULE_SECTIONS.map((section) => (
+              <section key={section.title} className="rounded-[24px] border border-black/6 bg-white px-5 py-5">
+                <div className="text-[15px] font-semibold tracking-[-0.02em] text-gray-900">{section.title}</div>
+                <div className="mt-3 space-y-2">
+                  {section.items.map((item) => (
+                    <p key={item} className="text-sm leading-7 text-gray-600">
+                      {item}
+                    </p>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -360,6 +505,7 @@ export default function AdminQuizPage() {
   const [questionSaving, setQuestionSaving] = useState(false);
   const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
   const [showImportOverlay, setShowImportOverlay] = useState(false);
+  const [showImportRulesOverlay, setShowImportRulesOverlay] = useState(false);
   const [importText, setImportText] = useState(QUIZ_IMPORT_EXAMPLE);
   const [importingQuestions, setImportingQuestions] = useState(false);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
@@ -1603,10 +1749,15 @@ export default function AdminQuizPage() {
         open={showImportOverlay}
         value={importText}
         importing={importingQuestions}
+        onOpenRules={() => setShowImportRulesOverlay(true)}
         onChange={setImportText}
         onClose={() => setShowImportOverlay(false)}
         onFillExample={() => setImportText(QUIZ_IMPORT_EXAMPLE)}
         onSubmit={submitImportQuestions}
+      />
+      <QuizImportRulesOverlay
+        open={showImportRulesOverlay}
+        onClose={() => setShowImportRulesOverlay(false)}
       />
       <QuizDeleteConfirmOverlay
         open={showBulkDeleteConfirm}
