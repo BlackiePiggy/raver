@@ -289,6 +289,24 @@ actor MockSocialService: SocialService {
         )
     }
 
+    func fetchAccountQualifications() async throws -> [AccountQualification] {
+        let hasPassedQuiz = false
+        return [
+            AccountQualification(
+                key: "quiz_pass",
+                type: .quiz,
+                status: hasPassedQuiz ? .qualified : .unqualified,
+                qualifiedAt: nil,
+                summary: hasPassedQuiz ? "Quiz passed" : "Quiz not passed",
+                metadata: [
+                    "hasPermanentPass": .bool(hasPassedQuiz),
+                    "questionCount": .number(20),
+                    "passCorrectCount": .number(16),
+                ]
+            )
+        ]
+    }
+
     func fetchAccountEnforcements() async throws -> [AccountEnforcement] {
         accountEnforcements.sorted { ($0.createdAt ?? $0.startsAt) > ($1.createdAt ?? $1.startsAt) }
     }

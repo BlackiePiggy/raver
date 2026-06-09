@@ -313,6 +313,11 @@ final class LiveSocialService: SocialService {
         return response.status ?? .clear
     }
 
+    func fetchAccountQualifications() async throws -> [AccountQualification] {
+        let response: AccountQualificationListResponse = try await request(path: "/v1/account/qualifications", method: "GET")
+        return response.items
+    }
+
     func fetchAccountEnforcements() async throws -> [AccountEnforcement] {
         let response: AccountEnforcementListResponse = try await request(path: "/v1/account/enforcements", method: "GET")
         return response.items
@@ -1951,6 +1956,11 @@ private struct AuthSessionListResponse: Decodable {
 private struct AccountStatusResponse: Decodable {
     let success: Bool
     let status: AccountEnforcementStatus?
+}
+
+private struct AccountQualificationListResponse: Decodable {
+    let success: Bool
+    let items: [AccountQualification]
 }
 
 private struct AccountEnforcementListResponse: Decodable {

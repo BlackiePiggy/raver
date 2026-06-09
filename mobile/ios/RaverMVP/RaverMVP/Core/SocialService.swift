@@ -237,6 +237,7 @@ protocol SocialService: IMChatConversationDataSource, IMChatCompatibilityService
     func revokeAuthSession(sessionID: String) async throws -> AuthSessionRevokeResult
     func deleteAccount() async throws
     func fetchAccountEnforcementStatus() async throws -> AccountEnforcementStatus
+    func fetchAccountQualifications() async throws -> [AccountQualification]
     func fetchAccountEnforcements() async throws -> [AccountEnforcement]
     func fetchAccountEnforcementAppeals() async throws -> [AccountEnforcementAppeal]
     func submitAccountEnforcementAppeal(enforcementID: String, input: AccountEnforcementAppealInput) async throws -> AccountEnforcementAppeal

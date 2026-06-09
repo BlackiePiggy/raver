@@ -81,6 +81,7 @@ import {
   accountEnforcementService,
   type EnforcementScope,
 } from '../services/account-enforcement.service';
+import { accountQualificationService } from '../services/account-qualification.service';
 import { accountDeletionService } from '../services/account-deletion.service';
 import { analyzeI18nCompleteness } from '../utils/i18n';
 import { contentCompliance } from '../utils/content-compliance';
@@ -3348,6 +3349,7 @@ router.get('/', (_req: Request, res: Response) => {
       authLogoutAll: 'POST /v1/auth/logout-all',
       authAccountDelete: 'DELETE /v1/auth/account',
       accountStatus: 'GET /v1/account/status',
+      accountQualifications: 'GET /v1/account/qualifications',
       accountEnforcements: 'GET /v1/account/enforcements',
       accountEnforcementAppeal: 'POST /v1/account/enforcements/:id/appeal',
       accountAppeals: 'GET /v1/account/appeals',
@@ -5266,6 +5268,19 @@ router.get('/account/status', optionalAuth, async (req: Request, res: Response):
     res.json({ success: true, status });
   } catch (error) {
     console.error('BFF account status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/account/qualifications', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = requireAuth(req as BFFAuthRequest, res);
+    if (!userId) return;
+
+    const summary = await accountQualificationService.getSummary(userId);
+    res.json({ success: true, items: summary.items });
+  } catch (error) {
+    console.error('BFF account qualifications error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

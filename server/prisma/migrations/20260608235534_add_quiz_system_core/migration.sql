@@ -153,7 +153,8 @@ INSERT INTO "quiz_config" (
   "default_time_limit_sec",
   "daily_limit_time_zone",
   "allow_retake_after_pass",
-  "allow_restart_during_session"
+  "allow_restart_during_session",
+  "updated_at"
 ) VALUES (
   'default',
   false,
@@ -163,5 +164,6 @@ INSERT INTO "quiz_config" (
   20,
   'Asia/Shanghai',
   true,
-  true
+  true,
+  CURRENT_TIMESTAMP
 );

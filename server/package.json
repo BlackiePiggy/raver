@@ -60,6 +60,8 @@
     "notification:followed-brand-update:run": "ts-node src/scripts/notification-followed-brand-update-run.ts",
     "notification:compat:regression": "ts-node src/scripts/notification-compat-regression.ts",
     "notification:normalize-device-platforms": "ts-node src/scripts/notification-normalize-device-platforms.ts",
+    "quiz:qualification:smoke": "ts-node src/scripts/quiz-qualification-smoke.ts",
+    "quiz:admin:smoke": "ts-node src/scripts/quiz-admin-smoke.ts",
     "checkins:projection:run": "ts-node src/scripts/checkin-projection-worker-run.ts",
     "checkins:reproject:user": "ts-node src/scripts/checkin-reproject-user.ts",
     "checkins:reproject:dirty": "ts-node src/scripts/checkin-reproject-dirty-users.ts",

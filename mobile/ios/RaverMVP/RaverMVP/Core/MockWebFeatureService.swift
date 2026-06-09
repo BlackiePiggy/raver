@@ -2,6 +2,78 @@ import Foundation
 import RaverEventAdminContract
 
 actor MockWebFeatureService: WebFeatureService {
+    struct QuizScenario {
+        var status: QuizConfigSummary
+        var sessionFactory: @Sendable () -> QuizSessionCreateResponse
+        var submitHandler: @Sendable (_ sessionId: String, _ answers: [QuizSubmitAnswerPayload]) -> QuizSessionSubmitResponse
+        var abandonHandler: @Sendable (_ sessionId: String) -> QuizSessionAbandonResponse
+
+        static func `default`() -> QuizScenario {
+            QuizScenario(
+                status: QuizConfigSummary(
+                    isEnabled: true,
+                    questionCount: 20,
+                    passCorrectCount: 16,
+                    dailyAttemptLimit: 3,
+                    effectiveDailyAttemptLimit: 3,
+                    isUnlimitedAttempts: false,
+                    attemptMode: "default",
+                    defaultTimeLimitSec: 20,
+                    dailyLimitTimeZone: "Asia/Shanghai",
+                    allowRetakeAfterPass: true,
+                    allowRestartDuringSession: true,
+                    todayAttemptCount: 0,
+                    todayRemainingAttempts: 3,
+                    hasPermanentPass: false,
+                    passedAt: nil,
+                    canStart: true,
+                    activeSessionId: nil,
+                    disabledReason: nil
+                ),
+                sessionFactory: {
+                    let questions: [QuizQuestionPayload] = (1...20).map { index in
+                        QuizQuestionPayload(
+                            questionId: "mock-quiz-question-\(index)",
+                            stemText: "第 \(index) 题：以下哪一项更符合当前 mock quiz 场景？",
+                            stemImageUrl: nil,
+                            options: [
+                                QuizQuestionOptionPayload(optionId: "q\(index)-a", text: "选项 A", imageUrl: nil, sortOrder: 0),
+                                QuizQuestionOptionPayload(optionId: "q\(index)-b", text: "选项 B", imageUrl: nil, sortOrder: 1),
+                                QuizQuestionOptionPayload(optionId: "q\(index)-c", text: "选项 C", imageUrl: nil, sortOrder: 2),
+                            ],
+                            timeLimitSec: 20
+                        )
+                    }
+                    return QuizSessionCreateResponse(
+                        sessionId: "mock-quiz-session-\(UUID().uuidString)",
+                        questionCount: 20,
+                        passCorrectCount: 16,
+                        dailyAttemptLimit: 3,
+                        dailyRemainingAttemptsAfterStart: 2,
+                        timeZone: "Asia/Shanghai",
+                        questions: questions,
+                        startedAt: ISO8601DateFormatter().string(from: Date()),
+                        expiresAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(60 * 60))
+                    )
+                },
+                submitHandler: { sessionId, answers in
+                    let correctCount = min(answers.count / 2, 20)
+                    return QuizSessionSubmitResponse(
+                        sessionId: sessionId,
+                        totalCount: 20,
+                        correctCount: correctCount,
+                        passCorrectCount: 16,
+                        passed: correctCount >= 16,
+                        passedAt: correctCount >= 16 ? ISO8601DateFormatter().string(from: Date()) : nil
+                    )
+                },
+                abandonHandler: { sessionId in
+                    QuizSessionAbandonResponse(sessionId: sessionId, status: "abandoned")
+                }
+            )
+        }
+    }
+
     private static func seededAvatarURL(for seed: String) -> String {
         let encoded = seed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? seed
         return "https://api.dicebear.com/9.x/adventurer-neutral/png?seed=\(encoded)&backgroundType=gradientLinear"
@@ -33,8 +105,10 @@ actor MockWebFeatureService: WebFeatureService {
     private var checkins: [WebCheckin]
     private var ratingEvents: [WebRatingEvent]
     private var learnFestivals: [WebLearnFestival]
+    private var quizScenario: QuizScenario
 
     init() {
+        quizScenario = .default()
         let now = Date()
         let contributorAna = WebUserLite(
             id: "u_ana",
@@ -702,6 +776,30 @@ actor MockWebFeatureService: WebFeatureService {
             }
             .prefix(max(1, limit))
             .map { $0 }
+    }
+
+    func fetchQuizConfigSummary() async throws -> QuizConfigSummary {
+        quizScenario.status
+    }
+
+    func fetchQuizStatus() async throws -> QuizConfigSummary {
+        try await fetchQuizConfigSummary()
+    }
+
+    func createQuizSession() async throws -> QuizSessionCreateResponse {
+        quizScenario.sessionFactory()
+    }
+
+    func submitQuizSession(sessionId: String, answers: [QuizSubmitAnswerPayload]) async throws -> QuizSessionSubmitResponse {
+        quizScenario.submitHandler(sessionId, answers)
+    }
+
+    func abandonQuizSession(sessionId: String) async throws -> QuizSessionAbandonResponse {
+        quizScenario.abandonHandler(sessionId)
+    }
+
+    func setQuizScenario(_ scenario: QuizScenario) {
+        quizScenario = scenario
     }
 
     func fetchMyEvents() async throws -> [WebEvent] {

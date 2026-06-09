@@ -903,6 +903,7 @@ final class AppState: ObservableObject {
     @Published var preferredAppearance: AppAppearance = AppAppearancePreference.current
     @Published var realNameVerificationStatus: RealNameVerificationStatus = .unverified
     @Published var accountEnforcementStatus: AccountEnforcementStatus = .clear
+    @Published var accountQualifications: [AccountQualification] = []
     @Published var accountEnforcements: [AccountEnforcement] = []
     @Published var accountEnforcementAppeals: [AccountEnforcementAppeal] = []
     @Published var isLoadingAccountEnforcements = false
@@ -1470,6 +1471,7 @@ final class AppState: ObservableObject {
         tencentIMBootstrapRefreshTask?.cancel()
         tencentIMBootstrapRefreshTask = nil
         accountEnforcementStatus = .clear
+        accountQualifications = []
         accountEnforcements = []
         accountEnforcementAppeals = []
     }
@@ -1491,6 +1493,7 @@ final class AppState: ObservableObject {
             tencentIMBootstrapRefreshTask?.cancel()
             tencentIMBootstrapRefreshTask = nil
             accountEnforcementStatus = .clear
+            accountQualifications = []
             accountEnforcements = []
             accountEnforcementAppeals = []
             errorMessage = nil
@@ -1518,6 +1521,7 @@ final class AppState: ObservableObject {
             tencentIMBootstrapRefreshTask?.cancel()
             tencentIMBootstrapRefreshTask = nil
             accountEnforcementStatus = .clear
+            accountQualifications = []
             accountEnforcements = []
             accountEnforcementAppeals = []
             errorMessage = nil
@@ -1534,10 +1538,17 @@ final class AppState: ObservableObject {
         defer { isLoadingAccountEnforcements = false }
         do {
             async let statusRequest = service.fetchAccountEnforcementStatus()
+            async let qualificationsRequest = service.fetchAccountQualifications()
             async let enforcementsRequest = service.fetchAccountEnforcements()
             async let appealsRequest = service.fetchAccountEnforcementAppeals()
-            let (status, enforcements, appeals) = try await (statusRequest, enforcementsRequest, appealsRequest)
+            let (status, qualifications, enforcements, appeals) = try await (
+                statusRequest,
+                qualificationsRequest,
+                enforcementsRequest,
+                appealsRequest
+            )
             accountEnforcementStatus = status
+            accountQualifications = qualifications
             accountEnforcements = enforcements
             accountEnforcementAppeals = appeals
             errorMessage = nil

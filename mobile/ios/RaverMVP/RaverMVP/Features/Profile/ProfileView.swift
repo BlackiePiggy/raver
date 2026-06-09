@@ -278,6 +278,9 @@ struct ProfileView: View {
                         ContributionModuleTelemetry.contributionCenterEntryTapped()
                         profilePush(.contributionCenter)
                     }
+                    quickActionTile(title: LT("答题系统", "Quiz", "クイズ"), icon: "checklist") {
+                        profilePush(.quiz)
+                    }
                     quickActionTile(title: LT("我的收藏", "My Saves", "保存済み"), icon: "star.fill") {
                         profilePush(.mySaves)
                     }
@@ -4278,6 +4281,816 @@ struct ShareAssetDetailView: View {
             print("[share-poster-ios] regenerate-failed code=\(code) error=\(String(describing: error))")
             feedbackMessage = error.userFacingMessage ?? LT("重新生成海报失败，请稍后再试。", "Failed to regenerate poster. Please try again later.", "海報の再生成に失敗しました。時間をおいて再試行してください。")
         }
+    }
+}
+
+@MainActor
+final class QuizFlowViewModel: ObservableObject {
+    typealias MediaPreloader = @Sendable ([URL]) async throws -> Void
+
+    enum Phase {
+        case loading
+        case ready(QuizConfigSummary)
+        case inSession
+        case result(QuizSessionSubmitResponse)
+        case failure(String)
+    }
+
+    enum SessionExitReason {
+        case backgrounded
+        case mediaLoadFailed
+        case completed
+    }
+
+    @Published private(set) var phase: Phase = .loading
+    @Published private(set) var summary: QuizConfigSummary?
+    @Published private(set) var session: QuizSessionCreateResponse?
+    @Published var answers: [String: String] = [:]
+    @Published var currentQuestionIndex: Int = 0
+    @Published var isSubmitting = false
+    @Published private(set) var isPreparingQuestion = false
+    @Published private(set) var preparationAttempt = 0
+    @Published private(set) var preparationMessage: String?
+    @Published private(set) var secondsRemaining = 0
+    @Published var feedbackMessage: String?
+    @Published var activeAlert: QuizAlert?
+
+    private let service: WebFeatureService
+    private let maxMediaRetryCount = 3
+    private let prefetchQuestionCount = 2
+    private let countdownTickNanoseconds: UInt64
+    private let mediaRetryDelayNanoseconds: UInt64
+    private let mediaPreloader: MediaPreloader
+    private var countdownTask: Task<Void, Never>?
+    private var prefetchTask: Task<Void, Never>?
+    private var questionRunToken = UUID()
+    private var preloadedMediaURLs = Set<String>()
+
+    init(
+        service: WebFeatureService,
+        countdownTickNanoseconds: UInt64 = 1_000_000_000,
+        mediaRetryDelayNanoseconds: UInt64 = 500_000_000,
+        mediaPreloader: @escaping MediaPreloader = QuizFlowViewModel.defaultMediaPreloader
+    ) {
+        self.service = service
+        self.countdownTickNanoseconds = countdownTickNanoseconds
+        self.mediaRetryDelayNanoseconds = mediaRetryDelayNanoseconds
+        self.mediaPreloader = mediaPreloader
+    }
+
+    deinit {
+        countdownTask?.cancel()
+        prefetchTask?.cancel()
+    }
+
+    var currentQuestion: QuizQuestionPayload? {
+        guard let session, session.questions.indices.contains(currentQuestionIndex) else { return nil }
+        return session.questions[currentQuestionIndex]
+    }
+
+    var progressText: String {
+        guard let session else { return "0/0" }
+        return "\(min(currentQuestionIndex + 1, session.questions.count))/\(session.questions.count)"
+    }
+
+    var isSessionLocked: Bool {
+        session != nil && !isSubmitting
+    }
+
+    func load() async {
+        cancelQuestionTasks()
+        do {
+            phase = .loading
+            let summary = try await service.fetchQuizStatus()
+            self.summary = summary
+            phase = .ready(summary)
+        } catch {
+            phase = .failure(error.userFacingMessage ?? LT("答题信息加载失败，请稍后重试。", "Failed to load quiz info. Please try again later.", "クイズ情報を読み込めませんでした。時間をおいて再試行してください。"))
+        }
+    }
+
+    func startQuiz() async {
+        do {
+            cancelQuestionTasks()
+            let session = try await service.createQuizSession()
+            self.session = session
+            self.answers = [:]
+            self.currentQuestionIndex = 0
+            self.feedbackMessage = nil
+            self.preloadedMediaURLs = []
+            phase = .inSession
+            await prepareQuestion(at: 0)
+        } catch {
+            feedbackMessage = error.userFacingMessage ?? LT("开始答题失败，请稍后重试。", "Failed to start quiz. Please try again later.", "クイズを開始できませんでした。時間をおいて再試行してください。")
+        }
+    }
+
+    func selectOption(_ optionId: String) {
+        guard let question = currentQuestion else { return }
+        answers[question.questionId] = optionId
+    }
+
+    func goNext() {
+        guard session != nil, !isPreparingQuestion, !isSubmitting else { return }
+        Task {
+            await advanceFromCurrentQuestion()
+        }
+    }
+
+    func requestRestart() {
+        activeAlert = .restart
+    }
+
+    func requestAbandon() {
+        activeAlert = .abandon
+    }
+
+    func confirmAlert() async {
+        guard let alert = activeAlert else { return }
+        activeAlert = nil
+        switch alert {
+        case .restart:
+            await abandonCurrentSessionSilently()
+            await startQuiz()
+        case .abandon:
+            await abandonCurrentSessionSilently()
+            await load()
+        }
+    }
+
+    func submitQuiz() async {
+        guard let session, !isSubmitting else { return }
+        cancelQuestionTasks()
+        isSubmitting = true
+        defer { isSubmitting = false }
+        do {
+            let payload = session.questions.map { question in
+                QuizSubmitAnswerPayload(questionId: question.questionId, optionId: answers[question.questionId])
+            }
+            let result = try await service.submitQuizSession(sessionId: session.sessionId, answers: payload)
+            self.session = nil
+            phase = .result(result)
+            summary = try? await service.fetchQuizStatus()
+        } catch {
+            feedbackMessage = error.userFacingMessage ?? LT("提交答题失败，请稍后重试。", "Failed to submit quiz. Please try again later.", "クイズ提出に失敗しました。時間をおいて再試行してください。")
+        }
+    }
+
+    func handleScenePhaseChange(_ scenePhase: ScenePhase) async {
+        guard scenePhase == .background else { return }
+        await terminateCurrentSession(reason: .backgrounded)
+    }
+
+    private func prepareQuestion(at index: Int) async {
+        guard let session, session.questions.indices.contains(index) else { return }
+
+        cancelQuestionTasks()
+        let token = UUID()
+        questionRunToken = token
+        currentQuestionIndex = index
+        isPreparingQuestion = true
+        preparationAttempt = 0
+        preparationMessage = LT("正在准备本题资源…", "Preparing question media…", "問題のメディアを準備中…")
+        feedbackMessage = nil
+
+        let question = session.questions[index]
+        let mediaURLs = questionMediaURLs(question)
+
+        guard !mediaURLs.isEmpty else {
+            finishPreparingQuestion(question, token: token)
+            startPrefetchingUpcomingQuestions(from: index, token: token)
+            return
+        }
+
+        for attempt in 1...maxMediaRetryCount {
+            guard questionRunToken == token else { return }
+            preparationAttempt = attempt
+            preparationMessage = LT(
+                "正在加载第 \(index + 1) 题资源（第 \(attempt)/\(maxMediaRetryCount) 次）",
+                "Loading media for question \(index + 1) (\(attempt)/\(maxMediaRetryCount))",
+                "第 \(index + 1) 問のメディアを読み込み中（\(attempt)/\(maxMediaRetryCount) 回目）"
+            )
+
+            do {
+                try await preloadMediaAssets(mediaURLs)
+                guard questionRunToken == token else { return }
+                finishPreparingQuestion(question, token: token)
+                startPrefetchingUpcomingQuestions(from: index, token: token)
+                return
+            } catch {
+                guard questionRunToken == token else { return }
+                if attempt == maxMediaRetryCount {
+                    feedbackMessage = LT(
+                        "第 \(index + 1) 题媒体资源连续加载失败，系统已自动判错并跳过。",
+                        "Question \(index + 1) media failed to load repeatedly and was marked wrong automatically.",
+                        "第 \(index + 1) 問のメディア読み込みに失敗したため、自動で不正解としてスキップしました。"
+                    )
+                    await advanceFromCurrentQuestion(afterMediaFailure: true)
+                    return
+                }
+                try? await Task.sleep(nanoseconds: mediaRetryDelayNanoseconds)
+            }
+        }
+    }
+
+    private func finishPreparingQuestion(_ question: QuizQuestionPayload, token: UUID) {
+        guard questionRunToken == token else { return }
+        isPreparingQuestion = false
+        preparationAttempt = 0
+        preparationMessage = nil
+        startCountdown(for: question, token: token)
+    }
+
+    private func startCountdown(for question: QuizQuestionPayload, token: UUID) {
+        countdownTask?.cancel()
+        secondsRemaining = max(1, question.timeLimitSec)
+        countdownTask = Task { [weak self] in
+            while let self, !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: countdownTickNanoseconds)
+                await self.handleCountdownTick(token: token)
+            }
+        }
+    }
+
+    private func handleCountdownTick(token: UUID) async {
+        guard questionRunToken == token, session != nil, !isPreparingQuestion else { return }
+        if secondsRemaining > 1 {
+            secondsRemaining -= 1
+            return
+        }
+
+        secondsRemaining = 0
+        feedbackMessage = LT(
+            "本题已超时，系统已自动判错并进入下一题。",
+            "Time is up for this question. It was marked wrong automatically.",
+            "この問題は時間切れとなり、自動で不正解として次へ進みました。"
+        )
+        await advanceFromCurrentQuestion()
+    }
+
+    private func advanceFromCurrentQuestion(afterMediaFailure: Bool = false) async {
+        cancelQuestionTasks()
+        guard let session else { return }
+        let nextIndex = currentQuestionIndex + 1
+        if nextIndex < session.questions.count {
+            await prepareQuestion(at: nextIndex)
+        } else if afterMediaFailure {
+            await submitQuiz()
+        } else {
+            await submitQuiz()
+        }
+    }
+
+    private func terminateCurrentSession(reason: SessionExitReason) async {
+        guard session != nil else { return }
+        cancelQuestionTasks()
+        await abandonCurrentSessionSilently()
+        switch reason {
+        case .backgrounded:
+            feedbackMessage = LT(
+                "答题过程中切到后台，本次答题已自动作废，需要重新开始。",
+                "The quiz was sent to the background and has been abandoned. Please restart.",
+                "クイズ中にアプリがバックグラウンドへ移動したため、この回は破棄されました。再度開始してください。"
+            )
+            if let summary = try? await service.fetchQuizStatus() {
+                self.summary = summary
+                phase = .ready(summary)
+            } else if let summary {
+                phase = .ready(summary)
+            } else {
+                phase = .failure(LT("答题状态同步失败，请稍后重试。", "Failed to sync quiz state. Please try again later.", "クイズ状態の同期に失敗しました。時間をおいて再試行してください。"))
+            }
+        case .mediaLoadFailed:
+            feedbackMessage = LT("题目资源加载失败，本次答题已结束。", "Question media failed to load. The quiz has ended.", "問題メディアの読み込みに失敗したため、クイズを終了しました。")
+        case .completed:
+            break
+        }
+    }
+
+    private func abandonCurrentSessionSilently() async {
+        guard let session else { return }
+        cancelQuestionTasks()
+        _ = try? await service.abandonQuizSession(sessionId: session.sessionId)
+        self.session = nil
+        self.isPreparingQuestion = false
+        self.preparationAttempt = 0
+        self.preparationMessage = nil
+        self.secondsRemaining = 0
+    }
+
+    private func cancelQuestionTasks() {
+        countdownTask?.cancel()
+        countdownTask = nil
+        prefetchTask?.cancel()
+        prefetchTask = nil
+        secondsRemaining = 0
+    }
+
+    private func startPrefetchingUpcomingQuestions(from index: Int, token: UUID) {
+        prefetchTask?.cancel()
+        guard let session else { return }
+        let questionBatch = Array(session.questions.dropFirst(index + 1).prefix(prefetchQuestionCount))
+        guard !questionBatch.isEmpty else { return }
+        prefetchTask = Task(priority: .utility) { [weak self] in
+            guard let self else { return }
+            for question in questionBatch {
+                guard !Task.isCancelled else { return }
+                await self.preloadQuestionIfNeeded(question, token: token)
+            }
+        }
+    }
+
+    private func preloadQuestionIfNeeded(_ question: QuizQuestionPayload, token: UUID) async {
+        guard questionRunToken == token else { return }
+        let mediaURLs = questionMediaURLs(question)
+        guard !mediaURLs.isEmpty else { return }
+        try? await preloadMediaAssets(mediaURLs)
+    }
+
+    private func preloadMediaAssets(_ urls: [URL]) async throws {
+        let pending = urls.filter { !preloadedMediaURLs.contains($0.absoluteString) }
+        guard !pending.isEmpty else { return }
+
+        try await mediaPreloader(pending)
+        for url in pending {
+            preloadedMediaURLs.insert(url.absoluteString)
+        }
+    }
+
+    private static func defaultMediaPreloader(_ urls: [URL]) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for url in urls {
+                group.addTask {
+                    let request = URLRequest(
+                        url: url,
+                        cachePolicy: .returnCacheDataElseLoad,
+                        timeoutInterval: 20
+                    )
+                    let (data, response) = try await URLSession.shared.data(for: request)
+                    guard let http = response as? HTTPURLResponse,
+                          (200..<300).contains(http.statusCode),
+                          !data.isEmpty else {
+                        throw URLError(.badServerResponse)
+                    }
+                }
+            }
+
+            try await group.waitForAll()
+        }
+    }
+
+    private func questionMediaURLs(_ question: QuizQuestionPayload) -> [URL] {
+        var seen = Set<String>()
+        let candidates = ([question.stemImageUrl] + question.options.map(\.imageUrl))
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return candidates.compactMap { raw in
+            guard seen.insert(raw).inserted else { return nil }
+            return URL(string: raw)
+        }
+    }
+}
+
+enum QuizAlert: Identifiable {
+    case restart
+    case abandon
+
+    var id: String {
+        switch self {
+        case .restart: return "restart"
+        case .abandon: return "abandon"
+        }
+    }
+}
+
+struct QuizFlowView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var viewModel: QuizFlowViewModel
+
+    init(service: WebFeatureService) {
+        _viewModel = StateObject(wrappedValue: QuizFlowViewModel(service: service))
+    }
+
+    var body: some View {
+        Group {
+            switch viewModel.phase {
+            case .loading:
+                ProgressView(LT("正在加载答题系统", "Loading quiz", "クイズを読み込み中"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.background)
+            case .failure(let message):
+                VStack(spacing: 16) {
+                    ScreenErrorCard(message: message) {
+                        Task { await viewModel.load() }
+                    }
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RaverTheme.background)
+            case .ready(let summary):
+                quizStartView(summary)
+            case .inSession:
+                quizQuestionView
+            case .result(let result):
+                quizResultView(result)
+            }
+        }
+        .navigationTitle(LT("答题系统", "Quiz", "クイズ"))
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            if viewModel.summary == nil && viewModel.session == nil {
+                await viewModel.load()
+            }
+        }
+        .onChange(of: scenePhase) { _, newValue in
+            Task {
+                await viewModel.handleScenePhaseChange(newValue)
+            }
+        }
+        .navigationBarBackButtonHidden(viewModel.isSessionLocked)
+        .alert(item: $viewModel.activeAlert) { alert in
+            switch alert {
+            case .restart:
+                return Alert(
+                    title: Text(LT("重新开始答题", "Restart Quiz", "クイズを再開始")),
+                    message: Text(LT("当前答题会被放弃，并立即重新抽取一套新题。", "The current session will be abandoned and a new set of questions will be created immediately.", "現在のセッションは破棄され、新しい問題セットがすぐに生成されます。")),
+                    primaryButton: .destructive(Text(LT("确认重启", "Restart", "再開始"))) {
+                        Task { await viewModel.confirmAlert() }
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .abandon:
+                return Alert(
+                    title: Text(LT("放弃本次答题", "Abandon Quiz", "今回のクイズを放棄")),
+                    message: Text(LT("退出后不会保留进度，需要重新开始整场答题。", "Progress will not be preserved. You will need to restart the whole quiz next time.", "進捗は保存されず、次回は最初からやり直しになります。")),
+                    primaryButton: .destructive(Text(LT("确认放弃", "Abandon", "放棄する"))) {
+                        Task { await viewModel.confirmAlert() }
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
+        }
+    }
+
+    private func quizStartView(_ summary: QuizConfigSummary) -> some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(LT("答题说明", "Quiz Rules", "クイズ説明"))
+                            .font(.headline)
+                            .foregroundStyle(RaverTheme.primaryText)
+                        Text(
+                            LT(
+                                "每次随机抽取 \(summary.questionCount) 道单选题，只展示最终答对数量与是否通过。答对至少 \(summary.passCorrectCount) 题算通过。",
+                                "\(summary.questionCount) single-choice questions will be drawn randomly. Only the final correct count and pass result are shown. You need at least \(summary.passCorrectCount) correct answers to pass.",
+                                "毎回 \(summary.questionCount) 問の単一選択問題がランダムに出題されます。最終的な正答数と合否のみが表示されます。合格には少なくとも \(summary.passCorrectCount) 問の正解が必要です。"
+                            )
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(RaverTheme.secondaryText)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            summaryRow(LT("今日已用次数", "Attempts Used Today", "本日の使用回数"), "\(summary.todayAttemptCount)")
+                            summaryRow(
+                                LT("今日剩余次数", "Remaining Today", "本日の残り回数"),
+                                summary.todayRemainingAttempts < 0 ? LT("无限次", "Unlimited", "無制限") : "\(summary.todayRemainingAttempts)"
+                            )
+                            summaryRow(LT("当前状态", "Current Status", "現在の状態"), statusText(summary))
+                        }
+                    }
+                }
+
+                if let feedbackMessage = viewModel.feedbackMessage, !feedbackMessage.isEmpty {
+                    ScreenStatusBanner(message: feedbackMessage, style: .error)
+                }
+
+                if summary.hasPermanentPass {
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(LT("你已通过该答题", "You Have Passed", "すでに合格しています"))
+                                .font(.headline)
+                            if let passedAt = summary.passedAt {
+                                Text("\(LT("通过时间", "Passed At", "合格日時")): \(formatTime(passedAt))")
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                            }
+                        }
+                    }
+                }
+
+                Button {
+                    Task { await viewModel.startQuiz() }
+                } label: {
+                    Text(LT("开始答题", "Start Quiz", "クイズを開始"))
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(RaverTheme.accent)
+                .disabled(!summary.canStart)
+
+                if !summary.canStart {
+                    Text(disabledReasonText(summary.disabledReason))
+                        .font(.footnote)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(16)
+        }
+        .background(RaverTheme.background)
+    }
+
+    private var quizQuestionView: some View {
+        VStack(spacing: 0) {
+            if viewModel.isPreparingQuestion {
+                VStack(spacing: 18) {
+                    Spacer()
+                    ProgressView()
+                        .controlSize(.large)
+                    Text(LT("正在准备题目", "Preparing Question", "問題を準備中"))
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(RaverTheme.primaryText)
+                    Text(viewModel.progressText)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(RaverTheme.accent)
+                    if let preparationMessage = viewModel.preparationMessage {
+                        Text(preparationMessage)
+                            .font(.subheadline)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .multilineTextAlignment(.center)
+                    }
+                    if viewModel.preparationAttempt > 0 {
+                        Text(
+                            LT(
+                                "媒体加载重试：\(viewModel.preparationAttempt)/3",
+                                "Media retry: \(viewModel.preparationAttempt)/3",
+                                "メディア再試行：\(viewModel.preparationAttempt)/3"
+                            )
+                        )
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                    }
+
+                    HStack(spacing: 10) {
+                        Button(LT("放弃", "Abandon", "放棄")) {
+                            viewModel.requestAbandon()
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button(LT("重新开始", "Restart", "再開始")) {
+                            viewModel.requestRestart()
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    Spacer()
+                }
+                .padding(16)
+            } else if let question = viewModel.currentQuestion {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Text(viewModel.progressText)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(RaverTheme.accent)
+                                    Spacer()
+                                    Text(
+                                        LT(
+                                            "剩余 \(viewModel.secondsRemaining) 秒",
+                                            "\(viewModel.secondsRemaining)s left",
+                                            "残り \(viewModel.secondsRemaining) 秒"
+                                        )
+                                    )
+                                    .font(.caption)
+                                    .foregroundStyle(RaverTheme.secondaryText)
+                                }
+                                Text(question.stemText)
+                                    .font(.title3.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                if let imageUrl = question.stemImageUrl,
+                                   !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    AsyncImage(url: URL(string: imageUrl)) { phase in
+                                        switch phase {
+                                        case .empty:
+                                            ProgressView()
+                                                .frame(maxWidth: .infinity, minHeight: 180)
+                                        case .success(let image):
+                                            image
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(maxWidth: .infinity)
+                                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                        case .failure:
+                                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                                .fill(RaverTheme.card)
+                                                .frame(maxWidth: .infinity, minHeight: 180)
+                                                .overlay(
+                                                    Text(LT("题干图片加载失败", "Failed to load image", "画像を読み込めませんでした"))
+                                                        .font(.footnote)
+                                                        .foregroundStyle(RaverTheme.secondaryText)
+                                                )
+                                        @unknown default:
+                                            EmptyView()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        VStack(spacing: 12) {
+                            ForEach(question.options) { option in
+                                Button {
+                                    viewModel.selectOption(option.optionId)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        HStack(alignment: .top, spacing: 12) {
+                                            Circle()
+                                                .stroke(viewModel.answers[question.questionId] == option.optionId ? RaverTheme.accent : RaverTheme.secondaryText, lineWidth: 2)
+                                                .frame(width: 18, height: 18)
+                                                .overlay {
+                                                    if viewModel.answers[question.questionId] == option.optionId {
+                                                        Circle()
+                                                            .fill(RaverTheme.accent)
+                                                            .frame(width: 8, height: 8)
+                                                    }
+                                                }
+                                            Text(option.text?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? option.text! : LT("图片选项", "Image Option", "画像オプション"))
+                                                .font(.body.weight(.medium))
+                                                .foregroundStyle(RaverTheme.primaryText)
+                                            Spacer()
+                                        }
+                                        if let imageUrl = option.imageUrl,
+                                           !imageUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                            AsyncImage(url: URL(string: imageUrl)) { phase in
+                                                switch phase {
+                                                case .empty:
+                                                    ProgressView()
+                                                        .frame(maxWidth: .infinity, minHeight: 140)
+                                                case .success(let image):
+                                                    image
+                                                        .resizable()
+                                                        .scaledToFit()
+                                                        .frame(maxWidth: .infinity)
+                                                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                                case .failure:
+                                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                                        .fill(RaverTheme.card)
+                                                        .frame(maxWidth: .infinity, minHeight: 140)
+                                                @unknown default:
+                                                    EmptyView()
+                                                }
+                                            }
+                                        }
+                                    }
+                                    .padding(16)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                            .fill(RaverTheme.card)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                            .stroke(viewModel.answers[question.questionId] == option.optionId ? RaverTheme.accent : RaverTheme.cardBorder, lineWidth: 1)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        if let feedbackMessage = viewModel.feedbackMessage, !feedbackMessage.isEmpty {
+                            ScreenStatusBanner(message: feedbackMessage, style: .error)
+                        }
+                    }
+                    .padding(16)
+                }
+
+                VStack(spacing: 10) {
+                    HStack(spacing: 10) {
+                        Button(LT("放弃", "Abandon", "放棄")) {
+                            viewModel.requestAbandon()
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button(LT("重新开始", "Restart", "再開始")) {
+                            viewModel.requestRestart()
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button {
+                            viewModel.goNext()
+                        } label: {
+                            Text(viewModel.currentQuestionIndex + 1 >= (viewModel.session?.questions.count ?? 0)
+                                 ? LT("提交答题", "Submit", "提出")
+                                 : LT("下一题", "Next", "次へ"))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(RaverTheme.accent)
+                        .disabled(viewModel.isSubmitting)
+                    }
+                }
+                .padding(16)
+                .background(RaverTheme.background)
+            }
+        }
+        .background(RaverTheme.background)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(LT("退出", "Exit", "終了")) {
+                    viewModel.requestAbandon()
+                }
+            }
+        }
+    }
+
+    private func quizResultView(_ result: QuizSessionSubmitResponse) -> some View {
+        VStack(spacing: 18) {
+            Spacer()
+            Image(systemName: result.passed ? "checkmark.seal.fill" : "xmark.seal")
+                .font(.system(size: 58, weight: .semibold))
+                .foregroundStyle(result.passed ? RaverTheme.accent : Color.red)
+            Text(result.passed ? LT("答题通过", "Passed", "合格") : LT("未通过", "Not Passed", "不合格"))
+                .font(.largeTitle.weight(.bold))
+                .foregroundStyle(RaverTheme.primaryText)
+            Text(
+                LT(
+                    "本次答对 \(result.correctCount) / \(result.totalCount) 题",
+                    "You answered \(result.correctCount) / \(result.totalCount) correctly",
+                    "\(result.totalCount)問中 \(result.correctCount) 問正解"
+                )
+            )
+            .font(.title3)
+            .foregroundStyle(RaverTheme.secondaryText)
+
+            Button {
+                Task { await viewModel.load() }
+            } label: {
+                Text(LT("返回答题首页", "Back to Quiz Home", "クイズホームへ戻る"))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(RaverTheme.accent)
+
+            Button {
+                dismiss()
+            } label: {
+                Text(LT("完成", "Done", "完了"))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            Spacer()
+        }
+        .padding(16)
+        .background(RaverTheme.background)
+    }
+
+    private func summaryRow(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title)
+                .foregroundStyle(RaverTheme.secondaryText)
+            Spacer()
+            Text(value)
+                .foregroundStyle(RaverTheme.primaryText)
+        }
+        .font(.subheadline)
+    }
+
+    private func statusText(_ summary: QuizConfigSummary) -> String {
+        if summary.hasPermanentPass {
+            return LT("已通过", "Passed", "合格済み")
+        }
+        if summary.canStart {
+            return LT("可开始", "Ready", "開始可能")
+        }
+        return disabledReasonText(summary.disabledReason)
+    }
+
+    private func disabledReasonText(_ code: String?) -> String {
+        switch code {
+        case "quiz_disabled":
+            return LT("当前答题系统未开启。", "Quiz is currently disabled.", "現在クイズは無効です。")
+        case "already_passed":
+            return LT("你已经通过本次答题。", "You have already passed this quiz.", "このクイズはすでに合格しています。")
+        case "daily_limit_reached":
+            return LT("今日答题次数已用完。", "Daily attempt limit reached.", "本日の挑戦回数を使い切りました。")
+        case "session_in_progress":
+            return LT("当前已有进行中的答题。", "A quiz session is already in progress.", "進行中のクイズセッションがあります。")
+        default:
+            return LT("当前暂时无法开始答题。", "Unable to start quiz right now.", "現在クイズを開始できません。")
+        }
+    }
+
+    private func formatTime(_ isoString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        guard let date = formatter.date(from: isoString) else { return isoString }
+        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 

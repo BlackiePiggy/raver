@@ -65,6 +65,30 @@ final class LiveWebFeatureService: WebFeatureService {
         self.session = session
     }
 
+    func fetchQuizConfigSummary() async throws -> QuizConfigSummary {
+        try await request(path: "/v1/quiz/config", method: "GET")
+    }
+
+    func fetchQuizStatus() async throws -> QuizConfigSummary {
+        try await request(path: "/v1/quiz/status", method: "GET")
+    }
+
+    func createQuizSession() async throws -> QuizSessionCreateResponse {
+        try await request(path: "/v1/quiz/sessions", method: "POST")
+    }
+
+    func submitQuizSession(sessionId: String, answers: [QuizSubmitAnswerPayload]) async throws -> QuizSessionSubmitResponse {
+        try await request(
+            path: "/v1/quiz/sessions/\(sessionId)/submit",
+            method: "POST",
+            body: ["answers": answers]
+        )
+    }
+
+    func abandonQuizSession(sessionId: String) async throws -> QuizSessionAbandonResponse {
+        try await request(path: "/v1/quiz/sessions/\(sessionId)/abandon", method: "POST")
+    }
+
     func prepareAuthenticatedRequestForUserAction(source: String) async throws {
         guard refreshToken?.isEmpty == false else { return }
         guard shouldRefreshAccessTokenBeforeUserAction() else { return }

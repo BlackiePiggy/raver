@@ -94,6 +94,12 @@ const statusClassName = (status: QuizQuestionStatus): string => {
   return 'border-yellow-500/40 bg-yellow-500/10 text-yellow-300';
 };
 
+const previewOptionLabel = (text: string, imageUrl: string): string => {
+  const normalized = text.trim();
+  if (normalized) return normalized;
+  return imageUrl.trim() ? '图片选项' : '未填写内容';
+};
+
 function SectionCard({
   title,
   description,
@@ -883,6 +889,90 @@ export default function AdminQuizPage() {
                         </label>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                <div className="space-y-4 rounded-2xl border border-border-secondary bg-bg-tertiary p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-text-primary">题目预览</div>
+                      <div className="text-xs text-text-tertiary">按当前草稿实时预览最终答题展示结构，不显示正确答案反馈。</div>
+                    </div>
+                    <div className="rounded-full border border-border-secondary px-3 py-1 text-xs text-text-tertiary">
+                      单选题 · {questionDraft.options.length} 个选项
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-border-secondary bg-bg-secondary p-5">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-text-tertiary">
+                      <span className={`rounded-full border px-2 py-1 ${statusClassName(questionDraft.status)}`}>
+                        {questionDraft.status}
+                      </span>
+                      <span className="rounded-full border border-border-secondary px-2 py-1">
+                        限时 {questionDraft.timeLimitSec.trim() || '-'} 秒
+                      </span>
+                      <span className="rounded-full border border-border-secondary px-2 py-1">
+                        正确答案 {questionDraft.correctOptionId.trim() || '未指定'}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 space-y-4">
+                      <div className="text-lg font-semibold leading-8 text-text-primary">
+                        {questionDraft.stemText.trim() || '题干预览将在这里显示'}
+                      </div>
+
+                      {questionDraft.stemImageUrl.trim() ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={questionDraft.stemImageUrl.trim()}
+                          alt="题干预览"
+                          className="max-h-[260px] w-full rounded-2xl border border-border-secondary object-contain bg-bg-tertiary"
+                        />
+                      ) : null}
+
+                      <div className="space-y-3">
+                        {questionDraft.options.map((option, index) => {
+                          const isCorrect = questionDraft.correctOptionId === option.id;
+                          return (
+                            <div
+                              key={`preview-${option.id}`}
+                              className={`rounded-2xl border p-4 ${
+                                isCorrect
+                                  ? 'border-accent-green/40 bg-accent-green/10'
+                                  : 'border-border-secondary bg-bg-tertiary'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div
+                                  className={`mt-0.5 h-5 w-5 rounded-full border ${
+                                    isCorrect ? 'border-accent-green bg-accent-green/15' : 'border-border-secondary'
+                                  }`}
+                                />
+                                <div className="min-w-0 flex-1 space-y-3">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="rounded-full border border-border-secondary px-2 py-1 text-[11px] text-text-tertiary">
+                                      选项 {index + 1}
+                                    </span>
+                                    <span className="font-mono text-[11px] text-text-tertiary">{option.id}</span>
+                                  </div>
+                                  <div className="text-sm font-medium leading-6 text-text-primary">
+                                    {previewOptionLabel(option.text, option.imageUrl)}
+                                  </div>
+                                  {option.imageUrl.trim() ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={option.imageUrl.trim()}
+                                      alt={previewOptionLabel(option.text, option.imageUrl)}
+                                      className="max-h-[220px] w-full rounded-2xl border border-border-secondary object-contain bg-bg-secondary"
+                                    />
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
 

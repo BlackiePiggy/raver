@@ -3,6 +3,11 @@ import RaverEventAdminContract
 
 protocol WebFeatureService {
     func prepareAuthenticatedRequestForUserAction(source: String) async throws
+    func fetchQuizConfigSummary() async throws -> QuizConfigSummary
+    func fetchQuizStatus() async throws -> QuizConfigSummary
+    func createQuizSession() async throws -> QuizSessionCreateResponse
+    func submitQuizSession(sessionId: String, answers: [QuizSubmitAnswerPayload]) async throws -> QuizSessionSubmitResponse
+    func abandonQuizSession(sessionId: String) async throws -> QuizSessionAbandonResponse
     func fetchEvents(page: Int, limit: Int, search: String?, eventType: String?, status: String?, wikiFestivalId: String?) async throws -> EventListPage
     func fetchEventsBootstrap(limit: Int, search: String?, eventType: String?) async throws -> EventsBootstrapResponse
     func fetchFestivalEventFeed(wikiFestivalId: String, upcomingPage: Int, upcomingLimit: Int, endedPage: Int, endedLimit: Int) async throws -> FestivalEventFeedResponse
@@ -244,4 +249,75 @@ extension WebFeatureService {
             usage: nil
         )
     }
+}
+
+struct QuizConfigSummary: Decodable {
+    let isEnabled: Bool
+    let questionCount: Int
+    let passCorrectCount: Int
+    let dailyAttemptLimit: Int
+    let effectiveDailyAttemptLimit: Int?
+    let isUnlimitedAttempts: Bool
+    let attemptMode: String
+    let defaultTimeLimitSec: Int
+    let dailyLimitTimeZone: String
+    let allowRetakeAfterPass: Bool
+    let allowRestartDuringSession: Bool
+    let todayAttemptCount: Int
+    let todayRemainingAttempts: Int
+    let hasPermanentPass: Bool
+    let passedAt: String?
+    let canStart: Bool
+    let activeSessionId: String?
+    let disabledReason: String?
+}
+
+struct QuizQuestionOptionPayload: Decodable, Identifiable, Hashable {
+    let optionId: String
+    let text: String?
+    let imageUrl: String?
+    let sortOrder: Int
+
+    var id: String { optionId }
+}
+
+struct QuizQuestionPayload: Decodable, Identifiable, Hashable {
+    let questionId: String
+    let stemText: String
+    let stemImageUrl: String?
+    let options: [QuizQuestionOptionPayload]
+    let timeLimitSec: Int
+
+    var id: String { questionId }
+}
+
+struct QuizSessionCreateResponse: Decodable {
+    let sessionId: String
+    let questionCount: Int
+    let passCorrectCount: Int
+    let dailyAttemptLimit: Int
+    let dailyRemainingAttemptsAfterStart: Int
+    let timeZone: String
+    let questions: [QuizQuestionPayload]
+    let startedAt: String
+    let expiresAt: String
+}
+
+struct QuizSubmitAnswerPayload: Encodable {
+    let questionId: String
+    let optionId: String?
+}
+
+struct QuizSessionSubmitResponse: Decodable {
+    let sessionId: String
+    let totalCount: Int
+    let correctCount: Int
+    let passCorrectCount: Int
+    let passed: Bool
+    let passedAt: String?
+}
+
+struct QuizSessionAbandonResponse: Decodable {
+    let sessionId: String
+    let status: String
 }

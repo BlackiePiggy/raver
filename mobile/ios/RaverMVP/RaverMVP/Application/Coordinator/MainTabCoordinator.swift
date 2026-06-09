@@ -656,6 +656,8 @@ struct MainTabCoordinatorView: View {
                     userRepository: appContainer.profileUserRepository,
                     contentRepository: appContainer.profileContentRepository
                 )
+            case .quiz:
+                QuizFlowView(service: appContainer.webService)
             case .contributionCenter:
                 ContributionCenterView(contentRepository: appContainer.profileContentRepository)
             case let .contentSubmissionDetail(submissionID):
@@ -974,6 +976,7 @@ struct MainTabCoordinatorView: View {
                 .widgetManager,
                 .movieBanner,
                 .myPublishes,
+                .quiz,
                 .contributionCenter,
                 .contentSubmissionDetail,
                 .mySaves,

@@ -2,7 +2,7 @@
 
 > Status: Draft
 > Owner: Backend / Web Admin / iOS
-> Last Updated: 2026-06-08
+> Last Updated: 2026-06-09
 > Scope: `server/`, `web/`, `mobile/ios/`, `server/prisma/`, `docs/`
 
 ---
@@ -380,25 +380,25 @@ V1 不追求强对抗，但要有清晰边界。
 
 ### A. 题库管理
 
-- [ ] 题目列表页
-- [ ] 新建题目
-- [ ] 编辑题目
-- [ ] 启用 / 停用题目
-- [ ] 删除或归档题目
-- [ ] 图片上传
-- [ ] 题目预览
+- [x] 题目列表页
+- [x] 新建题目
+- [x] 编辑题目
+- [x] 启用 / 停用题目
+- [x] 删除或归档题目
+- [x] 图片上传
+- [x] 题目预览
 
 ### B. 答题系统配置
 
-- [ ] 是否启用答题系统
-- [ ] 抽题数量
-- [ ] 通过所需正确题数
-- [ ] 每日答题次数
-- [ ] 默认单题时长
-- [ ] 业务日界线时区
-- [ ] 通过后是否允许继续答题
-- [ ] 用户级次数覆盖管理
-- [ ] 用户级无限次管理
+- [x] 是否启用答题系统
+- [x] 抽题数量
+- [x] 通过所需正确题数
+- [x] 每日答题次数
+- [x] 默认单题时长
+- [x] 业务日界线时区
+- [x] 通过后是否允许继续答题
+- [x] 用户级次数覆盖管理
+- [x] 用户级无限次管理
 
 ### 未来预留但 V1 不启用
 
@@ -413,34 +413,34 @@ V1 不追求强对抗，但要有清晰边界。
 
 ### 用户端 API
 
-- [ ] `GET /v1/quiz/config`
+- [x] `GET /v1/quiz/config`
   - 返回当前是否启用、用户是否有资格进入、基础规则摘要
-- [ ] `GET /v1/quiz/status`
+- [x] `GET /v1/quiz/status`
   - 返回：
     - 今日剩余次数
     - 是否已通过
     - 通过时间
-- [ ] `POST /v1/quiz/sessions`
+- [x] `POST /v1/quiz/sessions`
   - 创建答题 session
   - 一次性返回本次 20 题的展示 payload
-- [ ] `POST /v1/quiz/sessions/:id/answer`
-  - 可选：逐题提交
-- [ ] `POST /v1/quiz/sessions/:id/submit`
+- [x] `POST /v1/quiz/sessions/:id/answer`
+  - V1 不实现，明确保留为后续增强口；当前主线采用“本地暂存 + 最终汇总提交”
+- [x] `POST /v1/quiz/sessions/:id/submit`
   - 提交整场结果
-- [ ] `POST /v1/quiz/sessions/:id/abandon`
+- [x] `POST /v1/quiz/sessions/:id/abandon`
   - 主动放弃 / 重启前关闭旧 session
 
 ### 管理端 API
 
-- [ ] `GET /admin/v1/quiz/questions`
-- [ ] `POST /admin/v1/quiz/questions`
-- [ ] `GET /admin/v1/quiz/questions/:id`
-- [ ] `PATCH /admin/v1/quiz/questions/:id`
-- [ ] `POST /admin/v1/quiz/questions/:id/archive`
-- [ ] `GET /admin/v1/quiz/config`
-- [ ] `PATCH /admin/v1/quiz/config`
-- [ ] `GET /admin/v1/quiz/user-overrides`
-- [ ] `PATCH /admin/v1/quiz/users/:userId/override`
+- [x] `GET /admin/v1/quiz/questions`
+- [x] `POST /admin/v1/quiz/questions`
+- [x] `GET /admin/v1/quiz/questions/:id`
+- [x] `PATCH /admin/v1/quiz/questions/:id`
+- [x] `POST /admin/v1/quiz/questions/:id/archive`
+- [x] `GET /admin/v1/quiz/config`
+- [x] `PATCH /admin/v1/quiz/config`
+- [x] `GET /admin/v1/quiz/user-overrides`
+- [x] `PATCH /admin/v1/quiz/users/:userId/override`
 
 ### 关于逐题提交的选择
 
@@ -456,13 +456,14 @@ V1 推荐：
 
 ### 建议新增表
 
-- [ ] `QuizQuestion`
-- [ ] `QuizQuestionOption`
-- [ ] `QuizConfig`
-- [ ] `QuizSession`
-- [ ] `QuizAttemptLedger`
-- [ ] `QuizUserPolicyOverride`
-- [ ] 可选：`UserQualification`
+- [x] `QuizQuestion`
+- [x] `QuizQuestionOption`
+- [x] `QuizConfig`
+- [x] `QuizSession`
+- [x] `QuizAttemptLedger`
+- [x] `QuizUserPolicyOverride`
+- [x] 可选：`UserQualification`
+  - V1 不单独建表，先由统一 `accountQualificationService` 聚合 quiz qualification，满足权限接入口主线
 
 ### 媒体字段策略
 
@@ -557,43 +558,43 @@ V1 推荐：
 
 ## Phase 5. iOS 答题入口与页面流
 
-- [ ] 在个人主页快捷入口增加答题入口
-- [ ] 新建答题开始页
-- [ ] 新建答题单题页
-- [ ] 新建答题结果页
-- [ ] 新建答题中断 / 放弃 / 重启交互
+- [x] 在个人主页快捷入口增加答题入口
+- [x] 新建答题开始页
+- [x] 新建答题单题页
+- [x] 新建答题结果页
+- [x] 新建答题中断 / 放弃 / 重启交互
 
 ## Phase 6. iOS 媒体预加载与计时
 
-- [ ] 进入题目前完成该题媒体预加载
-- [ ] 媒体失败 3 次后跳题判错
-- [ ] 单题倒计时完成自动判错并下一题
-- [ ] 不允许返回上一题
-- [ ] 不允许退出后继续
+- [x] 进入题目前完成该题媒体预加载
+- [x] 媒体失败 3 次后跳题判错
+- [x] 单题倒计时完成自动判错并下一题
+- [x] 不允许返回上一题
+- [x] 不允许退出后继续
 
 ## Phase 7. 权限接入口预留
 
-- [ ] 增加统一 qualification 读取口
-- [ ] 让 quiz pass 状态可被权限链路消费
-- [ ] 暂不改具体业务权限，只把接口留好
+- [x] 增加统一 qualification 读取口
+- [x] 让 quiz pass 状态可被权限链路消费
+- [x] 暂不改具体业务权限，只把接口留好
 
 ## Phase 8. QA 与回归
 
-- [ ] 服务端抽题 / 判题 / 限次测试
-- [ ] web 题库管理测试
-- [ ] iOS 单题倒计时测试
-- [ ] iOS 图片预加载测试
-- [ ] iOS 重启 / 放弃 / 切后台测试
-- [ ] 权限接入口冒烟测试
+- [x] 服务端抽题 / 判题 / 限次测试
+- [x] web 题库管理测试
+- [x] iOS 单题倒计时测试
+- [x] iOS 图片预加载测试
+- [x] iOS 重启 / 放弃 / 切后台测试
+- [x] 权限接入口冒烟测试
 
 ---
 
 ## 风险清单
 
-- [ ] 若完全不保存最小服务端状态，则无法满足业务规则
-- [ ] 若重启不消耗次数，会被用来绕过每日上限
+- [x] 若完全不保存最小服务端状态，则无法满足业务规则
+- [x] 若重启不消耗次数，会被用来绕过每日上限
 - [ ] 若把图片全部提前下载完再开题，弱网下首屏会过慢
-- [ ] 若正确答案进入客户端，会天然削弱题目安全性
+- [x] 若正确答案进入客户端，会天然削弱题目安全性
 - [ ] 若未来权限直接耦合到单一 quiz 表，会影响后续认证体系扩展
 
 ---
@@ -605,3 +606,15 @@ V1 推荐：
 - [x] 现有 iOS 快捷入口挂点确认
 - [x] 现有 web admin 导航挂点确认
 - [x] 生成本执行文档作为后续唯一主线依据
+- [x] iOS Phase 5 页面流主线完成
+- [x] iOS Phase 6 预加载与计时主线完成
+- [x] Phase 7 统一 qualification 读取口已落地到 server / iOS
+- [x] 服务端新增 `quiz:qualification:smoke` 主线 smoke 脚本
+- [x] 服务端新增 `quiz:admin:smoke`，已覆盖 quiz config / 题目 CRUD / 用户次数覆盖主链路
+- [x] Quiz schema / migration 已落库并修复 failed migration，Phase 8 服务端 smoke 已跑通
+- [x] Smoke 已验证 qualification 状态可随答题通过结果从 `unqualified` 切换到 `qualified`
+- [x] `QuizFlowViewModelTests` 已覆盖 iOS 倒计时超时自动提交、媒体预加载后起题、切后台放弃会话三条主线回归
+- [x] Web quiz admin 已补齐题目预览，题库管理 / 全局配置 / 用户次数覆盖主线与文档状态对齐
+- [x] 已明确 V1 不实现逐题提交接口，主线固定为 session create + session submit
+- [x] 已明确 V1 不新增独立 `UserQualification` 表，由统一 qualification service 先承接权限读取
+- [x] `quiz:qualification:smoke` 已补充验证：session payload 不下发正确答案，abandon / restart 不回退每日次数

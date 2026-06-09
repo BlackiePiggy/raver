@@ -380,6 +380,30 @@ struct AccountEnforcementStatus: Codable, Hashable {
     }
 }
 
+enum AccountQualificationType: String, Codable, Hashable {
+    case quiz
+}
+
+enum AccountQualificationStatus: String, Codable, Hashable {
+    case qualified
+    case unqualified
+}
+
+struct AccountQualification: Codable, Hashable, Identifiable {
+    let key: String
+    let type: AccountQualificationType
+    let status: AccountQualificationStatus
+    let qualifiedAt: String?
+    let summary: String
+    let metadata: [String: ContentSubmissionJSONValue]?
+
+    var id: String { key }
+
+    var isQualified: Bool {
+        status == .qualified
+    }
+}
+
 struct AccountEnforcement: Codable, Hashable, Identifiable {
     let id: String
     var userId: String?
