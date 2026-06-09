@@ -115,6 +115,7 @@ app.use('/api', preRegistrationRoutes);
 app.use('/api/content-submissions', contentSubmissionRoutes);
 app.use('/api/admin/v1/dj-enrichment', djEnrichmentRoutes);
 app.use('/api/quiz', quizRoutes);
+app.use('/v1/quiz', quizRoutes);
 app.use('/', shareRoutes);
 app.use('/v1', bffRoutes);
 app.use('/v1', bffWebRoutes);
