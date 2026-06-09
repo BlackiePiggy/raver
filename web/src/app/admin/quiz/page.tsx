@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import AdminAppShell from '@/components/admin/AdminAppShell';
@@ -599,8 +600,15 @@ function QuizImageField({
             aria-label="打开大图预览"
             title="点击查看大图"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={normalizedImageUrl} alt={alt} className="h-14 w-14 object-contain" />
+            <div className="relative h-14 w-14">
+              <Image
+                src={normalizedImageUrl}
+                alt={alt}
+                fill
+                className="object-contain"
+                sizes="56px"
+              />
+            </div>
           </button>
           {/* info */}
           <div className="min-w-0 flex-1 overflow-hidden py-0.5">
@@ -1951,12 +1959,15 @@ export default function AdminQuizPage() {
 
                     {questionDraft.stemImageUrl.trim() ? (
                       <div className="flex">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={questionDraft.stemImageUrl.trim()}
-                          alt="题干预览"
-                          className="max-h-48 w-[70%] rounded-[12px] border border-gray-100 bg-gray-50 object-contain"
-                        />
+                        <div className="relative h-48 w-[70%] overflow-hidden rounded-[12px] border border-gray-100 bg-gray-50">
+                          <Image
+                            src={questionDraft.stemImageUrl.trim()}
+                            alt="题干预览"
+                            fill
+                            className="object-contain"
+                            sizes="(max-width: 768px) 100vw, 560px"
+                          />
+                        </div>
                       </div>
                     ) : null}
 
@@ -1970,8 +1981,15 @@ export default function AdminQuizPage() {
                               className="relative overflow-hidden rounded-[14px] border border-gray-200 bg-gray-50"
                             >
                               {option.imageUrl.trim() ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={option.imageUrl.trim()} alt={`选项 ${letter}`} className="h-36 w-full object-cover" />
+                                <div className="relative h-36 w-full">
+                                  <Image
+                                    src={option.imageUrl.trim()}
+                                    alt={`选项 ${letter}`}
+                                    fill
+                                    className="object-cover"
+                                    sizes="(max-width: 768px) 50vw, 180px"
+                                  />
+                                </div>
                               ) : (
                                 <div className="flex h-36 items-center justify-center text-xs text-gray-400">图片缺失</div>
                               )}
@@ -2003,12 +2021,15 @@ export default function AdminQuizPage() {
                                 {previewOptionLabel(option.text, option.imageUrl)}
                               </span>
                               {option.imageUrl.trim() ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={option.imageUrl.trim()}
-                                  alt={previewOptionLabel(option.text, option.imageUrl)}
-                                  className="ml-auto h-9 w-9 rounded-lg border border-gray-200 object-contain bg-white"
-                                />
+                                <div className="relative ml-auto h-9 w-9 overflow-hidden rounded-lg border border-gray-200 bg-white">
+                                  <Image
+                                    src={option.imageUrl.trim()}
+                                    alt={previewOptionLabel(option.text, option.imageUrl)}
+                                    fill
+                                    className="object-contain"
+                                    sizes="36px"
+                                  />
+                                </div>
                               ) : null}
                             </div>
                           );
