@@ -16969,6 +16969,12 @@ type GenreThemeRow = {
   color: string | null;
 };
 
+type GenreBackgroundRow = {
+  id: string;
+  parentId: string | null;
+  backgroundImageUrl: string | null;
+};
+
 const normalizeGenreKeyArtistBindings = (
   keyArtists: string[],
   rawBindings: unknown,
@@ -17050,6 +17056,48 @@ const buildGenreBranchThemeColorLookup = <TRow extends GenreThemeRow>(rows: TRow
 
     const fallback = row.parentId == null && row.id !== ELECTRONIC_MUSIC_GENRE_ID
       ? normalizeGenreThemeColor(row.color)
+      : null;
+    memo.set(row.id, fallback);
+    return fallback;
+  };
+
+  for (const row of rows) {
+    resolve(row);
+  }
+
+  return memo;
+};
+
+const buildGenreBranchBackgroundImageLookup = <TRow extends GenreBackgroundRow>(rows: TRow[]): Map<string, string | null> => {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const memo = new Map<string, string | null>();
+
+  const resolve = (row: TRow): string | null => {
+    const cached = memo.get(row.id);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const ownImage = normalizeGenreEditableText(row.backgroundImageUrl);
+    if (ownImage) {
+      memo.set(row.id, ownImage);
+      return ownImage;
+    }
+
+    let current: TRow | undefined = row;
+    let branchRoot: TRow | undefined;
+    while (current?.parentId) {
+      const parent = byId.get(current.parentId);
+      if (!parent) break;
+      if (parent.id === ELECTRONIC_MUSIC_GENRE_ID) {
+        branchRoot = current;
+        break;
+      }
+      current = parent;
+    }
+
+    const fallback = branchRoot && branchRoot.id !== row.id
+      ? normalizeGenreEditableText(branchRoot.backgroundImageUrl)
       : null;
     memo.set(row.id, fallback);
     return fallback;
@@ -17618,6 +17666,7 @@ router.get('/learn/genres', async (_req: Request, res: Response): Promise<void> 
       byParentId.set(row.parentId, siblings);
     }
     const themeColorById = buildGenreBranchThemeColorLookup(rows);
+    const backgroundImageById = buildGenreBranchBackgroundImageLookup(rows);
 
     const buildNode = (row: (typeof rows)[number]): LearnGenreTreeNode => ({
       id: row.id,
@@ -17633,7 +17682,7 @@ router.get('/learn/genres', async (_req: Request, res: Response): Promise<void> 
       origin: row.origin ?? '',
       era: row.era ?? '',
       bpm: row.bpm ?? '',
-      backgroundImageURL: row.backgroundImageUrl ?? '',
+      backgroundImageURL: backgroundImageById.get(row.id) ?? '',
       spotifyTrackURL: row.spotifyTrackUrl ?? '',
       wikipediaURL: row.wikipediaUrl ?? '',
       keyArtists: row.keyArtists,
@@ -17843,9 +17892,11 @@ router.get('/learn/genres/:id', async (req: Request, res: Response): Promise<voi
         id: true,
         parentId: true,
         color: true,
+        backgroundImageUrl: true,
       },
     });
     const themeColorById = buildGenreBranchThemeColorLookup(themeRows);
+    const backgroundImageById = buildGenreBranchBackgroundImageLookup(themeRows);
 
     const detail: LearnGenreDetailNode = {
       id: row.id,
@@ -17861,7 +17912,7 @@ router.get('/learn/genres/:id', async (req: Request, res: Response): Promise<voi
       origin: row.origin ?? '',
       era: row.era ?? '',
       bpm: row.bpm ?? '',
-      backgroundImageURL: row.backgroundImageUrl ?? '',
+      backgroundImageURL: backgroundImageById.get(row.id) ?? '',
       spotifyTrackURL: row.spotifyTrackUrl ?? '',
       wikipediaURL: row.wikipediaUrl ?? '',
       keyArtists: row.keyArtists,

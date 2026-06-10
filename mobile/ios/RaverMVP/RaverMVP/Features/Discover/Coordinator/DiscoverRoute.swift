@@ -167,13 +167,32 @@ private struct DiscoverGenreDetailLoaderView: View {
     @State private var phase: LoadPhase = .idle
 
     var body: some View {
-        DiscoverRouteLoaderScaffold(phase: phase) {
-            Task { await loadGenre(force: true) }
-        } content: {
-            if let genre {
-                LearnGenreDetailView(genre: genre)
-            } else {
-                Color.clear
+        Group {
+            switch phase {
+            case .idle, .initialLoading:
+                GenreDetailSkeletonView()
+            case .failure(let message), .offline(let message):
+                ScrollView {
+                    ScreenErrorCard(message: message, retryAction: {
+                        Task { await loadGenre(force: true) }
+                    })
+                    .padding(16)
+                    .padding(.top, 72)
+                }
+                .background(RaverTheme.background)
+            case .empty:
+                ContentUnavailableView(
+                    LT("内容不存在", "Content Unavailable", "コンテンツがありません"),
+                    systemImage: "exclamationmark.circle"
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RaverTheme.background)
+            case .success:
+                if let genre {
+                    LearnGenreDetailView(genre: genre)
+                } else {
+                    Color.clear
+                }
             }
         }
         .task {

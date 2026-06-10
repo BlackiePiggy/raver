@@ -1,0 +1,2166 @@
+{
+  "importedAt": "2026-06-10T15:02:18.871Z",
+  "inputPath": "/Users/blackie/Downloads/电子音乐风格大全.json",
+  "sourceRowCount": 305,
+  "updatedGenreCount": 308,
+  "matchedGenreCount": 308,
+  "unmatchedSourceRows": [],
+  "matched": [
+    {
+      "genreId": "electronic-music",
+      "genreName": "Electronic Music",
+      "path": "Electronic Music",
+      "sourceEnglishName": "Electronic Music",
+      "normalizedKey": "electronic music"
+    },
+    {
+      "genreId": "ambient",
+      "genreName": "Ambient",
+      "path": "Electronic Music/ambient",
+      "sourceEnglishName": "Ambient",
+      "normalizedKey": "ambient"
+    },
+    {
+      "genreId": "ambient/berlin-school-ambient",
+      "genreName": "Berlin School Ambient",
+      "path": "Electronic Music/ambient/ambient-berlin-school-ambient",
+      "sourceEnglishName": "Berlin School Ambient",
+      "normalizedKey": "berlin school ambient"
+    },
+    {
+      "genreId": "ambient/dark-ambient",
+      "genreName": "Dark Ambient",
+      "path": "Electronic Music/ambient/ambient-dark-ambient",
+      "sourceEnglishName": "Dark Ambient",
+      "normalizedKey": "dark ambient"
+    },
+    {
+      "genreId": "ambient/dark-ambient/dungeon-synth",
+      "genreName": "Dungeon Synth",
+      "path": "Electronic Music/ambient/ambient-dark-ambient/ambient-dark-ambient-dungeon-synth",
+      "sourceEnglishName": "Dungeon Synth",
+      "normalizedKey": "dungeon synth"
+    },
+    {
+      "genreId": "ambient/dark-ambient/industrial-ambient",
+      "genreName": "Industrial Ambient",
+      "path": "Electronic Music/ambient/ambient-dark-ambient/ambient-dark-ambient-industrial-ambient",
+      "sourceEnglishName": "Industrial Ambient",
+      "normalizedKey": "industrial ambient"
+    },
+    {
+      "genreId": "ambient/dark-ambient/isolationism",
+      "genreName": "Isolationism",
+      "path": "Electronic Music/ambient/ambient-dark-ambient/ambient-dark-ambient-isolationism",
+      "sourceEnglishName": "Isolationism",
+      "normalizedKey": "isolationism"
+    },
+    {
+      "genreId": "ambient/dark-ambient/lovecraftian-ambient",
+      "genreName": "Lovecraftian Ambient",
+      "path": "Electronic Music/ambient/ambient-dark-ambient/ambient-dark-ambient-lovecraftian-ambient",
+      "sourceEnglishName": "Lovecraftian Ambient",
+      "normalizedKey": "lovecraftian ambient"
+    },
+    {
+      "genreId": "ambient/drone-ambient",
+      "genreName": "Drone Ambient",
+      "path": "Electronic Music/ambient/ambient-drone-ambient",
+      "sourceEnglishName": "Drone Ambient",
+      "normalizedKey": "drone ambient"
+    },
+    {
+      "genreId": "ambient/drone-ambient/drone-metal",
+      "genreName": "Drone Metal",
+      "path": "Electronic Music/ambient/ambient-drone-ambient/ambient-drone-ambient-drone-metal",
+      "sourceEnglishName": "Drone Metal",
+      "normalizedKey": "drone metal"
+    },
+    {
+      "genreId": "ambient/drone-ambient/microtonal-drone",
+      "genreName": "Microtonal Drone",
+      "path": "Electronic Music/ambient/ambient-drone-ambient/ambient-drone-ambient-microtonal-drone",
+      "sourceEnglishName": "Microtonal Drone",
+      "normalizedKey": "microtonal drone"
+    },
+    {
+      "genreId": "ambient/new-age-ambient",
+      "genreName": "New Age Ambient",
+      "path": "Electronic Music/ambient/ambient-new-age-ambient",
+      "sourceEnglishName": "New Age Ambient",
+      "normalizedKey": "new age ambient"
+    },
+    {
+      "genreId": "ambient/new-age-ambient/celtic-ambient",
+      "genreName": "Celtic Ambient",
+      "path": "Electronic Music/ambient/ambient-new-age-ambient/ambient-new-age-ambient-celtic-ambient",
+      "sourceEnglishName": "Celtic Ambient",
+      "normalizedKey": "celtic ambient"
+    },
+    {
+      "genreId": "ambient/new-age-ambient/meditation-ambient",
+      "genreName": "Meditation Ambient",
+      "path": "Electronic Music/ambient/ambient-new-age-ambient/ambient-new-age-ambient-meditation-ambient",
+      "sourceEnglishName": "Meditation Ambient",
+      "normalizedKey": "meditation ambient"
+    },
+    {
+      "genreId": "ambient/psybient",
+      "genreName": "Psybient",
+      "path": "Electronic Music/ambient/ambient-psybient",
+      "sourceEnglishName": "Psybient",
+      "normalizedKey": "psybient"
+    },
+    {
+      "genreId": "ambient/psybient/forest-psybient",
+      "genreName": "Forest Psybient",
+      "path": "Electronic Music/ambient/ambient-psybient/ambient-psybient-forest-psybient",
+      "sourceEnglishName": "Forest Psybient",
+      "normalizedKey": "forest psybient"
+    },
+    {
+      "genreId": "ambient/psybient/psydub",
+      "genreName": "Psydub",
+      "path": "Electronic Music/ambient/ambient-psybient/ambient-psybient-psydub",
+      "sourceEnglishName": "Psydub",
+      "normalizedKey": "psydub"
+    },
+    {
+      "genreId": "ambient/space-ambient",
+      "genreName": "Space Ambient",
+      "path": "Electronic Music/ambient/ambient-space-ambient",
+      "sourceEnglishName": "Space Ambient",
+      "normalizedKey": "space ambient"
+    },
+    {
+      "genreId": "bass-music",
+      "genreName": "Bass Music",
+      "path": "Electronic Music/bass-music",
+      "sourceEnglishName": "Bass Music",
+      "normalizedKey": "bass music"
+    },
+    {
+      "genreId": "bass-music/cloud-rap",
+      "genreName": "Cloud Rap",
+      "path": "Electronic Music/bass-music/bass-music-cloud-rap",
+      "sourceEnglishName": "Cloud Rap",
+      "normalizedKey": "cloud rap"
+    },
+    {
+      "genreId": "bass-music/drum-and-bass",
+      "genreName": "Drum and Bass",
+      "path": "Electronic Music/bass-music/bass-music-drum-and-bass",
+      "sourceEnglishName": "Drum and Bass",
+      "normalizedKey": "drum and bass"
+    },
+    {
+      "genreId": "bass-music/drum-and-bass/darkstep",
+      "genreName": "Darkstep",
+      "path": "Electronic Music/bass-music/bass-music-drum-and-bass/bass-music-drum-and-bass-darkstep",
+      "sourceEnglishName": "Darkstep",
+      "normalizedKey": "darkstep"
+    },
+    {
+      "genreId": "bass-music/drum-and-bass/jump-up",
+      "genreName": "Jump Up",
+      "path": "Electronic Music/bass-music/bass-music-drum-and-bass/bass-music-drum-and-bass-jump-up",
+      "sourceEnglishName": "Jump Up",
+      "normalizedKey": "jump up"
+    },
+    {
+      "genreId": "bass-music/drum-and-bass/jump-up/happy-jump-up",
+      "genreName": "Happy Jump Up",
+      "path": "Electronic Music/bass-music/bass-music-drum-and-bass/bass-music-drum-and-bass-jump-up/bass-music-drum-and-bass-jump-up-happy-jump-up",
+      "sourceEnglishName": "Happy Jump Up",
+      "normalizedKey": "happy jump up"
+    },
+    {
+      "genreId": "bass-music/drum-and-bass/jump-up/party-drum-and-bass",
+      "genreName": "Party Drum and Bass",
+      "path": "Electronic Music/bass-music/bass-music-drum-and-bass/bass-music-drum-and-bass-jump-up/bass-music-drum-and-bass-jump-up-party-drum-and-bass",
+      "sourceEnglishName": "Party Drum and Bass",
+      "normalizedKey": "party drum and bass"
+    },
+    {
+      "genreId": "bass-music/drum-and-bass/liquid-drum-and-bass",
+      "genreName": "Liquid Drum and Bass",
+      "path": "Electronic Music/bass-music/bass-music-drum-and-bass/bass-music-drum-and-bass-liquid-drum-and-bass",
+      "sourceEnglishName": "Liquid Drum and Bass",
+      "normalizedKey": "liquid drum and bass"
+    },
+    {
+      "genreId": "bass-music/drum-and-bass/liquid-drum-and-bass/atmospheric-drum-and-bass",
+      "genreName": "Atmospheric Drum and Bass",
+      "path": "Electronic Music/bass-music/bass-music-drum-and-bass/bass-music-drum-and-bass-liquid-drum-and-bass/bass-music-drum-and-bass-liquid-drum-and-bass-atmospheric-drum-and-bass",
+      "sourceEnglishName": "Atmospheric Drum and Bass",
+      "normalizedKey": "atmospheric drum and bass"
+    },
+    {
+      "genreId": "bass-music/drum-and-bass/liquid-drum-and-bass/jazzstep",
+      "genreName": "Jazzstep",
+      "path": "Electronic Music/bass-music/bass-music-drum-and-bass/bass-music-drum-and-bass-liquid-drum-and-bass/bass-music-drum-and-bass-liquid-drum-and-bass-jazzstep",
+      "sourceEnglishName": "Jazzstep",
+      "normalizedKey": "jazzstep"
+    },
+    {
+      "genreId": "bass-music/drum-and-bass/liquid-drum-and-bass/liquid-funk",
+      "genreName": "Liquid Funk",
+      "path": "Electronic Music/bass-music/bass-music-drum-and-bass/bass-music-drum-and-bass-liquid-drum-and-bass/bass-music-drum-and-bass-liquid-drum-and-bass-liquid-funk",
+      "sourceEnglishName": "Liquid Funk",
+      "normalizedKey": "liquid funk"
+    },
+    {
+      "genreId": "bass-music/drum-and-bass/neurofunk",
+      "genreName": "Neurofunk",
+      "path": "Electronic Music/bass-music/bass-music-drum-and-bass/bass-music-drum-and-bass-neurofunk",
+      "sourceEnglishName": "Neurofunk",
+      "normalizedKey": "neurofunk"
+    },
+    {
+      "genreId": "bass-music/drum-and-bass/techstep",
+      "genreName": "Techstep",
+      "path": "Electronic Music/bass-music/bass-music-drum-and-bass/bass-music-drum-and-bass-techstep",
+      "sourceEnglishName": "Techstep",
+      "normalizedKey": "techstep"
+    },
+    {
+      "genreId": "bass-music/dubstep",
+      "genreName": "Dubstep",
+      "path": "Electronic Music/bass-music/bass-music-dubstep",
+      "sourceEnglishName": "Dubstep",
+      "normalizedKey": "dubstep"
+    },
+    {
+      "genreId": "bass-music/dubstep/brostep",
+      "genreName": "Brostep",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-brostep",
+      "sourceEnglishName": "Brostep",
+      "normalizedKey": "brostep"
+    },
+    {
+      "genreId": "bass-music/dubstep/brostep/aggressive-dubstep",
+      "genreName": "Aggressive Dubstep",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-brostep/bass-music-dubstep-brostep-aggressive-dubstep",
+      "sourceEnglishName": "Aggressive Dubstep",
+      "normalizedKey": "aggressive dubstep"
+    },
+    {
+      "genreId": "bass-music/dubstep/brostep/melodic-brostep",
+      "genreName": "Melodic Brostep",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-brostep/bass-music-dubstep-brostep-melodic-brostep",
+      "sourceEnglishName": "Melodic Brostep",
+      "normalizedKey": "melodic brostep"
+    },
+    {
+      "genreId": "bass-music/dubstep/color-bass",
+      "genreName": "Color Bass",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-color-bass",
+      "sourceEnglishName": "Color Bass",
+      "normalizedKey": "color bass"
+    },
+    {
+      "genreId": "bass-music/dubstep/deep-dubstep",
+      "genreName": "Deep Dubstep",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-deep-dubstep",
+      "sourceEnglishName": "Deep Dubstep",
+      "normalizedKey": "deep dubstep"
+    },
+    {
+      "genreId": "bass-music/dubstep/deep-dubstep/dub-techno-dubstep",
+      "genreName": "Dub Techno Dubstep",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-deep-dubstep/bass-music-dubstep-deep-dubstep-dub-techno-dubstep",
+      "sourceEnglishName": "Dub Techno Dubstep",
+      "normalizedKey": "dub techno dubstep"
+    },
+    {
+      "genreId": "bass-music/dubstep/deep-dubstep/halftime-dubstep",
+      "genreName": "Halftime Dubstep",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-deep-dubstep/bass-music-dubstep-deep-dubstep-halftime-dubstep",
+      "sourceEnglishName": "Halftime Dubstep",
+      "normalizedKey": "halftime dubstep"
+    },
+    {
+      "genreId": "bass-music/dubstep/melodic-dubstep",
+      "genreName": "Melodic Dubstep",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-melodic-dubstep",
+      "sourceEnglishName": "Melodic Dubstep",
+      "normalizedKey": "melodic dubstep"
+    },
+    {
+      "genreId": "bass-music/dubstep/melodic-dubstep/chillstep",
+      "genreName": "Chillstep",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-melodic-dubstep/bass-music-dubstep-melodic-dubstep-chillstep",
+      "sourceEnglishName": "Chillstep",
+      "normalizedKey": "chillstep"
+    },
+    {
+      "genreId": "bass-music/dubstep/riddim",
+      "genreName": "Riddim",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-riddim",
+      "sourceEnglishName": "Riddim",
+      "normalizedKey": "riddim"
+    },
+    {
+      "genreId": "bass-music/dubstep/riddim/heavy-riddim",
+      "genreName": "Heavy Riddim",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-riddim/bass-music-dubstep-riddim-heavy-riddim",
+      "sourceEnglishName": "Heavy Riddim",
+      "normalizedKey": "heavy riddim"
+    },
+    {
+      "genreId": "bass-music/dubstep/riddim/melodic-riddim",
+      "genreName": "Melodic Riddim",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-riddim/bass-music-dubstep-riddim-melodic-riddim",
+      "sourceEnglishName": "Melodic Riddim",
+      "normalizedKey": "melodic riddim"
+    },
+    {
+      "genreId": "bass-music/dubstep/uk-dubstep",
+      "genreName": "UK Dubstep",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-uk-dubstep",
+      "sourceEnglishName": "UK Dubstep",
+      "normalizedKey": "uk dubstep"
+    },
+    {
+      "genreId": "bass-music/dubstep/uk-dubstep/dark-dubstep",
+      "genreName": "Dark Dubstep",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-uk-dubstep/bass-music-dubstep-uk-dubstep-dark-dubstep",
+      "sourceEnglishName": "Dark Dubstep",
+      "normalizedKey": "dark dubstep"
+    },
+    {
+      "genreId": "bass-music/dubstep/uk-dubstep/wonky-dubstep",
+      "genreName": "Wonky Dubstep",
+      "path": "Electronic Music/bass-music/bass-music-dubstep/bass-music-dubstep-uk-dubstep/bass-music-dubstep-uk-dubstep-wonky-dubstep",
+      "sourceEnglishName": "Wonky Dubstep",
+      "normalizedKey": "wonky dubstep"
+    },
+    {
+      "genreId": "bass-music/future-bass",
+      "genreName": "Future bass",
+      "path": "Electronic Music/bass-music/bass-music-future-bass",
+      "sourceEnglishName": "Future Bass",
+      "normalizedKey": "future bass"
+    },
+    {
+      "genreId": "bass-music/future-bass/kawaii-future-bass",
+      "genreName": "Kawaii future bass",
+      "path": "Electronic Music/bass-music/bass-music-future-bass/bass-music-future-bass-kawaii-future-bass",
+      "sourceEnglishName": "Kawaii Future Bass",
+      "normalizedKey": "kawaii future bass"
+    },
+    {
+      "genreId": "bass-music/juke",
+      "genreName": "Juke",
+      "path": "Electronic Music/bass-music/bass-music-juke",
+      "sourceEnglishName": "Juke",
+      "normalizedKey": "juke"
+    },
+    {
+      "genreId": "bass-music/juke/chicago-footwork",
+      "genreName": "Chicago Footwork",
+      "path": "Electronic Music/bass-music/bass-music-juke/bass-music-juke-chicago-footwork",
+      "sourceEnglishName": "Chicago Footwork",
+      "normalizedKey": "chicago footwork"
+    },
+    {
+      "genreId": "bass-music/juke/footwork",
+      "genreName": "Footwork",
+      "path": "Electronic Music/bass-music/bass-music-juke/bass-music-juke-footwork",
+      "sourceEnglishName": "Footwork",
+      "normalizedKey": "footwork"
+    },
+    {
+      "genreId": "bass-music/jungle",
+      "genreName": "Jungle",
+      "path": "Electronic Music/bass-music/bass-music-jungle",
+      "sourceEnglishName": "Jungle",
+      "normalizedKey": "jungle"
+    },
+    {
+      "genreId": "bass-music/jungle/drumfunk",
+      "genreName": "Drumfunk",
+      "path": "Electronic Music/bass-music/bass-music-jungle/bass-music-jungle-drumfunk",
+      "sourceEnglishName": "Drumfunk",
+      "normalizedKey": "drumfunk"
+    },
+    {
+      "genreId": "bass-music/jungle/jungle-terror",
+      "genreName": "Jungle Terror",
+      "path": "Electronic Music/bass-music/bass-music-jungle/bass-music-jungle-jungle-terror",
+      "sourceEnglishName": "Jungle Terror",
+      "normalizedKey": "jungle terror"
+    },
+    {
+      "genreId": "bass-music/jungle/ragga-jungle",
+      "genreName": "Ragga Jungle",
+      "path": "Electronic Music/bass-music/bass-music-jungle/bass-music-jungle-ragga-jungle",
+      "sourceEnglishName": "Ragga Jungle",
+      "normalizedKey": "ragga jungle"
+    },
+    {
+      "genreId": "bass-music/midtempo-bass",
+      "genreName": "Midtempo bass",
+      "path": "Electronic Music/bass-music/bass-music-midtempo-bass",
+      "sourceEnglishName": "Midtempo Bass",
+      "normalizedKey": "midtempo bass"
+    },
+    {
+      "genreId": "bass-music/moombahton",
+      "genreName": "Moombahton",
+      "path": "Electronic Music/bass-music/bass-music-moombahton",
+      "sourceEnglishName": "Moombahton",
+      "normalizedKey": "moombahton"
+    },
+    {
+      "genreId": "bass-music/phonk",
+      "genreName": "Phonk",
+      "path": "Electronic Music/bass-music/bass-music-phonk",
+      "sourceEnglishName": "Phonk",
+      "normalizedKey": "phonk"
+    },
+    {
+      "genreId": "bass-music/phonk/brazilian-phonk",
+      "genreName": "Brazilian Phonk",
+      "path": "Electronic Music/bass-music/bass-music-phonk/bass-music-phonk-brazilian-phonk",
+      "sourceEnglishName": "Brazilian Phonk",
+      "normalizedKey": "brazilian phonk"
+    },
+    {
+      "genreId": "bass-music/phonk/drift-phonk",
+      "genreName": "Drift Phonk",
+      "path": "Electronic Music/bass-music/bass-music-phonk/bass-music-phonk-drift-phonk",
+      "sourceEnglishName": "Drift Phonk",
+      "normalizedKey": "drift phonk"
+    },
+    {
+      "genreId": "bass-music/phonk/rare-phonk",
+      "genreName": "Rare Phonk",
+      "path": "Electronic Music/bass-music/bass-music-phonk/bass-music-phonk-rare-phonk",
+      "sourceEnglishName": "Rare Phonk",
+      "normalizedKey": "rare phonk"
+    },
+    {
+      "genreId": "bass-music/trap-edm",
+      "genreName": "Trap (EDM)",
+      "path": "Electronic Music/bass-music/bass-music-trap-edm",
+      "sourceEnglishName": "Trap (EDM)",
+      "normalizedKey": "trap edm"
+    },
+    {
+      "genreId": "bass-music/uk-bass",
+      "genreName": "UK bass",
+      "path": "Electronic Music/bass-music/bass-music-uk-bass",
+      "sourceEnglishName": "UK Bass",
+      "normalizedKey": "uk bass"
+    },
+    {
+      "genreId": "bass-music/wave",
+      "genreName": "Wave",
+      "path": "Electronic Music/bass-music/bass-music-wave",
+      "sourceEnglishName": "Wave",
+      "normalizedKey": "wave"
+    },
+    {
+      "genreId": "bass-music/wave/hardwave",
+      "genreName": "Hardwave",
+      "path": "Electronic Music/bass-music/bass-music-wave/bass-music-wave-hardwave",
+      "sourceEnglishName": "Hardwave",
+      "normalizedKey": "hardwave"
+    },
+    {
+      "genreId": "breakbeat",
+      "genreName": "Breakbeat",
+      "path": "Electronic Music/breakbeat",
+      "sourceEnglishName": "Breakbeat",
+      "normalizedKey": "breakbeat"
+    },
+    {
+      "genreId": "breakbeat/acid-breaks",
+      "genreName": "Acid breaks",
+      "path": "Electronic Music/breakbeat/breakbeat-acid-breaks",
+      "sourceEnglishName": "Acid Breaks",
+      "normalizedKey": "acid breaks"
+    },
+    {
+      "genreId": "breakbeat/baltimore-club",
+      "genreName": "Baltimore club",
+      "path": "Electronic Music/breakbeat/breakbeat-baltimore-club",
+      "sourceEnglishName": "Baltimore Club",
+      "normalizedKey": "baltimore club"
+    },
+    {
+      "genreId": "breakbeat/baltimore-club/jersey-club",
+      "genreName": "Jersey club",
+      "path": "Electronic Music/breakbeat/breakbeat-baltimore-club/breakbeat-baltimore-club-jersey-club",
+      "sourceEnglishName": "Jersey Club",
+      "normalizedKey": "jersey club"
+    },
+    {
+      "genreId": "breakbeat/baltimore-club/philly-club",
+      "genreName": "Philly club",
+      "path": "Electronic Music/breakbeat/breakbeat-baltimore-club/breakbeat-baltimore-club-philly-club",
+      "sourceEnglishName": "Philly Club",
+      "normalizedKey": "philly club"
+    },
+    {
+      "genreId": "breakbeat/big-beat",
+      "genreName": "Big beat",
+      "path": "Electronic Music/breakbeat/breakbeat-big-beat",
+      "sourceEnglishName": "Big Beat",
+      "normalizedKey": "big beat"
+    },
+    {
+      "genreId": "breakbeat/big-beat/chemical-breaks",
+      "genreName": "Chemical Breaks",
+      "path": "Electronic Music/breakbeat/breakbeat-big-beat/breakbeat-big-beat-chemical-breaks",
+      "sourceEnglishName": "Chemical Breaks",
+      "normalizedKey": "chemical breaks"
+    },
+    {
+      "genreId": "breakbeat/big-beat/funky-breaks",
+      "genreName": "Funky Breaks",
+      "path": "Electronic Music/breakbeat/breakbeat-big-beat/breakbeat-big-beat-funky-breaks",
+      "sourceEnglishName": "Funky Breaks",
+      "normalizedKey": "funky breaks"
+    },
+    {
+      "genreId": "breakbeat/breakbeat-hardcore",
+      "genreName": "Breakbeat hardcore",
+      "path": "Electronic Music/breakbeat/breakbeat-breakbeat-hardcore",
+      "sourceEnglishName": "Breakbeat Hardcore",
+      "normalizedKey": "breakbeat hardcore"
+    },
+    {
+      "genreId": "breakbeat/breakbeat-hardcore/darkcore",
+      "genreName": "Darkcore",
+      "path": "Electronic Music/breakbeat/breakbeat-breakbeat-hardcore/breakbeat-breakbeat-hardcore-darkcore",
+      "sourceEnglishName": "Darkcore",
+      "normalizedKey": "darkcore"
+    },
+    {
+      "genreId": "breakbeat/breakbeat-hardcore/hardcore-breaks",
+      "genreName": "Hardcore breaks",
+      "path": "Electronic Music/breakbeat/breakbeat-breakbeat-hardcore/breakbeat-breakbeat-hardcore-hardcore-breaks",
+      "sourceEnglishName": "Hardcore Breaks",
+      "normalizedKey": "hardcore breaks"
+    },
+    {
+      "genreId": "breakbeat/broken-beat",
+      "genreName": "Broken beat",
+      "path": "Electronic Music/breakbeat/breakbeat-broken-beat",
+      "sourceEnglishName": "Broken Beat",
+      "normalizedKey": "broken beat"
+    },
+    {
+      "genreId": "breakbeat/nu-skool-breaks",
+      "genreName": "Nu skool breaks",
+      "path": "Electronic Music/breakbeat/breakbeat-nu-skool-breaks",
+      "sourceEnglishName": "Nu Skool Breaks",
+      "normalizedKey": "nu skool breaks"
+    },
+    {
+      "genreId": "breakbeat/nu-skool-breaks/florida-breaks",
+      "genreName": "Florida breaks",
+      "path": "Electronic Music/breakbeat/breakbeat-nu-skool-breaks/breakbeat-nu-skool-breaks-florida-breaks",
+      "sourceEnglishName": "Florida Breaks",
+      "normalizedKey": "florida breaks"
+    },
+    {
+      "genreId": "breakbeat/nu-skool-breaks/progressive-breaks",
+      "genreName": "Progressive breaks",
+      "path": "Electronic Music/breakbeat/breakbeat-nu-skool-breaks/breakbeat-nu-skool-breaks-progressive-breaks",
+      "sourceEnglishName": "Progressive Breaks",
+      "normalizedKey": "progressive breaks"
+    },
+    {
+      "genreId": "breakbeat/psychedelic-breakbeat",
+      "genreName": "Psychedelic breakbeat",
+      "path": "Electronic Music/breakbeat/breakbeat-psychedelic-breakbeat",
+      "sourceEnglishName": "Psychedelic Breakbeat",
+      "normalizedKey": "psychedelic breakbeat"
+    },
+    {
+      "genreId": "chill-out",
+      "genreName": "Chill-out",
+      "path": "Electronic Music/chill-out",
+      "sourceEnglishName": "Chill-out",
+      "normalizedKey": "chill out"
+    },
+    {
+      "genreId": "chill-out/ambient-dub",
+      "genreName": "Ambient Dub",
+      "path": "Electronic Music/chill-out/chill-out-ambient-dub",
+      "sourceEnglishName": "Ambient Dub",
+      "normalizedKey": "ambient dub"
+    },
+    {
+      "genreId": "chill-out/balearic-beat",
+      "genreName": "Balearic Beat",
+      "path": "Electronic Music/chill-out/chill-out-balearic-beat",
+      "sourceEnglishName": "Balearic Beat",
+      "normalizedKey": "balearic beat"
+    },
+    {
+      "genreId": "chill-out/chillwave",
+      "genreName": "Chillwave",
+      "path": "Electronic Music/chill-out/chill-out-chillwave",
+      "sourceEnglishName": "Chillwave",
+      "normalizedKey": "chillwave"
+    },
+    {
+      "genreId": "chill-out/downtempo",
+      "genreName": "Downtempo",
+      "path": "Electronic Music/chill-out/chill-out-downtempo",
+      "sourceEnglishName": "Downtempo",
+      "normalizedKey": "downtempo"
+    },
+    {
+      "genreId": "chill-out/downtempo/bossa-nova-chill",
+      "genreName": "Bossa nova chill",
+      "path": "Electronic Music/chill-out/chill-out-downtempo/chill-out-downtempo-bossa-nova-chill",
+      "sourceEnglishName": "Bossa Nova Chill",
+      "normalizedKey": "bossa nova chill"
+    },
+    {
+      "genreId": "chill-out/downtempo/lo-fi-hip-hop",
+      "genreName": "Lo-fi Hip Hop",
+      "path": "Electronic Music/chill-out/chill-out-downtempo/chill-out-downtempo-lo-fi-hip-hop",
+      "sourceEnglishName": "Lo-fi Hip Hop",
+      "normalizedKey": "lo fi hip hop"
+    },
+    {
+      "genreId": "chill-out/downtempo/lounge",
+      "genreName": "Lounge",
+      "path": "Electronic Music/chill-out/chill-out-downtempo/chill-out-downtempo-lounge",
+      "sourceEnglishName": "Lounge",
+      "normalizedKey": "lounge"
+    },
+    {
+      "genreId": "chill-out/downtempo/nu-jazz",
+      "genreName": "Nu-jazz",
+      "path": "Electronic Music/chill-out/chill-out-downtempo/chill-out-downtempo-nu-jazz",
+      "sourceEnglishName": "Nu-jazz",
+      "normalizedKey": "nu jazz"
+    },
+    {
+      "genreId": "chill-out/horror-synth",
+      "genreName": "Horror Synth",
+      "path": "Electronic Music/chill-out/chill-out-horror-synth",
+      "sourceEnglishName": "Horror Synth",
+      "normalizedKey": "horror synth"
+    },
+    {
+      "genreId": "chill-out/synthwave",
+      "genreName": "Synthwave",
+      "path": "Electronic Music/chill-out/chill-out-synthwave",
+      "sourceEnglishName": "Synthwave",
+      "normalizedKey": "synthwave"
+    },
+    {
+      "genreId": "chill-out/trip-hop",
+      "genreName": "Trip hop",
+      "path": "Electronic Music/chill-out/chill-out-trip-hop",
+      "sourceEnglishName": "Trip Hop",
+      "normalizedKey": "trip hop"
+    },
+    {
+      "genreId": "chill-out/trip-hop/illbient",
+      "genreName": "Illbient",
+      "path": "Electronic Music/chill-out/chill-out-trip-hop/chill-out-trip-hop-illbient",
+      "sourceEnglishName": "Illbient",
+      "normalizedKey": "illbient"
+    },
+    {
+      "genreId": "chill-out/trip-hop/trip-rock",
+      "genreName": "Trip rock",
+      "path": "Electronic Music/chill-out/chill-out-trip-hop/chill-out-trip-hop-trip-rock",
+      "sourceEnglishName": "Trip Rock",
+      "normalizedKey": "trip rock"
+    },
+    {
+      "genreId": "chill-out/vaporwave",
+      "genreName": "Vaporwave",
+      "path": "Electronic Music/chill-out/chill-out-vaporwave",
+      "sourceEnglishName": "Vaporwave",
+      "normalizedKey": "vaporwave"
+    },
+    {
+      "genreId": "chill-out/vaporwave/dreampunk",
+      "genreName": "Dreampunk",
+      "path": "Electronic Music/chill-out/chill-out-vaporwave/chill-out-vaporwave-dreampunk",
+      "sourceEnglishName": "Dreampunk",
+      "normalizedKey": "dreampunk"
+    },
+    {
+      "genreId": "chill-out/vaporwave/mallsoft",
+      "genreName": "Mallsoft",
+      "path": "Electronic Music/chill-out/chill-out-vaporwave/chill-out-vaporwave-mallsoft",
+      "sourceEnglishName": "Mallsoft",
+      "normalizedKey": "mallsoft"
+    },
+    {
+      "genreId": "disco",
+      "genreName": "Disco",
+      "path": "Electronic Music/disco",
+      "sourceEnglishName": "Disco",
+      "normalizedKey": "disco"
+    },
+    {
+      "genreId": "disco/afro-cosmic-music",
+      "genreName": "Afro/cosmic music",
+      "path": "Electronic Music/disco/disco-afro-cosmic-music",
+      "sourceEnglishName": "Afro/Cosmic Music",
+      "normalizedKey": "afro cosmic music"
+    },
+    {
+      "genreId": "disco/electro-disco",
+      "genreName": "Electro-disco",
+      "path": "Electronic Music/disco/disco-electro-disco",
+      "sourceEnglishName": "Electro-disco",
+      "normalizedKey": "electro disco"
+    },
+    {
+      "genreId": "disco/euro-disco",
+      "genreName": "Euro disco",
+      "path": "Electronic Music/disco/disco-euro-disco",
+      "sourceEnglishName": "Euro Disco",
+      "normalizedKey": "euro disco"
+    },
+    {
+      "genreId": "disco/euro-disco/italo-disco",
+      "genreName": "Italo disco",
+      "path": "Electronic Music/disco/disco-euro-disco/disco-euro-disco-italo-disco",
+      "sourceEnglishName": "Italo Disco",
+      "normalizedKey": "italo disco"
+    },
+    {
+      "genreId": "disco/hi-nrg",
+      "genreName": "Hi-NRG",
+      "path": "Electronic Music/disco/disco-hi-nrg",
+      "sourceEnglishName": "Hi-NRG",
+      "normalizedKey": "hi nrg"
+    },
+    {
+      "genreId": "disco/hi-nrg/eurobeat",
+      "genreName": "Eurobeat",
+      "path": "Electronic Music/disco/disco-hi-nrg/disco-hi-nrg-eurobeat",
+      "sourceEnglishName": "Eurobeat",
+      "normalizedKey": "eurobeat"
+    },
+    {
+      "genreId": "disco/nu-disco",
+      "genreName": "Nu-disco",
+      "path": "Electronic Music/disco/disco-nu-disco",
+      "sourceEnglishName": "Nu-disco",
+      "normalizedKey": "nu disco"
+    },
+    {
+      "genreId": "disco/space-disco",
+      "genreName": "Space disco",
+      "path": "Electronic Music/disco/disco-space-disco",
+      "sourceEnglishName": "Space Disco",
+      "normalizedKey": "space disco"
+    },
+    {
+      "genreId": "electro",
+      "genreName": "Electro",
+      "path": "Electronic Music/electro",
+      "sourceEnglishName": "Electro",
+      "normalizedKey": "electro"
+    },
+    {
+      "genreId": "electro/dark-electro",
+      "genreName": "Dark Electro",
+      "path": "Electronic Music/electro/electro-dark-electro",
+      "sourceEnglishName": "Dark Electro",
+      "normalizedKey": "dark electro"
+    },
+    {
+      "genreId": "electro/detroit-electro",
+      "genreName": "Detroit Electro",
+      "path": "Electronic Music/electro/electro-detroit-electro",
+      "sourceEnglishName": "Detroit Electro",
+      "normalizedKey": "detroit electro"
+    },
+    {
+      "genreId": "electro/electroclash",
+      "genreName": "Electroclash",
+      "path": "Electronic Music/electro/electro-electroclash",
+      "sourceEnglishName": "Electroclash",
+      "normalizedKey": "electroclash"
+    },
+    {
+      "genreId": "electro/electrofunk",
+      "genreName": "Electrofunk",
+      "path": "Electronic Music/electro/electro-electrofunk",
+      "sourceEnglishName": "Electrofunk",
+      "normalizedKey": "electrofunk"
+    },
+    {
+      "genreId": "electro/electrofunk/boogie",
+      "genreName": "Boogie",
+      "path": "Electronic Music/electro/electro-electrofunk/electro-electrofunk-boogie",
+      "sourceEnglishName": "Boogie",
+      "normalizedKey": "boogie"
+    },
+    {
+      "genreId": "electro/french-electro",
+      "genreName": "French Electro",
+      "path": "Electronic Music/electro/electro-french-electro",
+      "sourceEnglishName": "French Electro",
+      "normalizedKey": "french electro"
+    },
+    {
+      "genreId": "electro/industrial-electro",
+      "genreName": "Industrial Electro",
+      "path": "Electronic Music/electro/electro-industrial-electro",
+      "sourceEnglishName": "Industrial Electro",
+      "normalizedKey": "industrial electro"
+    },
+    {
+      "genreId": "electro/miami-bass",
+      "genreName": "Miami Bass",
+      "path": "Electronic Music/electro/electro-miami-bass",
+      "sourceEnglishName": "Miami Bass",
+      "normalizedKey": "miami bass"
+    },
+    {
+      "genreId": "electro/miami-bass/electro-bass",
+      "genreName": "Electro Bass",
+      "path": "Electronic Music/electro/electro-miami-bass/electro-miami-bass-electro-bass",
+      "sourceEnglishName": "Electro Bass",
+      "normalizedKey": "electro bass"
+    },
+    {
+      "genreId": "electro/space-electro",
+      "genreName": "Space Electro",
+      "path": "Electronic Music/electro/electro-space-electro",
+      "sourceEnglishName": "Space Electro",
+      "normalizedKey": "space electro"
+    },
+    {
+      "genreId": "experimental",
+      "genreName": "Experimental",
+      "path": "Electronic Music/experimental",
+      "sourceEnglishName": "Experimental",
+      "normalizedKey": "experimental"
+    },
+    {
+      "genreId": "experimental/8-bit-chiptune",
+      "genreName": "8-bit (Chiptune)",
+      "path": "Electronic Music/experimental/experimental-8-bit-chiptune",
+      "sourceEnglishName": "8-bit (Chiptune)",
+      "normalizedKey": "8 bit chiptune"
+    },
+    {
+      "genreId": "experimental/8-bit-chiptune/bitpop",
+      "genreName": "Bitpop",
+      "path": "Electronic Music/experimental/experimental-8-bit-chiptune/experimental-8-bit-chiptune-bitpop",
+      "sourceEnglishName": "Bitpop",
+      "normalizedKey": "bitpop"
+    },
+    {
+      "genreId": "experimental/8-bit-chiptune/nintendocore",
+      "genreName": "Nintendocore",
+      "path": "Electronic Music/experimental/experimental-8-bit-chiptune/experimental-8-bit-chiptune-nintendocore",
+      "sourceEnglishName": "Nintendocore",
+      "normalizedKey": "nintendocore"
+    },
+    {
+      "genreId": "experimental/experimental-club-avant-club",
+      "genreName": "Experimental Club / Avant-Club",
+      "path": "Electronic Music/experimental/experimental-experimental-club-avant-club",
+      "sourceEnglishName": "Experimental Club / Avant-Club",
+      "normalizedKey": "experimental club avant club"
+    },
+    {
+      "genreId": "experimental/experimental-club-avant-club/deconstructed-club",
+      "genreName": "Deconstructed Club",
+      "path": "Electronic Music/experimental/experimental-experimental-club-avant-club/experimental-experimental-club-avant-club-deconstructed-club",
+      "sourceEnglishName": "Deconstructed Club",
+      "normalizedKey": "deconstructed club"
+    },
+    {
+      "genreId": "experimental/experimental-club-avant-club/textural-club",
+      "genreName": "Textural Club",
+      "path": "Electronic Music/experimental/experimental-experimental-club-avant-club/experimental-experimental-club-avant-club-textural-club",
+      "sourceEnglishName": "Textural Club",
+      "normalizedKey": "textural club"
+    },
+    {
+      "genreId": "experimental/hauntology",
+      "genreName": "Hauntology",
+      "path": "Electronic Music/experimental/experimental-hauntology",
+      "sourceEnglishName": "Hauntology",
+      "normalizedKey": "hauntology"
+    },
+    {
+      "genreId": "experimental/hauntology/hypnagogic-pop",
+      "genreName": "Hypnagogic Pop",
+      "path": "Electronic Music/experimental/experimental-hauntology/experimental-hauntology-hypnagogic-pop",
+      "sourceEnglishName": "Hypnagogic Pop",
+      "normalizedKey": "hypnagogic pop"
+    },
+    {
+      "genreId": "experimental/idm-intelligent-dance-music",
+      "genreName": "IDM (Intelligent Dance Music)",
+      "path": "Electronic Music/experimental/experimental-idm-intelligent-dance-music",
+      "sourceEnglishName": "IDM (Intelligent Dance Music)",
+      "normalizedKey": "idm intelligent dance music"
+    },
+    {
+      "genreId": "experimental/idm-intelligent-dance-music/acid-idm",
+      "genreName": "Acid IDM",
+      "path": "Electronic Music/experimental/experimental-idm-intelligent-dance-music/experimental-idm-intelligent-dance-music-acid-idm",
+      "sourceEnglishName": "Acid IDM",
+      "normalizedKey": "acid idm"
+    },
+    {
+      "genreId": "experimental/idm-intelligent-dance-music/ambient-idm",
+      "genreName": "Ambient IDM",
+      "path": "Electronic Music/experimental/experimental-idm-intelligent-dance-music/experimental-idm-intelligent-dance-music-ambient-idm",
+      "sourceEnglishName": "Ambient IDM",
+      "normalizedKey": "ambient idm"
+    },
+    {
+      "genreId": "experimental/idm-intelligent-dance-music/braindance",
+      "genreName": "Braindance",
+      "path": "Electronic Music/experimental/experimental-idm-intelligent-dance-music/experimental-idm-intelligent-dance-music-braindance",
+      "sourceEnglishName": "Braindance",
+      "normalizedKey": "braindance"
+    },
+    {
+      "genreId": "experimental/idm-intelligent-dance-music/breakcore",
+      "genreName": "Breakcore",
+      "path": "Electronic Music/experimental/experimental-idm-intelligent-dance-music/experimental-idm-intelligent-dance-music-breakcore",
+      "sourceEnglishName": "Breakcore",
+      "normalizedKey": "breakcore"
+    },
+    {
+      "genreId": "experimental/idm-intelligent-dance-music/drill-n-bass",
+      "genreName": "Drill 'n' Bass",
+      "path": "Electronic Music/experimental/experimental-idm-intelligent-dance-music/experimental-idm-intelligent-dance-music-drill-n-bass",
+      "sourceEnglishName": "Drill n Bass",
+      "normalizedKey": "drill n bass"
+    },
+    {
+      "genreId": "experimental/idm-intelligent-dance-music/glitch-hop",
+      "genreName": "Glitch Hop",
+      "path": "Electronic Music/experimental/experimental-idm-intelligent-dance-music/experimental-idm-intelligent-dance-music-glitch-hop",
+      "sourceEnglishName": "Glitch Hop",
+      "normalizedKey": "glitch hop"
+    },
+    {
+      "genreId": "experimental/idm-intelligent-dance-music/leftfield",
+      "genreName": "Leftfield",
+      "path": "Electronic Music/experimental/experimental-idm-intelligent-dance-music/experimental-idm-intelligent-dance-music-leftfield",
+      "sourceEnglishName": "Leftfield",
+      "normalizedKey": "leftfield"
+    },
+    {
+      "genreId": "experimental/idm-intelligent-dance-music/skweee",
+      "genreName": "Skweee",
+      "path": "Electronic Music/experimental/experimental-idm-intelligent-dance-music/experimental-idm-intelligent-dance-music-skweee",
+      "sourceEnglishName": "Skweee",
+      "normalizedKey": "skweee"
+    },
+    {
+      "genreId": "experimental/musique-concrte",
+      "genreName": "Musique Concrète",
+      "path": "Electronic Music/experimental/experimental-musique-concrte",
+      "sourceEnglishName": "Musique Concrete",
+      "normalizedKey": "musique concrete"
+    },
+    {
+      "genreId": "experimental/neoclassical",
+      "genreName": "Neoclassical",
+      "path": "Electronic Music/experimental/experimental-neoclassical",
+      "sourceEnglishName": "Neoclassical",
+      "normalizedKey": "neoclassical"
+    },
+    {
+      "genreId": "experimental/neoclassical/ambient-classical",
+      "genreName": "Ambient Classical",
+      "path": "Electronic Music/experimental/experimental-neoclassical/experimental-neoclassical-ambient-classical",
+      "sourceEnglishName": "Ambient Classical",
+      "normalizedKey": "ambient classical"
+    },
+    {
+      "genreId": "experimental/neoclassical/cinematic",
+      "genreName": "Cinematic",
+      "path": "Electronic Music/experimental/experimental-neoclassical/experimental-neoclassical-cinematic",
+      "sourceEnglishName": "Cinematic",
+      "normalizedKey": "cinematic"
+    },
+    {
+      "genreId": "experimental/neoclassical/contemporary-classical",
+      "genreName": "Contemporary Classical",
+      "path": "Electronic Music/experimental/experimental-neoclassical/experimental-neoclassical-contemporary-classical",
+      "sourceEnglishName": "Contemporary Classical",
+      "normalizedKey": "contemporary classical"
+    },
+    {
+      "genreId": "experimental/noise-distortion",
+      "genreName": "Noise & Distortion",
+      "path": "Electronic Music/experimental/experimental-noise-distortion",
+      "sourceEnglishName": "Noise and Distortion",
+      "normalizedKey": "noise and distortion"
+    },
+    {
+      "genreId": "experimental/noise-distortion/circuit-bending",
+      "genreName": "Circuit Bending",
+      "path": "Electronic Music/experimental/experimental-noise-distortion/experimental-noise-distortion-circuit-bending",
+      "sourceEnglishName": "Circuit Bending",
+      "normalizedKey": "circuit bending"
+    },
+    {
+      "genreId": "experimental/noise-distortion/harsh-noise-wall",
+      "genreName": "Harsh Noise Wall",
+      "path": "Electronic Music/experimental/experimental-noise-distortion/experimental-noise-distortion-harsh-noise-wall",
+      "sourceEnglishName": "Harsh Noise Wall",
+      "normalizedKey": "harsh noise wall"
+    },
+    {
+      "genreId": "experimental/noise-distortion/japanoise",
+      "genreName": "Japanoise",
+      "path": "Electronic Music/experimental/experimental-noise-distortion/experimental-noise-distortion-japanoise",
+      "sourceEnglishName": "Japanoise",
+      "normalizedKey": "japanoise"
+    },
+    {
+      "genreId": "experimental/noise-distortion/lowercase",
+      "genreName": "Lowercase",
+      "path": "Electronic Music/experimental/experimental-noise-distortion/experimental-noise-distortion-lowercase",
+      "sourceEnglishName": "Lowercase",
+      "normalizedKey": "lowercase"
+    },
+    {
+      "genreId": "experimental/noise-distortion/power-electronics",
+      "genreName": "Power Electronics",
+      "path": "Electronic Music/experimental/experimental-noise-distortion/experimental-noise-distortion-power-electronics",
+      "sourceEnglishName": "Power Electronics",
+      "normalizedKey": "power electronics"
+    },
+    {
+      "genreId": "experimental/plunderphonics",
+      "genreName": "Plunderphonics",
+      "path": "Electronic Music/experimental/experimental-plunderphonics",
+      "sourceEnglishName": "Plunderphonics",
+      "normalizedKey": "plunderphonics"
+    },
+    {
+      "genreId": "experimental/sound-manipulation",
+      "genreName": "Sound Manipulation",
+      "path": "Electronic Music/experimental/experimental-sound-manipulation",
+      "sourceEnglishName": "Sound Manipulation",
+      "normalizedKey": "sound manipulation"
+    },
+    {
+      "genreId": "experimental/sound-manipulation/generative-process-music",
+      "genreName": "Generative & Process Music",
+      "path": "Electronic Music/experimental/experimental-sound-manipulation/experimental-sound-manipulation-generative-process-music",
+      "sourceEnglishName": "Generative and Process Music",
+      "normalizedKey": "generative and process music"
+    },
+    {
+      "genreId": "experimental/sound-manipulation/generative-process-music/algorithmic-composition",
+      "genreName": "Algorithmic Composition",
+      "path": "Electronic Music/experimental/experimental-sound-manipulation/experimental-sound-manipulation-generative-process-music/experimental-sound-manipulation-generative-process-music-algorithmic-composition",
+      "sourceEnglishName": "Algorithmic Composition",
+      "normalizedKey": "algorithmic composition"
+    },
+    {
+      "genreId": "experimental/sound-manipulation/generative-process-music/generative-music",
+      "genreName": "Generative Music",
+      "path": "Electronic Music/experimental/experimental-sound-manipulation/experimental-sound-manipulation-generative-process-music/experimental-sound-manipulation-generative-process-music-generative-music",
+      "sourceEnglishName": "Generative Music",
+      "normalizedKey": "generative music"
+    },
+    {
+      "genreId": "experimental/sound-manipulation/glitch",
+      "genreName": "Glitch",
+      "path": "Electronic Music/experimental/experimental-sound-manipulation/experimental-sound-manipulation-glitch",
+      "sourceEnglishName": "Glitch",
+      "normalizedKey": "glitch"
+    },
+    {
+      "genreId": "experimental/sound-manipulation/microsound",
+      "genreName": "Microsound",
+      "path": "Electronic Music/experimental/experimental-sound-manipulation/experimental-sound-manipulation-microsound",
+      "sourceEnglishName": "Microsound",
+      "normalizedKey": "microsound"
+    },
+    {
+      "genreId": "experimental/sound-manipulation/post-digital",
+      "genreName": "Post-Digital",
+      "path": "Electronic Music/experimental/experimental-sound-manipulation/experimental-sound-manipulation-post-digital",
+      "sourceEnglishName": "Post-Digital",
+      "normalizedKey": "post digital"
+    },
+    {
+      "genreId": "experimental/sound-manipulation/sound-art",
+      "genreName": "Sound Art",
+      "path": "Electronic Music/experimental/experimental-sound-manipulation/experimental-sound-manipulation-sound-art",
+      "sourceEnglishName": "Sound Art",
+      "normalizedKey": "sound art"
+    },
+    {
+      "genreId": "experimental/tape-music",
+      "genreName": "Tape Music",
+      "path": "Electronic Music/experimental/experimental-tape-music",
+      "sourceEnglishName": "Tape Music",
+      "normalizedKey": "tape music"
+    },
+    {
+      "genreId": "funk-and-soul-fusion",
+      "genreName": "Funk and Soul Fusion",
+      "path": "Electronic Music/funk-and-soul-fusion",
+      "sourceEnglishName": "Funk and Soul Fusion",
+      "normalizedKey": "funk and soul fusion"
+    },
+    {
+      "genreId": "funk-and-soul-fusion/acid-jazz",
+      "genreName": "Acid Jazz",
+      "path": "Electronic Music/funk-and-soul-fusion/funk-and-soul-fusion-acid-jazz",
+      "sourceEnglishName": "Acid Jazz",
+      "normalizedKey": "acid jazz"
+    },
+    {
+      "genreId": "funk-and-soul-fusion/acid-jazz/jazz-house",
+      "genreName": "Jazz House",
+      "path": "Electronic Music/funk-and-soul-fusion/funk-and-soul-fusion-acid-jazz/funk-and-soul-fusion-acid-jazz-jazz-house",
+      "sourceEnglishName": "Jazz House",
+      "normalizedKey": "jazz house"
+    },
+    {
+      "genreId": "funk-and-soul-fusion/acid-jazz/lounge-jazz",
+      "genreName": "Lounge Jazz",
+      "path": "Electronic Music/funk-and-soul-fusion/funk-and-soul-fusion-acid-jazz/funk-and-soul-fusion-acid-jazz-lounge-jazz",
+      "sourceEnglishName": "Lounge Jazz",
+      "normalizedKey": "lounge jazz"
+    },
+    {
+      "genreId": "funk-and-soul-fusion/funktronica",
+      "genreName": "Funktronica",
+      "path": "Electronic Music/funk-and-soul-fusion/funk-and-soul-fusion-funktronica",
+      "sourceEnglishName": "Funktronica",
+      "normalizedKey": "funktronica"
+    },
+    {
+      "genreId": "funk-and-soul-fusion/funktronica/future-funk",
+      "genreName": "Future Funk",
+      "path": "Electronic Music/funk-and-soul-fusion/funk-and-soul-fusion-funktronica/funk-and-soul-fusion-funktronica-future-funk",
+      "sourceEnglishName": "Future Funk",
+      "normalizedKey": "future funk"
+    },
+    {
+      "genreId": "funk-and-soul-fusion/funktronica/nu-funk",
+      "genreName": "Nu-Funk",
+      "path": "Electronic Music/funk-and-soul-fusion/funk-and-soul-fusion-funktronica/funk-and-soul-fusion-funktronica-nu-funk",
+      "sourceEnglishName": "Nu-Funk",
+      "normalizedKey": "nu funk"
+    },
+    {
+      "genreId": "funk-and-soul-fusion/synth-funk",
+      "genreName": "Synth-funk",
+      "path": "Electronic Music/funk-and-soul-fusion/funk-and-soul-fusion-synth-funk",
+      "sourceEnglishName": "Synth-funk",
+      "normalizedKey": "synth funk"
+    },
+    {
+      "genreId": "global-club",
+      "genreName": "Global Club",
+      "path": "Electronic Music/global-club",
+      "sourceEnglishName": "Global Club",
+      "normalizedKey": "global club"
+    },
+    {
+      "genreId": "global-club/funk-carioca",
+      "genreName": "Funk Carioca",
+      "path": "Electronic Music/global-club/global-club-funk-carioca",
+      "sourceEnglishName": "Funk Carioca",
+      "normalizedKey": "funk carioca"
+    },
+    {
+      "genreId": "global-club/funk-carioca/classic-funk-funk-de-raiz",
+      "genreName": "Classic Funk / Funk de Raiz",
+      "path": "Electronic Music/global-club/global-club-funk-carioca/global-club-funk-carioca-classic-funk-funk-de-raiz",
+      "sourceEnglishName": "Classic Funk / Funk de Raiz",
+      "normalizedKey": "classic funk funk de raiz"
+    },
+    {
+      "genreId": "global-club/funk-carioca/funk-150-bpm",
+      "genreName": "Funk 150 BPM",
+      "path": "Electronic Music/global-club/global-club-funk-carioca/global-club-funk-carioca-funk-150-bpm",
+      "sourceEnglishName": "Funk 150 BPM",
+      "normalizedKey": "funk 150 bpm"
+    },
+    {
+      "genreId": "global-club/funk-carioca/funk-bruxaria-automotivo",
+      "genreName": "Funk Bruxaria / Automotivo",
+      "path": "Electronic Music/global-club/global-club-funk-carioca/global-club-funk-carioca-funk-bruxaria-automotivo",
+      "sourceEnglishName": "Funk Bruxaria / Automotivo",
+      "normalizedKey": "funk bruxaria automotivo"
+    },
+    {
+      "genreId": "global-club/funk-carioca/funk-ostentao",
+      "genreName": "Funk Ostentação",
+      "path": "Electronic Music/global-club/global-club-funk-carioca/global-club-funk-carioca-funk-ostentao",
+      "sourceEnglishName": "Funk Ostentacao",
+      "normalizedKey": "funk ostentacao"
+    },
+    {
+      "genreId": "global-club/funk-carioca/funk-proibido",
+      "genreName": "Funk Proibidão",
+      "path": "Electronic Music/global-club/global-club-funk-carioca/global-club-funk-carioca-funk-proibido",
+      "sourceEnglishName": "Funk Proibidao",
+      "normalizedKey": "funk proibidao"
+    },
+    {
+      "genreId": "global-club/gqom",
+      "genreName": "Gqom",
+      "path": "Electronic Music/global-club/global-club-gqom",
+      "sourceEnglishName": "Gqom",
+      "normalizedKey": "gqom"
+    },
+    {
+      "genreId": "global-club/kuduro",
+      "genreName": "Kuduro",
+      "path": "Electronic Music/global-club/global-club-kuduro",
+      "sourceEnglishName": "Kuduro",
+      "normalizedKey": "kuduro"
+    },
+    {
+      "genreId": "global-club/latin-club",
+      "genreName": "Latin Club",
+      "path": "Electronic Music/global-club/global-club-latin-club",
+      "sourceEnglishName": "Latin Club",
+      "normalizedKey": "latin club"
+    },
+    {
+      "genreId": "global-club/latin-club/latin-bass",
+      "genreName": "Latin Bass",
+      "path": "Electronic Music/global-club/global-club-latin-club/global-club-latin-club-latin-bass",
+      "sourceEnglishName": "Latin Bass",
+      "normalizedKey": "latin bass"
+    },
+    {
+      "genreId": "global-club/latin-club/latincore",
+      "genreName": "Latincore",
+      "path": "Electronic Music/global-club/global-club-latin-club/global-club-latin-club-latincore",
+      "sourceEnglishName": "Latincore",
+      "normalizedKey": "latincore"
+    },
+    {
+      "genreId": "global-club/nortec",
+      "genreName": "Nortec",
+      "path": "Electronic Music/global-club/global-club-nortec",
+      "sourceEnglishName": "Nortec",
+      "normalizedKey": "nortec"
+    },
+    {
+      "genreId": "global-club/reggaeton",
+      "genreName": "Reggaeton",
+      "path": "Electronic Music/global-club/global-club-reggaeton",
+      "sourceEnglishName": "Reggaeton",
+      "normalizedKey": "reggaeton"
+    },
+    {
+      "genreId": "global-club/reggaeton/dembow",
+      "genreName": "Dembow",
+      "path": "Electronic Music/global-club/global-club-reggaeton/global-club-reggaeton-dembow",
+      "sourceEnglishName": "Dembow",
+      "normalizedKey": "dembow"
+    },
+    {
+      "genreId": "global-club/reggaeton/neoperreo",
+      "genreName": "Neoperreo",
+      "path": "Electronic Music/global-club/global-club-reggaeton/global-club-reggaeton-neoperreo",
+      "sourceEnglishName": "Neoperreo",
+      "normalizedKey": "neoperreo"
+    },
+    {
+      "genreId": "global-club/reggaeton/reggaeton-old-school-clsico",
+      "genreName": "Reggaeton Old School / Clásico",
+      "path": "Electronic Music/global-club/global-club-reggaeton/global-club-reggaeton-reggaeton-old-school-clsico",
+      "sourceEnglishName": "Reggaeton Old School / Clasico",
+      "normalizedKey": "reggaeton old school clasico"
+    },
+    {
+      "genreId": "global-club/reggaeton/reggaeton-romntico",
+      "genreName": "Reggaeton Romántico",
+      "path": "Electronic Music/global-club/global-club-reggaeton/global-club-reggaeton-reggaeton-romntico",
+      "sourceEnglishName": "Reggaeton Romantico",
+      "normalizedKey": "reggaeton romantico"
+    },
+    {
+      "genreId": "global-club/singeli",
+      "genreName": "Singeli",
+      "path": "Electronic Music/global-club/global-club-singeli",
+      "sourceEnglishName": "Singeli",
+      "normalizedKey": "singeli"
+    },
+    {
+      "genreId": "house",
+      "genreName": "House",
+      "path": "Electronic Music/house",
+      "sourceEnglishName": "House",
+      "normalizedKey": "house"
+    },
+    {
+      "genreId": "house/brazilian-bass",
+      "genreName": "Brazilian Bass",
+      "path": "Electronic Music/house/house-brazilian-bass",
+      "sourceEnglishName": "Brazilian Bass",
+      "normalizedKey": "brazilian bass"
+    },
+    {
+      "genreId": "house/brazilian-bass/slap-house",
+      "genreName": "Slap House",
+      "path": "Electronic Music/house/house-brazilian-bass/house-brazilian-bass-slap-house",
+      "sourceEnglishName": "Slap House",
+      "normalizedKey": "slap house"
+    },
+    {
+      "genreId": "house/chicago-house",
+      "genreName": "Chicago House",
+      "path": "Electronic Music/house/house-chicago-house",
+      "sourceEnglishName": "Chicago House",
+      "normalizedKey": "chicago house"
+    },
+    {
+      "genreId": "house/chicago-house/acid-house",
+      "genreName": "Acid House",
+      "path": "Electronic Music/house/house-chicago-house/house-chicago-house-acid-house",
+      "sourceEnglishName": "Acid House",
+      "normalizedKey": "acid house"
+    },
+    {
+      "genreId": "house/chicago-house/classic-chicago-house",
+      "genreName": "Classic Chicago House",
+      "path": "Electronic Music/house/house-chicago-house/house-chicago-house-classic-chicago-house",
+      "sourceEnglishName": "Classic Chicago House",
+      "normalizedKey": "classic chicago house"
+    },
+    {
+      "genreId": "house/chicago-house/ghetto-house",
+      "genreName": "Ghetto House",
+      "path": "Electronic Music/house/house-chicago-house/house-chicago-house-ghetto-house",
+      "sourceEnglishName": "Ghetto House",
+      "normalizedKey": "ghetto house"
+    },
+    {
+      "genreId": "house/chicago-house/jackin-house",
+      "genreName": "Jackin' House",
+      "path": "Electronic Music/house/house-chicago-house/house-chicago-house-jackin-house",
+      "sourceEnglishName": "Jackin House",
+      "normalizedKey": "jackin house"
+    },
+    {
+      "genreId": "house/chicago-house/piano-house",
+      "genreName": "Piano House",
+      "path": "Electronic Music/house/house-chicago-house/house-chicago-house-piano-house",
+      "sourceEnglishName": "Piano House",
+      "normalizedKey": "piano house"
+    },
+    {
+      "genreId": "house/deep-house",
+      "genreName": "Deep House",
+      "path": "Electronic Music/house/house-deep-house",
+      "sourceEnglishName": "Deep House",
+      "normalizedKey": "deep house"
+    },
+    {
+      "genreId": "house/deep-house/atmospheric-house",
+      "genreName": "Atmospheric House",
+      "path": "Electronic Music/house/house-deep-house/house-deep-house-atmospheric-house",
+      "sourceEnglishName": "Atmospheric House",
+      "normalizedKey": "atmospheric house"
+    },
+    {
+      "genreId": "house/deep-house/chill-house",
+      "genreName": "Chill House",
+      "path": "Electronic Music/house/house-deep-house/house-deep-house-chill-house",
+      "sourceEnglishName": "Chill House",
+      "normalizedKey": "chill house"
+    },
+    {
+      "genreId": "house/deep-house/dub-house",
+      "genreName": "Dub House",
+      "path": "Electronic Music/house/house-deep-house/house-deep-house-dub-house",
+      "sourceEnglishName": "Dub House",
+      "normalizedKey": "dub house"
+    },
+    {
+      "genreId": "house/deep-house/soulful-house",
+      "genreName": "Soulful House",
+      "path": "Electronic Music/house/house-deep-house/house-deep-house-soulful-house",
+      "sourceEnglishName": "Soulful House",
+      "normalizedKey": "soulful house"
+    },
+    {
+      "genreId": "house/deep-house/tropical-house",
+      "genreName": "Tropical House",
+      "path": "Electronic Music/house/house-deep-house/house-deep-house-tropical-house",
+      "sourceEnglishName": "Tropical House",
+      "normalizedKey": "tropical house"
+    },
+    {
+      "genreId": "house/electro-house",
+      "genreName": "Electro House",
+      "path": "Electronic Music/house/house-electro-house",
+      "sourceEnglishName": "Electro House",
+      "normalizedKey": "electro house"
+    },
+    {
+      "genreId": "house/electro-house/big-room-house",
+      "genreName": "Big Room House",
+      "path": "Electronic Music/house/house-electro-house/house-electro-house-big-room-house",
+      "sourceEnglishName": "Big Room House",
+      "normalizedKey": "big room house"
+    },
+    {
+      "genreId": "house/electro-house/complextro",
+      "genreName": "Complextro",
+      "path": "Electronic Music/house/house-electro-house/house-electro-house-complextro",
+      "sourceEnglishName": "Complextro",
+      "normalizedKey": "complextro"
+    },
+    {
+      "genreId": "house/french-house",
+      "genreName": "French House",
+      "path": "Electronic Music/house/house-french-house",
+      "sourceEnglishName": "French House",
+      "normalizedKey": "french house"
+    },
+    {
+      "genreId": "house/french-house/filter-house",
+      "genreName": "Filter House",
+      "path": "Electronic Music/house/house-french-house/house-french-house-filter-house",
+      "sourceEnglishName": "Filter House",
+      "normalizedKey": "filter house"
+    },
+    {
+      "genreId": "house/garage-house",
+      "genreName": "Garage House",
+      "path": "Electronic Music/house/house-garage-house",
+      "sourceEnglishName": "Garage House",
+      "normalizedKey": "garage house"
+    },
+    {
+      "genreId": "house/garage-house/2-step-garage",
+      "genreName": "2-step Garage",
+      "path": "Electronic Music/house/house-garage-house/house-garage-house-2-step-garage",
+      "sourceEnglishName": "2-step Garage",
+      "normalizedKey": "2 step garage"
+    },
+    {
+      "genreId": "house/garage-house/bassline",
+      "genreName": "Bassline",
+      "path": "Electronic Music/house/house-garage-house/house-garage-house-bassline",
+      "sourceEnglishName": "Bassline",
+      "normalizedKey": "bassline"
+    },
+    {
+      "genreId": "house/garage-house/dubstep-garage",
+      "genreName": "Dubstep Garage",
+      "path": "Electronic Music/house/house-garage-house/house-garage-house-dubstep-garage",
+      "sourceEnglishName": "Dubstep Garage",
+      "normalizedKey": "dubstep garage"
+    },
+    {
+      "genreId": "house/garage-house/future-garage",
+      "genreName": "Future Garage",
+      "path": "Electronic Music/house/house-garage-house/house-garage-house-future-garage",
+      "sourceEnglishName": "Future Garage",
+      "normalizedKey": "future garage"
+    },
+    {
+      "genreId": "house/garage-house/grime",
+      "genreName": "Grime",
+      "path": "Electronic Music/house/house-garage-house/house-garage-house-grime",
+      "sourceEnglishName": "Grime",
+      "normalizedKey": "grime"
+    },
+    {
+      "genreId": "house/garage-house/speed-garage",
+      "genreName": "Speed Garage",
+      "path": "Electronic Music/house/house-garage-house/house-garage-house-speed-garage",
+      "sourceEnglishName": "Speed Garage",
+      "normalizedKey": "speed garage"
+    },
+    {
+      "genreId": "house/garage-house/uk-garage",
+      "genreName": "UK Garage",
+      "path": "Electronic Music/house/house-garage-house/house-garage-house-uk-garage",
+      "sourceEnglishName": "UK Garage",
+      "normalizedKey": "uk garage"
+    },
+    {
+      "genreId": "house/hard-house",
+      "genreName": "Hard House",
+      "path": "Electronic Music/house/house-hard-house",
+      "sourceEnglishName": "Hard House",
+      "normalizedKey": "hard house"
+    },
+    {
+      "genreId": "house/hip-house",
+      "genreName": "Hip House",
+      "path": "Electronic Music/house/house-hip-house",
+      "sourceEnglishName": "Hip House",
+      "normalizedKey": "hip house"
+    },
+    {
+      "genreId": "house/kwaito",
+      "genreName": "Kwaito",
+      "path": "Electronic Music/house/house-kwaito",
+      "sourceEnglishName": "Kwaito",
+      "normalizedKey": "kwaito"
+    },
+    {
+      "genreId": "house/kwaito/afro-house",
+      "genreName": "Afro House",
+      "path": "Electronic Music/house/house-kwaito/house-kwaito-afro-house",
+      "sourceEnglishName": "Afro House",
+      "normalizedKey": "afro house"
+    },
+    {
+      "genreId": "house/kwaito/amapiano",
+      "genreName": "Amapiano",
+      "path": "Electronic Music/house/house-kwaito/house-kwaito-amapiano",
+      "sourceEnglishName": "Amapiano",
+      "normalizedKey": "amapiano"
+    },
+    {
+      "genreId": "house/lo-fi-house",
+      "genreName": "Lo-fi House",
+      "path": "Electronic Music/house/house-lo-fi-house",
+      "sourceEnglishName": "Lo-fi House",
+      "normalizedKey": "lo fi house"
+    },
+    {
+      "genreId": "house/lo-fi-house/outsider-house",
+      "genreName": "Outsider House",
+      "path": "Electronic Music/house/house-lo-fi-house/house-lo-fi-house-outsider-house",
+      "sourceEnglishName": "Outsider House",
+      "normalizedKey": "outsider house"
+    },
+    {
+      "genreId": "house/progressive-house",
+      "genreName": "Progressive House",
+      "path": "Electronic Music/house/house-progressive-house",
+      "sourceEnglishName": "Progressive House",
+      "normalizedKey": "progressive house"
+    },
+    {
+      "genreId": "house/tech-house",
+      "genreName": "Tech House",
+      "path": "Electronic Music/house/house-tech-house",
+      "sourceEnglishName": "Tech House",
+      "normalizedKey": "tech house"
+    },
+    {
+      "genreId": "house/tech-house/funky-tech-house",
+      "genreName": "Funky Tech House",
+      "path": "Electronic Music/house/house-tech-house/house-tech-house-funky-tech-house",
+      "sourceEnglishName": "Funky Tech House",
+      "normalizedKey": "funky tech house"
+    },
+    {
+      "genreId": "house/tech-house/minimal-tech-house",
+      "genreName": "Minimal Tech House",
+      "path": "Electronic Music/house/house-tech-house/house-tech-house-minimal-tech-house",
+      "sourceEnglishName": "Minimal Tech House",
+      "normalizedKey": "minimal tech house"
+    },
+    {
+      "genreId": "house/tech-house/progressive-tech-house",
+      "genreName": "Progressive Tech House",
+      "path": "Electronic Music/house/house-tech-house/house-tech-house-progressive-tech-house",
+      "sourceEnglishName": "Progressive Tech House",
+      "normalizedKey": "progressive tech house"
+    },
+    {
+      "genreId": "house/tech-house/tech-funk",
+      "genreName": "Tech Funk",
+      "path": "Electronic Music/house/house-tech-house/house-tech-house-tech-funk",
+      "sourceEnglishName": "Tech Funk",
+      "normalizedKey": "tech funk"
+    },
+    {
+      "genreId": "house/tech-house/tribal-tech-house",
+      "genreName": "Tribal Tech House",
+      "path": "Electronic Music/house/house-tech-house/house-tech-house-tribal-tech-house",
+      "sourceEnglishName": "Tribal Tech House",
+      "normalizedKey": "tribal tech house"
+    },
+    {
+      "genreId": "industrial-and-post-industrial",
+      "genreName": "Industrial and Post-Industrial",
+      "path": "Electronic Music/industrial-and-post-industrial",
+      "sourceEnglishName": "Industrial and Post-Industrial",
+      "normalizedKey": "industrial and post industrial"
+    },
+    {
+      "genreId": "industrial-and-post-industrial/ebm",
+      "genreName": "EBM",
+      "path": "Electronic Music/industrial-and-post-industrial/industrial-and-post-industrial-ebm",
+      "sourceEnglishName": "EBM",
+      "normalizedKey": "ebm"
+    },
+    {
+      "genreId": "industrial-and-post-industrial/ebm/aggrotech",
+      "genreName": "Aggrotech",
+      "path": "Electronic Music/industrial-and-post-industrial/industrial-and-post-industrial-ebm/industrial-and-post-industrial-ebm-aggrotech",
+      "sourceEnglishName": "Aggrotech",
+      "normalizedKey": "aggrotech"
+    },
+    {
+      "genreId": "industrial-and-post-industrial/ebm/futurepop",
+      "genreName": "Futurepop",
+      "path": "Electronic Music/industrial-and-post-industrial/industrial-and-post-industrial-ebm/industrial-and-post-industrial-ebm-futurepop",
+      "sourceEnglishName": "Futurepop",
+      "normalizedKey": "futurepop"
+    },
+    {
+      "genreId": "industrial-and-post-industrial/new-beat",
+      "genreName": "New Beat",
+      "path": "Electronic Music/industrial-and-post-industrial/industrial-and-post-industrial-new-beat",
+      "sourceEnglishName": "New Beat",
+      "normalizedKey": "new beat"
+    },
+    {
+      "genreId": "industrial-and-post-industrial/new-beat/hard-beat",
+      "genreName": "Hard Beat",
+      "path": "Electronic Music/industrial-and-post-industrial/industrial-and-post-industrial-new-beat/industrial-and-post-industrial-new-beat-hard-beat",
+      "sourceEnglishName": "Hard Beat",
+      "normalizedKey": "hard beat"
+    },
+    {
+      "genreId": "industrial-and-post-industrial/post-industrial",
+      "genreName": "Post-Industrial",
+      "path": "Electronic Music/industrial-and-post-industrial/industrial-and-post-industrial-post-industrial",
+      "sourceEnglishName": "Post-Industrial",
+      "normalizedKey": "post industrial"
+    },
+    {
+      "genreId": "industrial-and-post-industrial/post-industrial/witch-house",
+      "genreName": "Witch House",
+      "path": "Electronic Music/industrial-and-post-industrial/industrial-and-post-industrial-post-industrial/industrial-and-post-industrial-post-industrial-witch-house",
+      "sourceEnglishName": "Witch House",
+      "normalizedKey": "witch house"
+    },
+    {
+      "genreId": "pop-and-rock-fusion",
+      "genreName": "Pop and Rock Fusion",
+      "path": "Electronic Music/pop-and-rock-fusion",
+      "sourceEnglishName": "Pop and Rock Fusion",
+      "normalizedKey": "pop and rock fusion"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/dance-pop",
+      "genreName": "Dance-pop",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-dance-pop",
+      "sourceEnglishName": "Dance-pop",
+      "normalizedKey": "dance pop"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/dance-pop/bubblegum-pop",
+      "genreName": "Bubblegum Pop",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-dance-pop/pop-and-rock-fusion-dance-pop-bubblegum-pop",
+      "sourceEnglishName": "Bubblegum Pop",
+      "normalizedKey": "bubblegum pop"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/dance-pop/eurodance",
+      "genreName": "Eurodance",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-dance-pop/pop-and-rock-fusion-dance-pop-eurodance",
+      "sourceEnglishName": "Eurodance",
+      "normalizedKey": "eurodance"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/electronic-rock",
+      "genreName": "Electronic Rock",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-electronic-rock",
+      "sourceEnglishName": "Electronic Rock",
+      "normalizedKey": "electronic rock"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/electronic-rock/dance-punk",
+      "genreName": "Dance-punk",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-electronic-rock/pop-and-rock-fusion-electronic-rock-dance-punk",
+      "sourceEnglishName": "Dance-punk",
+      "normalizedKey": "dance punk"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/electronic-rock/indie-electronic",
+      "genreName": "Indie Electronic",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-electronic-rock/pop-and-rock-fusion-electronic-rock-indie-electronic",
+      "sourceEnglishName": "Indie Electronic",
+      "normalizedKey": "indie electronic"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/electronic-rock/krautrock",
+      "genreName": "Krautrock",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-electronic-rock/pop-and-rock-fusion-electronic-rock-krautrock",
+      "sourceEnglishName": "Krautrock",
+      "normalizedKey": "krautrock"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/electronic-rock/post-rock",
+      "genreName": "Post-Rock",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-electronic-rock/pop-and-rock-fusion-electronic-rock-post-rock",
+      "sourceEnglishName": "Post-Rock",
+      "normalizedKey": "post rock"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/hyperpop",
+      "genreName": "Hyperpop",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-hyperpop",
+      "sourceEnglishName": "Hyperpop",
+      "normalizedKey": "hyperpop"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/hyperpop/angelcore",
+      "genreName": "Angelcore",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-hyperpop/pop-and-rock-fusion-hyperpop-angelcore",
+      "sourceEnglishName": "Angelcore",
+      "normalizedKey": "angelcore"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/new-wave",
+      "genreName": "New Wave",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-new-wave",
+      "sourceEnglishName": "New Wave",
+      "normalizedKey": "new wave"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/new-wave/coldwave",
+      "genreName": "Coldwave",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-new-wave/pop-and-rock-fusion-new-wave-coldwave",
+      "sourceEnglishName": "Coldwave",
+      "normalizedKey": "coldwave"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/new-wave/darkwave",
+      "genreName": "Darkwave",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-new-wave/pop-and-rock-fusion-new-wave-darkwave",
+      "sourceEnglishName": "Darkwave",
+      "normalizedKey": "darkwave"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/new-wave/minimal-wave",
+      "genreName": "Minimal Wave",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-new-wave/pop-and-rock-fusion-new-wave-minimal-wave",
+      "sourceEnglishName": "Minimal Wave",
+      "normalizedKey": "minimal wave"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/synth-pop",
+      "genreName": "Synth-pop",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-synth-pop",
+      "sourceEnglishName": "Synth-pop",
+      "normalizedKey": "synth pop"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/synth-pop/electropop",
+      "genreName": "Electropop",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-synth-pop/pop-and-rock-fusion-synth-pop-electropop",
+      "sourceEnglishName": "Electropop",
+      "normalizedKey": "electropop"
+    },
+    {
+      "genreId": "pop-and-rock-fusion/synth-pop/futurepop",
+      "genreName": "Futurepop",
+      "path": "Electronic Music/pop-and-rock-fusion/pop-and-rock-fusion-synth-pop/pop-and-rock-fusion-synth-pop-futurepop",
+      "sourceEnglishName": "Futurepop",
+      "normalizedKey": "futurepop"
+    },
+    {
+      "genreId": "techno",
+      "genreName": "Techno",
+      "path": "Electronic Music/techno",
+      "sourceEnglishName": "Techno",
+      "normalizedKey": "techno"
+    },
+    {
+      "genreId": "techno/melodic-techno",
+      "genreName": "Melodic Techno",
+      "path": "Electronic Music/techno/melodic-techno",
+      "sourceEnglishName": "Melodic Techno",
+      "normalizedKey": "melodic techno"
+    },
+    {
+      "genreId": "techno/acid-techno",
+      "genreName": "Acid Techno",
+      "path": "Electronic Music/techno/techno-acid-techno",
+      "sourceEnglishName": "Acid Techno",
+      "normalizedKey": "acid techno"
+    },
+    {
+      "genreId": "techno/acid-techno/acid-breaks",
+      "genreName": "Acid Breaks",
+      "path": "Electronic Music/techno/techno-acid-techno/techno-acid-techno-acid-breaks",
+      "sourceEnglishName": "Acid Breaks",
+      "normalizedKey": "acid breaks"
+    },
+    {
+      "genreId": "techno/acid-techno/acid-house",
+      "genreName": "Acid House",
+      "path": "Electronic Music/techno/techno-acid-techno/techno-acid-techno-acid-house",
+      "sourceEnglishName": "Acid House",
+      "normalizedKey": "acid house"
+    },
+    {
+      "genreId": "techno/ambient-techno",
+      "genreName": "Ambient Techno",
+      "path": "Electronic Music/techno/techno-ambient-techno",
+      "sourceEnglishName": "Ambient Techno",
+      "normalizedKey": "ambient techno"
+    },
+    {
+      "genreId": "techno/detroit-techno",
+      "genreName": "Detroit Techno",
+      "path": "Electronic Music/techno/techno-detroit-techno",
+      "sourceEnglishName": "Detroit Techno",
+      "normalizedKey": "detroit techno"
+    },
+    {
+      "genreId": "techno/detroit-techno/classic-detroit-techno",
+      "genreName": "Classic Detroit Techno",
+      "path": "Electronic Music/techno/techno-detroit-techno/techno-detroit-techno-classic-detroit-techno",
+      "sourceEnglishName": "Classic Detroit Techno",
+      "normalizedKey": "classic detroit techno"
+    },
+    {
+      "genreId": "techno/detroit-techno/detroit-techno-20",
+      "genreName": "Detroit Techno 2.0",
+      "path": "Electronic Music/techno/techno-detroit-techno/techno-detroit-techno-detroit-techno-20",
+      "sourceEnglishName": "Detroit Techno 2.0",
+      "normalizedKey": "detroit techno 2 0"
+    },
+    {
+      "genreId": "techno/detroit-techno/ghettotech",
+      "genreName": "Ghettotech",
+      "path": "Electronic Music/techno/techno-detroit-techno/techno-detroit-techno-ghettotech",
+      "sourceEnglishName": "Ghettotech",
+      "normalizedKey": "ghettotech"
+    },
+    {
+      "genreId": "techno/detroit-techno/hard-detroit-techno",
+      "genreName": "Hard Detroit Techno",
+      "path": "Electronic Music/techno/techno-detroit-techno/techno-detroit-techno-hard-detroit-techno",
+      "sourceEnglishName": "Hard Detroit Techno",
+      "normalizedKey": "hard detroit techno"
+    },
+    {
+      "genreId": "techno/detroit-techno/techno-soul",
+      "genreName": "Techno Soul",
+      "path": "Electronic Music/techno/techno-detroit-techno/techno-detroit-techno-techno-soul",
+      "sourceEnglishName": "Techno Soul",
+      "normalizedKey": "techno soul"
+    },
+    {
+      "genreId": "techno/hard-techno",
+      "genreName": "Hard Techno",
+      "path": "Electronic Music/techno/techno-hard-techno",
+      "sourceEnglishName": "Hard Techno",
+      "normalizedKey": "hard techno"
+    },
+    {
+      "genreId": "techno/hard-techno/hardcore",
+      "genreName": "Hardcore",
+      "path": "Electronic Music/techno/techno-hard-techno/techno-hard-techno-hardcore",
+      "sourceEnglishName": "Hardcore",
+      "normalizedKey": "hardcore"
+    },
+    {
+      "genreId": "techno/hard-techno/hardcore/bakalao",
+      "genreName": "Bakalao",
+      "path": "Electronic Music/techno/techno-hard-techno/techno-hard-techno-hardcore/techno-hard-techno-hardcore-bakalao",
+      "sourceEnglishName": "Bakalao",
+      "normalizedKey": "bakalao"
+    },
+    {
+      "genreId": "techno/hard-techno/hardcore/frenchcore",
+      "genreName": "Frenchcore",
+      "path": "Electronic Music/techno/techno-hard-techno/techno-hard-techno-hardcore/techno-hard-techno-hardcore-frenchcore",
+      "sourceEnglishName": "Frenchcore",
+      "normalizedKey": "frenchcore"
+    },
+    {
+      "genreId": "techno/hard-techno/hardcore/gabber",
+      "genreName": "Gabber",
+      "path": "Electronic Music/techno/techno-hard-techno/techno-hard-techno-hardcore/techno-hard-techno-hardcore-gabber",
+      "sourceEnglishName": "Gabber",
+      "normalizedKey": "gabber"
+    },
+    {
+      "genreId": "techno/hard-techno/hardcore/happy-hardcore",
+      "genreName": "Happy Hardcore",
+      "path": "Electronic Music/techno/techno-hard-techno/techno-hard-techno-hardcore/techno-hard-techno-hardcore-happy-hardcore",
+      "sourceEnglishName": "Happy Hardcore",
+      "normalizedKey": "happy hardcore"
+    },
+    {
+      "genreId": "techno/hard-techno/hardcore/hardstyle",
+      "genreName": "Hardstyle",
+      "path": "Electronic Music/techno/techno-hard-techno/techno-hard-techno-hardcore/techno-hard-techno-hardcore-hardstyle",
+      "sourceEnglishName": "Hardstyle",
+      "normalizedKey": "hardstyle"
+    },
+    {
+      "genreId": "techno/hard-techno/hardcore/industrial-hardcore",
+      "genreName": "Industrial Hardcore",
+      "path": "Electronic Music/techno/techno-hard-techno/techno-hard-techno-hardcore/techno-hard-techno-hardcore-industrial-hardcore",
+      "sourceEnglishName": "Industrial Hardcore",
+      "normalizedKey": "industrial hardcore"
+    },
+    {
+      "genreId": "techno/hard-techno/hardcore/makina",
+      "genreName": "Makina",
+      "path": "Electronic Music/techno/techno-hard-techno/techno-hard-techno-hardcore/techno-hard-techno-hardcore-makina",
+      "sourceEnglishName": "Makina",
+      "normalizedKey": "makina"
+    },
+    {
+      "genreId": "techno/hard-techno/hardcore/speedcore",
+      "genreName": "Speedcore",
+      "path": "Electronic Music/techno/techno-hard-techno/techno-hard-techno-hardcore/techno-hard-techno-hardcore-speedcore",
+      "sourceEnglishName": "Speedcore",
+      "normalizedKey": "speedcore"
+    },
+    {
+      "genreId": "techno/hard-techno/hardcore/terrorcore",
+      "genreName": "Terrorcore",
+      "path": "Electronic Music/techno/techno-hard-techno/techno-hard-techno-hardcore/techno-hard-techno-hardcore-terrorcore",
+      "sourceEnglishName": "Terrorcore",
+      "normalizedKey": "terrorcore"
+    },
+    {
+      "genreId": "techno/hard-techno/industrial-techno",
+      "genreName": "Industrial Techno",
+      "path": "Electronic Music/techno/techno-hard-techno/techno-hard-techno-industrial-techno",
+      "sourceEnglishName": "Industrial Techno",
+      "normalizedKey": "industrial techno"
+    },
+    {
+      "genreId": "techno/hard-techno/schranz",
+      "genreName": "Schranz",
+      "path": "Electronic Music/techno/techno-hard-techno/techno-hard-techno-schranz",
+      "sourceEnglishName": "Schranz",
+      "normalizedKey": "schranz"
+    },
+    {
+      "genreId": "techno/minimal-techno",
+      "genreName": "Minimal Techno",
+      "path": "Electronic Music/techno/techno-minimal-techno",
+      "sourceEnglishName": "Minimal Techno",
+      "normalizedKey": "minimal techno"
+    },
+    {
+      "genreId": "techno/minimal-techno/click-techno",
+      "genreName": "Click Techno",
+      "path": "Electronic Music/techno/techno-minimal-techno/techno-minimal-techno-click-techno",
+      "sourceEnglishName": "Click Techno",
+      "normalizedKey": "click techno"
+    },
+    {
+      "genreId": "techno/minimal-techno/deep-techno",
+      "genreName": "Deep Techno",
+      "path": "Electronic Music/techno/techno-minimal-techno/techno-minimal-techno-deep-techno",
+      "sourceEnglishName": "Deep Techno",
+      "normalizedKey": "deep techno"
+    },
+    {
+      "genreId": "techno/minimal-techno/dub-techno",
+      "genreName": "Dub Techno",
+      "path": "Electronic Music/techno/techno-minimal-techno/techno-minimal-techno-dub-techno",
+      "sourceEnglishName": "Dub Techno",
+      "normalizedKey": "dub techno"
+    },
+    {
+      "genreId": "techno/minimal-techno/microhouse",
+      "genreName": "Microhouse",
+      "path": "Electronic Music/techno/techno-minimal-techno/techno-minimal-techno-microhouse",
+      "sourceEnglishName": "Microhouse",
+      "normalizedKey": "microhouse"
+    },
+    {
+      "genreId": "techno/peak-time-driving-techno",
+      "genreName": "Peak Time / Driving Techno",
+      "path": "Electronic Music/techno/techno-peak-time-driving-techno",
+      "sourceEnglishName": "Peak Time / Driving Techno",
+      "normalizedKey": "peak time driving techno"
+    },
+    {
+      "genreId": "techno/peak-time-driving-techno/hardgroove",
+      "genreName": "Hardgroove",
+      "path": "Electronic Music/techno/techno-peak-time-driving-techno/techno-peak-time-driving-techno-hardgroove",
+      "sourceEnglishName": "Hardgroove",
+      "normalizedKey": "hardgroove"
+    },
+    {
+      "genreId": "techno/schaffel-techno",
+      "genreName": "Schaffel Techno",
+      "path": "Electronic Music/techno/techno-schaffel-techno",
+      "sourceEnglishName": "Schaffel Techno",
+      "normalizedKey": "schaffel techno"
+    },
+    {
+      "genreId": "trance",
+      "genreName": "Trance",
+      "path": "Electronic Music/trance",
+      "sourceEnglishName": "Trance",
+      "normalizedKey": "trance"
+    },
+    {
+      "genreId": "trance/acid-trance",
+      "genreName": "Acid Trance",
+      "path": "Electronic Music/trance/trance-acid-trance",
+      "sourceEnglishName": "Acid Trance",
+      "normalizedKey": "acid trance"
+    },
+    {
+      "genreId": "trance/goa-trance",
+      "genreName": "Goa Trance",
+      "path": "Electronic Music/trance/trance-goa-trance",
+      "sourceEnglishName": "Goa Trance",
+      "normalizedKey": "goa trance"
+    },
+    {
+      "genreId": "trance/goa-trance/psytrance",
+      "genreName": "Psytrance",
+      "path": "Electronic Music/trance/trance-goa-trance/trance-goa-trance-psytrance",
+      "sourceEnglishName": "Psytrance",
+      "normalizedKey": "psytrance"
+    },
+    {
+      "genreId": "trance/goa-trance/psytrance/dark-psytrance",
+      "genreName": "Dark Psytrance",
+      "path": "Electronic Music/trance/trance-goa-trance/trance-goa-trance-psytrance/trance-goa-trance-psytrance-dark-psytrance",
+      "sourceEnglishName": "Dark Psytrance",
+      "normalizedKey": "dark psytrance"
+    },
+    {
+      "genreId": "trance/goa-trance/psytrance/forest-psytrance",
+      "genreName": "Forest Psytrance",
+      "path": "Electronic Music/trance/trance-goa-trance/trance-goa-trance-psytrance/trance-goa-trance-psytrance-forest-psytrance",
+      "sourceEnglishName": "Forest Psytrance",
+      "normalizedKey": "forest psytrance"
+    },
+    {
+      "genreId": "trance/goa-trance/psytrance/full-on-psytrance",
+      "genreName": "Full-on Psytrance",
+      "path": "Electronic Music/trance/trance-goa-trance/trance-goa-trance-psytrance/trance-goa-trance-psytrance-full-on-psytrance",
+      "sourceEnglishName": "Full-on Psytrance",
+      "normalizedKey": "full on psytrance"
+    },
+    {
+      "genreId": "trance/goa-trance/psytrance/psychedelic-goa",
+      "genreName": "Psychedelic Goa",
+      "path": "Electronic Music/trance/trance-goa-trance/trance-goa-trance-psytrance/trance-goa-trance-psytrance-psychedelic-goa",
+      "sourceEnglishName": "Psychedelic Goa",
+      "normalizedKey": "psychedelic goa"
+    },
+    {
+      "genreId": "trance/goa-trance/psytrance/suomisaundi",
+      "genreName": "Suomisaundi",
+      "path": "Electronic Music/trance/trance-goa-trance/trance-goa-trance-psytrance/trance-goa-trance-psytrance-suomisaundi",
+      "sourceEnglishName": "Suomisaundi",
+      "normalizedKey": "suomisaundi"
+    },
+    {
+      "genreId": "trance/goa-trance/psytrance/twilight-psytrance",
+      "genreName": "Twilight Psytrance",
+      "path": "Electronic Music/trance/trance-goa-trance/trance-goa-trance-psytrance/trance-goa-trance-psytrance-twilight-psytrance",
+      "sourceEnglishName": "Twilight Psytrance",
+      "normalizedKey": "twilight psytrance"
+    },
+    {
+      "genreId": "trance/hard-trance",
+      "genreName": "Hard Trance",
+      "path": "Electronic Music/trance/trance-hard-trance",
+      "sourceEnglishName": "Hard Trance",
+      "normalizedKey": "hard trance"
+    },
+    {
+      "genreId": "trance/hard-trance/hard-dance-trance",
+      "genreName": "Hard Dance Trance",
+      "path": "Electronic Music/trance/trance-hard-trance/trance-hard-trance-hard-dance-trance",
+      "sourceEnglishName": "Hard Dance Trance",
+      "normalizedKey": "hard dance trance"
+    },
+    {
+      "genreId": "trance/hard-trance/hard-progressive-trance",
+      "genreName": "Hard Progressive Trance",
+      "path": "Electronic Music/trance/trance-hard-trance/trance-hard-trance-hard-progressive-trance",
+      "sourceEnglishName": "Hard Progressive Trance",
+      "normalizedKey": "hard progressive trance"
+    },
+    {
+      "genreId": "trance/hard-trance/hard-uplifting-trance",
+      "genreName": "Hard Uplifting Trance",
+      "path": "Electronic Music/trance/trance-hard-trance/trance-hard-trance-hard-uplifting-trance",
+      "sourceEnglishName": "Hard Uplifting Trance",
+      "normalizedKey": "hard uplifting trance"
+    },
+    {
+      "genreId": "trance/progressive-trance",
+      "genreName": "Progressive Trance",
+      "path": "Electronic Music/trance/trance-progressive-trance",
+      "sourceEnglishName": "Progressive Trance",
+      "normalizedKey": "progressive trance"
+    },
+    {
+      "genreId": "trance/progressive-trance/dark-progressive-trance",
+      "genreName": "Dark Progressive Trance",
+      "path": "Electronic Music/trance/trance-progressive-trance/trance-progressive-trance-dark-progressive-trance",
+      "sourceEnglishName": "Dark Progressive Trance",
+      "normalizedKey": "dark progressive trance"
+    },
+    {
+      "genreId": "trance/progressive-trance/melodic-progressive-trance",
+      "genreName": "Melodic Progressive Trance",
+      "path": "Electronic Music/trance/trance-progressive-trance/trance-progressive-trance-melodic-progressive-trance",
+      "sourceEnglishName": "Melodic Progressive Trance",
+      "normalizedKey": "melodic progressive trance"
+    },
+    {
+      "genreId": "trance/progressive-trance/progressive-psytrance",
+      "genreName": "Progressive Psytrance",
+      "path": "Electronic Music/trance/trance-progressive-trance/trance-progressive-trance-progressive-psytrance",
+      "sourceEnglishName": "Progressive Psytrance",
+      "normalizedKey": "progressive psytrance"
+    },
+    {
+      "genreId": "trance/uplifting-trance",
+      "genreName": "Uplifting Trance",
+      "path": "Electronic Music/trance/trance-uplifting-trance",
+      "sourceEnglishName": "Uplifting Trance",
+      "normalizedKey": "uplifting trance"
+    },
+    {
+      "genreId": "trance/uplifting-trance/anthem-trance",
+      "genreName": "Anthem Trance",
+      "path": "Electronic Music/trance/trance-uplifting-trance/trance-uplifting-trance-anthem-trance",
+      "sourceEnglishName": "Anthem Trance",
+      "normalizedKey": "anthem trance"
+    },
+    {
+      "genreId": "trance/uplifting-trance/orchestral-trance",
+      "genreName": "Orchestral Trance",
+      "path": "Electronic Music/trance/trance-uplifting-trance/trance-uplifting-trance-orchestral-trance",
+      "sourceEnglishName": "Orchestral Trance",
+      "normalizedKey": "orchestral trance"
+    },
+    {
+      "genreId": "trance/uplifting-trance/vocal-trance",
+      "genreName": "Vocal Trance",
+      "path": "Electronic Music/trance/trance-uplifting-trance/trance-uplifting-trance-vocal-trance",
+      "sourceEnglishName": "Vocal Trance",
+      "normalizedKey": "vocal trance"
+    }
+  ]
+}

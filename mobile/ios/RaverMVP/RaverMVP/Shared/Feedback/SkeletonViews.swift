@@ -341,6 +341,132 @@ struct DJDetailSkeletonView: View {
     }
 }
 
+struct GenreDetailSkeletonView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack(alignment: .bottomLeading) {
+                    SkeletonBlock(height: 272, cornerRadius: 0)
+
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            Color.black.opacity(0.18),
+                            RaverTheme.background.opacity(0.96)
+                        ],
+                        startPoint: .init(x: 0.5, y: 0.58),
+                        endPoint: .bottom
+                    )
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        SkeletonBlock(width: 196, height: 36, cornerRadius: 12)
+                        SkeletonBlock(width: 124, height: 17, cornerRadius: 8)
+
+                        HStack(spacing: 8) {
+                            SkeletonBlock(width: 94, height: 28, cornerRadius: 14)
+                            SkeletonBlock(width: 72, height: 28, cornerRadius: 14)
+                            SkeletonBlock(width: 66, height: 28, cornerRadius: 14)
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 18)
+                }
+
+                VStack(alignment: .leading, spacing: 0) {
+                    SkeletonBlock(width: 188, height: 12, cornerRadius: 6)
+                        .padding(.horizontal, 18)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        SkeletonBlock(height: 14, cornerRadius: 7)
+                        SkeletonBlock(height: 14, cornerRadius: 7)
+                        SkeletonBlock(width: 230, height: 14, cornerRadius: 7)
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 4)
+                    .padding(.bottom, 10)
+
+                    VStack(alignment: .leading, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            SkeletonBlock(width: 90, height: 16, cornerRadius: 8)
+
+                            LazyVGrid(
+                                columns: [
+                                    GridItem(.flexible()),
+                                    GridItem(.flexible()),
+                                    GridItem(.flexible()),
+                                    GridItem(.flexible())
+                                ],
+                                spacing: 12
+                            ) {
+                                ForEach(0..<8, id: \.self) { _ in
+                                    VStack(spacing: 6) {
+                                        SkeletonBlock(width: 56, height: 56, cornerRadius: 28)
+                                        SkeletonBlock(width: 52, height: 12, cornerRadius: 6)
+                                        SkeletonBlock(width: 44, height: 12, cornerRadius: 6)
+                                    }
+                                    .frame(maxWidth: .infinity, minHeight: 92, alignment: .top)
+                                }
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 14) {
+                            SkeletonBlock(width: 90, height: 16, cornerRadius: 8)
+
+                            VStack(spacing: 0) {
+                                ForEach(0..<3, id: \.self) { index in
+                                    HStack(spacing: 12) {
+                                        SkeletonBlock(width: 20, height: 14, cornerRadius: 7)
+
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            SkeletonBlock(width: index == 0 ? 148 : 176, height: 14, cornerRadius: 7)
+                                            SkeletonBlock(width: index == 2 ? 92 : 116, height: 12, cornerRadius: 6)
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                                        HStack(spacing: 8) {
+                                            SkeletonBlock(width: 20, height: 20, cornerRadius: 10)
+                                            if index != 2 {
+                                                SkeletonBlock(width: 20, height: 20, cornerRadius: 10)
+                                            }
+                                        }
+                                        .padding(.trailing, 12)
+                                    }
+                                    .padding(.vertical, 10)
+
+                                    if index < 2 {
+                                        Divider().opacity(0.12)
+                                    }
+                                }
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 14) {
+                            SkeletonBlock(width: 90, height: 16, cornerRadius: 8)
+
+                            VStack(spacing: 10) {
+                                SkeletonBlock(height: 44, cornerRadius: 12)
+                                SkeletonBlock(height: 44, cornerRadius: 12)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .padding(.bottom, 32)
+                }
+            }
+        }
+        .ignoresSafeArea(edges: .top)
+        .background(RaverTheme.background)
+        .raverImmersiveFloatingNavigationChrome {
+            dismiss()
+        }
+    }
+}
+
 struct SetDetailSkeletonView: View {
     var body: some View {
         EventDetailSkeletonView()

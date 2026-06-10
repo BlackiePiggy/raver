@@ -31,29 +31,10 @@ struct LearnGenreDetailView: View {
                         .padding(.bottom, 4)
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    if !exampleText.isEmpty {
-                        sectionCard(
-                            icon: "record.circle",
-                            iconColor: .orange,
-                            title: LT("风格特征", "Characteristics", "特徴")
-                        ) {
-                            soundCueExampleView
-                        }
-                    }
-
-                    if !soundCueTracks.isEmpty {
-                        sectionCard(
-                            icon: "music.note",
-                            iconColor: .green,
-                            title: LT("经典曲目", "Classic Tracks", "クラシック曲")
-                        ) {
-                            trackListView
-                        }
-                    }
-
+                VStack(alignment: .leading, spacing: 10) {
                     if !artistBindings.isEmpty {
                         sectionCard(
+                            chromeless: true,
                             icon: "person.2.fill",
                             iconColor: .yellow,
                             title: LT("代表艺人", "Key Artists", "代表アーティスト")
@@ -62,22 +43,20 @@ struct LearnGenreDetailView: View {
                         }
                     }
 
-                    if hasMetadata {
+                    if !soundCueTracks.isEmpty {
                         sectionCard(
-                            icon: "info.circle.fill",
-                            iconColor: RaverTheme.accent,
-                            title: LT("基础信息", "Key Facts", "基本情報")
+                            chromeless: true,
+                            icon: "music.note",
+                            iconColor: .green,
+                            title: LT("经典曲目", "Classic Tracks", "クラシック曲")
                         ) {
-                            VStack(spacing: 10) {
-                                LearnMetadataInfoRow(title: LT("起源地", "Origin", "発祥地"), value: genre.origin)
-                                LearnMetadataInfoRow(title: LT("年代", "Era", "年代"), value: genre.era)
-                                LearnMetadataInfoRow(title: "BPM", value: genre.bpm)
-                            }
+                            trackListView
                         }
                     }
 
                     if hasExternalLinks {
                         sectionCard(
+                            chromeless: true,
                             icon: "link",
                             iconColor: .blue,
                             title: LT("延伸阅读", "Links", "関連リンク")
@@ -102,7 +81,7 @@ struct LearnGenreDetailView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.top, 10)
                 .padding(.bottom, 32)
             }
         }
@@ -113,65 +92,59 @@ struct LearnGenreDetailView: View {
         }
     }
 
-    private var heroSection: some View {
-        ZStack(alignment: .topLeading) {
-            HStack(spacing: 0) {
-                Color.clear
-                    .frame(maxWidth: .infinity)
+    // MARK: - Hero Section
 
-                Group {
-                    if let resolved = AppConfig.resolvedURLString(genre.backgroundImageURL) {
-                        ImageLoaderView(urlString: resolved, resizingMode: .fill, showsIndicator: false)
-                    } else {
-                        fallbackHeroBackground
-                    }
-                }
+    private var heroSection: some View {
+        ZStack(alignment: .bottomLeading) {
+            // 背景底色（确保左侧无图片区域是纯背景色）
+            RaverTheme.background
                 .frame(maxWidth: .infinity)
                 .frame(height: heroHeight)
-                .clipped()
-                .overlay(
-                    LinearGradient(
-                        stops: [
-                            .init(color: themeColor.opacity(0.00), location: 0.10),
-                            .init(color: themeColor.opacity(0.24), location: 0.56),
-                            .init(color: themeColor.opacity(0.78), location: 1.00)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .mask(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .black, location: 0.35),
-                            .init(color: .black, location: 1)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
+
+            // 图片层：铺满整个 hero 区域
+            Group {
+                if let resolved = AppConfig.resolvedURLString(genre.backgroundImageURL) {
+                    ImageLoaderView(urlString: resolved, resizingMode: .fill, showsIndicator: false)
+                } else {
+                    fallbackHeroBackground
+                }
             }
+            .frame(maxWidth: .infinity)
             .frame(height: heroHeight)
-            .overlay(
-                LinearGradient(
-                    stops: [
-                        .init(color: RaverTheme.background, location: 0.38),
-                        .init(color: RaverTheme.background.opacity(0.6), location: 0.58),
-                        .init(color: .clear, location: 0.78)
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
+            .clipped()
+            // 核心：用径向渐变 mask 实现右上角扩散光晕效果
+            .mask(
+                GeometryReader { geo in
+                    RadialGradient(
+                        colors: [.black, .clear],
+                        center: .init(x: 0.80, y: 0.05),
+                        startRadius: geo.size.width * 0.05,
+                        endRadius: geo.size.width * 0.55
+                    )
+                    // 横向拉伸让光晕更像椭圆，向左延伸更远
+                    .scaleEffect(x: 1.0, y: 1.6, anchor: .topTrailing)
+                }
             )
+            // 右边缘主题色晕染（氛围光）
+            .overlay(
+                RadialGradient(
+                    colors: [themeColor.opacity(0.28), .clear],
+                    center: .init(x: 1.0, y: 0.0),
+                    startRadius: 0,
+                    endRadius: 160
+                )
+                .blendMode(.screen)
+            )
+            // 底部渐变融入背景色
             .overlay(
                 LinearGradient(
                     colors: [.clear, RaverTheme.background],
-                    startPoint: .init(x: 0.5, y: 0.65),
+                    startPoint: .init(x: 0.5, y: 0.58),
                     endPoint: .bottom
                 )
             )
 
+            // 文字层
             VStack(alignment: .leading, spacing: 6) {
                 Text(genre.name)
                     .font(.system(size: 36, weight: .bold))
@@ -201,38 +174,40 @@ struct LearnGenreDetailView: View {
                 }
             }
             .padding(.horizontal, 18)
-            .padding(.top, 104)
-            .padding(.bottom, 20)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 18)
         }
         .frame(height: heroHeight)
     }
 
     private var heroHeight: CGFloat { 272 }
 
+    // MARK: - Meta Tag
+    // 对齐图1：深色半透明底 + 清晰边框描边
+
     private func metaTag(label: String?, value: String) -> some View {
         HStack(spacing: 0) {
             if let label {
                 Text(label)
-                    .foregroundStyle(Color.white.opacity(0.5))
+                    .foregroundStyle(Color.white.opacity(0.45))
             }
             Text(value)
-                .foregroundStyle(Color.white.opacity(0.85))
+                .foregroundStyle(Color.white.opacity(0.90))
         }
         .font(.caption.weight(.semibold))
         .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(Color.white.opacity(0.1))
+        .padding(.vertical, 5)
+        .background(Color.black.opacity(0.38))
         .overlay(
-            Capsule().stroke(Color.white.opacity(0.18), lineWidth: 0.5)
+            Capsule().stroke(Color.white.opacity(0.22), lineWidth: 0.5)
         )
         .clipShape(Capsule())
     }
 
+    // MARK: - Fallback Hero Background
+
     private var fallbackHeroBackground: some View {
         ZStack {
             Color.black.opacity(0.95)
-
             LinearGradient(
                 colors: [
                     themeColor.opacity(0.92),
@@ -242,7 +217,6 @@ struct LearnGenreDetailView: View {
                 startPoint: .topTrailing,
                 endPoint: .bottomLeading
             )
-
             RadialGradient(
                 colors: [themeColor.opacity(0.35), .clear],
                 center: .topTrailing,
@@ -252,7 +226,11 @@ struct LearnGenreDetailView: View {
         }
     }
 
+    // MARK: - Section Card
+    // 对齐图1：卡片背景更深，边框更明显，间距稍紧凑
+
     private func sectionCard<Content: View>(
+        chromeless: Bool = false,
         icon: String,
         iconColor: Color,
         title: String,
@@ -260,12 +238,14 @@ struct LearnGenreDetailView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(iconColor)
-                    .frame(width: 28, height: 28)
-                    .background(iconColor.opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                if !chromeless {
+                    Image(systemName: icon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(iconColor)
+                        .frame(width: 28, height: 28)
+                        .background(iconColor.opacity(0.18))
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
 
                 Text(title)
                     .font(.system(size: 15, weight: .bold))
@@ -273,17 +253,31 @@ struct LearnGenreDetailView: View {
             }
             content()
         }
-        .padding(16)
+        .padding(chromeless ? 0 : 16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(RaverTheme.card)
+            Group {
+                if chromeless {
+                    Color.clear
+                } else {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color(white: 0.11))
+                }
+            }
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(RaverTheme.cardBorder, lineWidth: 0.5)
+            Group {
+                if chromeless {
+                    Color.clear
+                } else {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
+                }
+            }
         )
     }
+
+    // MARK: - Computed Properties
 
     private var chineseName: String? {
         let value = genre.nameI18n?.zh.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -308,18 +302,8 @@ struct LearnGenreDetailView: View {
             .replacingOccurrences(of: "/", with: " › ") ?? ""
     }
 
-    private var exampleText: String {
-        localizedGenreText(genre.exampleI18n, fallback: genre.example)
-    }
-
     private var soundCueTracks: [LearnGenreSoundCueTrack] {
         genre.soundCueTracks ?? []
-    }
-
-    private var hasMetadata: Bool {
-        [genre.origin, genre.era, genre.bpm].contains { value in
-            !(value?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-        }
     }
 
     private var hasExternalLinks: Bool {
@@ -328,31 +312,23 @@ struct LearnGenreDetailView: View {
 
     private var artistBindings: [LearnGenreKeyArtistBinding] {
         let bindings = genre.keyArtistBindings ?? []
-        if !bindings.isEmpty {
-            return bindings
-        }
+        if !bindings.isEmpty { return bindings }
         return (genre.keyArtists ?? []).map { LearnGenreKeyArtistBinding(name: $0, djId: nil, dj: nil) }
     }
 
     private func localizedGenreText(_ value: WebBiText?, fallback: String?) -> String {
         let localized = value?.text(for: AppLanguagePreference.current.effectiveLanguage)
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !localized.isEmpty {
-            return localized
-        }
+        if !localized.isEmpty { return localized }
         return fallback?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     private func resolvedExternalURL(_ raw: String?) -> URL? {
-        guard let raw, let resolved = AppConfig.resolvedURLString(raw), !resolved.isEmpty else {
-            return nil
-        }
+        guard let raw, let resolved = AppConfig.resolvedURLString(raw), !resolved.isEmpty else { return nil }
         return URL(string: resolved)
     }
 
-    private var soundCueExampleView: some View {
-        LearnExpandableText(text: exampleText, collapsedLineLimit: 4)
-    }
+    // MARK: - Track List
 
     private var trackListView: some View {
         VStack(spacing: 0) {
@@ -376,19 +352,13 @@ struct LearnGenreDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     trackExternalLinks(track)
+                        .padding(.trailing, 12)
                 }
                 .padding(.vertical, 10)
 
                 if index < soundCueTracks.count - 1 {
                     Divider().opacity(0.12)
                 }
-            }
-
-            if !exampleText.isEmpty && soundCueTracks.isEmpty {
-                Text(exampleText)
-                    .font(.subheadline)
-                    .foregroundStyle(RaverTheme.secondaryText)
-                    .lineSpacing(3)
             }
         }
     }
@@ -402,7 +372,25 @@ struct LearnGenreDetailView: View {
                         .resizable()
                         .frame(width: 20, height: 20)
                 }
-            } else if let url = resolvedExternalURL(track.soundcloudUrl) {
+            }
+            if let url = resolvedExternalURL(track.appleMusicUrl) {
+                Link(destination: url) {
+                    Image(systemName: "apple.logo")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 20, height: 20)
+                        .background(Color(red: 0.93, green: 0.22, blue: 0.35), in: Circle())
+                }
+            }
+            if let url = resolvedExternalURL(track.neteaseUrl) {
+                Link(destination: url) {
+                    Image("NeteaseIcon")
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 20, height: 20)
+                }
+            }
+            if let url = resolvedExternalURL(track.soundcloudUrl) {
                 Link(destination: url) {
                     Image(systemName: "waveform")
                         .font(.system(size: 11, weight: .bold))
@@ -414,8 +402,15 @@ struct LearnGenreDetailView: View {
         }
     }
 
+    // MARK: - Artist Grid
+
     private var artistGridView: some View {
-        let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+        let columns = [
+            GridItem(.flexible()),
+            GridItem(.flexible()),
+            GridItem(.flexible()),
+            GridItem(.flexible())
+        ]
         return LazyVGrid(columns: columns, spacing: 12) {
             ForEach(artistBindings) { artist in
                 Group {
