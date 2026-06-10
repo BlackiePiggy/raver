@@ -3446,19 +3446,21 @@ actor MockWebFeatureService: WebFeatureService {
             LearnGenreNode(
                 id: "house",
                 name: "House",
+                themeColor: "#2EB7F5",
                 description: "四拍地板鼓点为核心。",
                 children: [
-                    LearnGenreNode(id: "deep-house", name: "Deep House", description: "柔和、氛围化。", children: nil),
-                    LearnGenreNode(id: "tech-house", name: "Tech House", description: "节奏简洁、律动强。", children: nil)
+                    LearnGenreNode(id: "deep-house", name: "Deep House", themeColor: "#2EB7F5", description: "柔和、氛围化。", children: nil),
+                    LearnGenreNode(id: "tech-house", name: "Tech House", themeColor: "#2EB7F5", description: "节奏简洁、律动强。", children: nil)
                 ]
             ),
             LearnGenreNode(
                 id: "techno",
                 name: "Techno",
+                themeColor: "#F04CB9",
                 description: "工业感与重复推进。",
                 children: [
-                    LearnGenreNode(id: "melodic-techno", name: "Melodic Techno", description: "旋律驱动。", children: nil),
-                    LearnGenreNode(id: "hard-techno", name: "Hard Techno", description: "更快更硬。", children: nil)
+                    LearnGenreNode(id: "melodic-techno", name: "Melodic Techno", themeColor: "#F04CB9", description: "旋律驱动。", children: nil),
+                    LearnGenreNode(id: "hard-techno", name: "Hard Techno", themeColor: "#F04CB9", description: "更快更硬。", children: nil)
                 ]
             )
         ]
@@ -3470,18 +3472,20 @@ actor MockWebFeatureService: WebFeatureService {
                 id: "house",
                 name: "House",
                 path: "electronic-music/house",
+                themeColor: "#2EB7F5",
                 children: [
-                    LearnGenreTreeSummaryNode(id: "deep-house", name: "Deep House", path: "electronic-music/house/deep-house", children: nil),
-                    LearnGenreTreeSummaryNode(id: "tech-house", name: "Tech House", path: "electronic-music/house/tech-house", children: nil)
+                    LearnGenreTreeSummaryNode(id: "deep-house", name: "Deep House", path: "electronic-music/house/deep-house", themeColor: "#2EB7F5", children: nil),
+                    LearnGenreTreeSummaryNode(id: "tech-house", name: "Tech House", path: "electronic-music/house/tech-house", themeColor: "#2EB7F5", children: nil)
                 ]
             ),
             LearnGenreTreeSummaryNode(
                 id: "techno",
                 name: "Techno",
                 path: "electronic-music/techno",
+                themeColor: "#F04CB9",
                 children: [
-                    LearnGenreTreeSummaryNode(id: "melodic-techno", name: "Melodic Techno", path: "electronic-music/techno/melodic-techno", children: nil),
-                    LearnGenreTreeSummaryNode(id: "hard-techno", name: "Hard Techno", path: "electronic-music/techno/hard-techno", children: nil)
+                    LearnGenreTreeSummaryNode(id: "melodic-techno", name: "Melodic Techno", path: "electronic-music/techno/melodic-techno", themeColor: "#F04CB9", children: nil),
+                    LearnGenreTreeSummaryNode(id: "hard-techno", name: "Hard Techno", path: "electronic-music/techno/hard-techno", themeColor: "#F04CB9", children: nil)
                 ]
             )
         ]
@@ -3494,6 +3498,7 @@ actor MockWebFeatureService: WebFeatureService {
                 name: "House",
                 nameI18n: WebBiText(en: "House", zh: "浩室"),
                 path: "electronic-music/house",
+                themeColor: "#2EB7F5",
                 description: "四拍地板鼓点为核心。",
                 example: "律动温暖、适合长时间舞池推进。",
                 soundCueTracks: [
@@ -3521,6 +3526,7 @@ actor MockWebFeatureService: WebFeatureService {
                 name: "Deep House",
                 nameI18n: WebBiText(en: "Deep House", zh: "深度浩室"),
                 path: "electronic-music/house/deep-house",
+                themeColor: "#2EB7F5",
                 description: "柔和、氛围化。",
                 example: "更细腻、更流动的律动层次。",
                 origin: "Chicago, United States",
@@ -3537,6 +3543,7 @@ actor MockWebFeatureService: WebFeatureService {
                 name: "Tech House",
                 nameI18n: WebBiText(en: "Tech House", zh: "科技浩室"),
                 path: "electronic-music/house/tech-house",
+                themeColor: "#2EB7F5",
                 description: "节奏简洁、律动强。",
                 example: "鼓点清晰，偏功能性舞池驱动。",
                 origin: "United Kingdom",
@@ -3552,6 +3559,7 @@ actor MockWebFeatureService: WebFeatureService {
                 name: "Techno",
                 nameI18n: WebBiText(en: "Techno", zh: "科技舞曲"),
                 path: "electronic-music/techno",
+                themeColor: "#F04CB9",
                 description: "工业感与重复推进。",
                 example: "机械、循环、推进感强。",
                 soundCueTracks: [
@@ -3579,6 +3587,7 @@ actor MockWebFeatureService: WebFeatureService {
                 name: "Melodic Techno",
                 nameI18n: WebBiText(en: "Melodic Techno", zh: "旋律科技舞曲"),
                 path: "electronic-music/techno/melodic-techno",
+                themeColor: "#F04CB9",
                 description: "旋律驱动。",
                 example: "情绪线更明显，常见铺陈与堆叠。",
                 origin: "Europe",
@@ -3594,6 +3603,7 @@ actor MockWebFeatureService: WebFeatureService {
                 name: "Hard Techno",
                 nameI18n: WebBiText(en: "Hard Techno", zh: "硬科技舞曲"),
                 path: "electronic-music/techno/hard-techno",
+                themeColor: "#F04CB9",
                 description: "更快更硬。",
                 example: "速度更快，冲击更强。",
                 origin: "Europe",

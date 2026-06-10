@@ -16634,6 +16634,7 @@ type LearnGenreTreeNode = {
   name: string;
   nameI18n: TriTextPayload | null;
   path: string;
+  themeColor: string;
   description: string;
   descriptionI18n: TriTextPayload | null;
   example: string;
@@ -16654,6 +16655,7 @@ type LearnGenreTreeSummaryNode = {
   id: string;
   name: string;
   path: string;
+  themeColor: string;
   children: LearnGenreTreeSummaryNode[];
 };
 
@@ -16662,6 +16664,7 @@ type LearnGenreDetailNode = {
   name: string;
   nameI18n: TriTextPayload | null;
   path: string;
+  themeColor: string;
   description: string;
   descriptionI18n: TriTextPayload | null;
   example: string;
@@ -16696,6 +16699,12 @@ type LearnGenreSoundCueTrack = {
   neteaseUrl: string | null;
   soundcloudUrl: string | null;
   beatportUrl: string | null;
+};
+
+type GenreThemeRow = {
+  id: string;
+  parentId: string | null;
+  color: string | null;
 };
 
 const normalizeGenreKeyArtistBindings = (
@@ -16738,6 +16747,57 @@ const normalizeGenreEditableText = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const text = value.trim();
   return text ? text : null;
+};
+
+const ELECTRONIC_MUSIC_GENRE_ID = 'electronic-music';
+
+const normalizeGenreThemeColor = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().replace(/^#/, '');
+  if (!trimmed) return null;
+  const expanded = trimmed.length === 3
+    ? trimmed.split('').map((char) => `${char}${char}`).join('')
+    : trimmed;
+  if (!/^[0-9a-fA-F]{6}$/.test(expanded)) {
+    return null;
+  }
+  return `#${expanded.toUpperCase()}`;
+};
+
+const buildGenreBranchThemeColorLookup = <TRow extends GenreThemeRow>(rows: TRow[]): Map<string, string | null> => {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const memo = new Map<string, string | null>();
+
+  const resolve = (row: TRow): string | null => {
+    const cached = memo.get(row.id);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    let current: TRow | undefined = row;
+    while (current?.parentId) {
+      const parent = byId.get(current.parentId);
+      if (!parent) break;
+      if (parent.id === ELECTRONIC_MUSIC_GENRE_ID) {
+        const color = normalizeGenreThemeColor(current.color);
+        memo.set(row.id, color);
+        return color;
+      }
+      current = parent;
+    }
+
+    const fallback = row.parentId == null && row.id !== ELECTRONIC_MUSIC_GENRE_ID
+      ? normalizeGenreThemeColor(row.color)
+      : null;
+    memo.set(row.id, fallback);
+    return fallback;
+  };
+
+  for (const row of rows) {
+    resolve(row);
+  }
+
+  return memo;
 };
 
 const normalizeGenreSoundCueTracks = (value: unknown): LearnGenreSoundCueTrack[] => {
@@ -17256,6 +17316,7 @@ router.get('/learn/genres', async (_req: Request, res: Response): Promise<void> 
         name: true,
         nameI18n: true,
         path: true,
+        color: true,
         description: true,
         descriptionI18n: true,
         example: true,
@@ -17294,12 +17355,14 @@ router.get('/learn/genres', async (_req: Request, res: Response): Promise<void> 
       siblings.push(row);
       byParentId.set(row.parentId, siblings);
     }
+    const themeColorById = buildGenreBranchThemeColorLookup(rows);
 
     const buildNode = (row: (typeof rows)[number]): LearnGenreTreeNode => ({
       id: row.id,
       name: row.name,
       nameI18n: resolveTriTextWithFallback(row.nameI18n ?? null, row.name ?? ''),
       path: row.path,
+      themeColor: themeColorById.get(row.id) ?? '',
       description: row.description ?? '',
       descriptionI18n: resolveTriTextWithFallback(row.descriptionI18n ?? null, row.description ?? ''),
       example: row.example ?? '',
@@ -17335,6 +17398,7 @@ router.get('/learn/genres/tree-summary', async (_req: Request, res: Response): P
         nameI18n: true,
         path: true,
         parentId: true,
+        color: true,
       },
     });
 
@@ -17344,11 +17408,13 @@ router.get('/learn/genres/tree-summary', async (_req: Request, res: Response): P
       siblings.push(row);
       byParentId.set(row.parentId, siblings);
     }
+    const themeColorById = buildGenreBranchThemeColorLookup(rows);
 
     const buildNode = (row: (typeof rows)[number]): LearnGenreTreeSummaryNode => ({
       id: row.id,
       name: row.name,
       path: row.path,
+      themeColor: themeColorById.get(row.id) ?? '',
       children: (byParentId.get(row.id) ?? []).map(buildNode),
     });
 
@@ -17376,6 +17442,8 @@ router.get('/learn/genres/:id', async (req: Request, res: Response): Promise<voi
         name: true,
         nameI18n: true,
         path: true,
+        color: true,
+        parentId: true,
         description: true,
         descriptionI18n: true,
         example: true,
@@ -17409,12 +17477,21 @@ router.get('/learn/genres/:id', async (req: Request, res: Response): Promise<voi
         })
       : [];
     const djById = new Map(boundDJs.map((dj) => [dj.id, dj]));
+    const themeRows = await prisma.genre.findMany({
+      select: {
+        id: true,
+        parentId: true,
+        color: true,
+      },
+    });
+    const themeColorById = buildGenreBranchThemeColorLookup(themeRows);
 
     const detail: LearnGenreDetailNode = {
       id: row.id,
       name: row.name,
       nameI18n: resolveTriTextWithFallback(row.nameI18n ?? null, row.name ?? ''),
       path: row.path,
+      themeColor: themeColorById.get(row.id) ?? '',
       description: row.description ?? '',
       descriptionI18n: resolveTriTextWithFallback(row.descriptionI18n ?? null, row.description ?? ''),
       example: row.example ?? '',
@@ -17446,6 +17523,7 @@ router.get('/learn/genres/admin/tree', optionalAuth, async (_req: Request, res: 
         name: true,
         nameI18n: true,
         path: true,
+        color: true,
         description: true,
         descriptionI18n: true,
         example: true,
@@ -17473,12 +17551,15 @@ router.get('/learn/genres/admin/tree', optionalAuth, async (_req: Request, res: 
       ? await prisma.dJ.findMany({ where: { id: { in: boundDjIds } }, select: selectGenreDJLite })
       : [];
     const djById = new Map(boundDJs.map((dj) => [dj.id, dj]));
+    const themeColorById = buildGenreBranchThemeColorLookup(rows);
     ok(res, {
       items: rows.map((row) => ({
         id: row.id,
         name: row.name,
         nameI18n: resolveTriTextWithFallback(row.nameI18n ?? null, row.name ?? ''),
         path: row.path,
+        color: normalizeGenreThemeColor(row.color) ?? '',
+        effectiveThemeColor: themeColorById.get(row.id) ?? '',
         description: row.description ?? '',
         descriptionI18n: resolveTriTextWithFallback(row.descriptionI18n ?? null, row.description ?? ''),
         example: row.example ?? '',
@@ -17581,6 +17662,7 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
         origin: true,
         era: true,
         bpm: true,
+        color: true,
         backgroundImageUrl: true,
         spotifyTrackUrl: true,
         wikipediaUrl: true,
@@ -17600,6 +17682,7 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
     const hasOriginField = Object.prototype.hasOwnProperty.call(body, 'origin');
     const hasEraField = Object.prototype.hasOwnProperty.call(body, 'era');
     const hasBpmField = Object.prototype.hasOwnProperty.call(body, 'bpm');
+    const hasColorField = Object.prototype.hasOwnProperty.call(body, 'color');
     const hasBackgroundImageField = Object.prototype.hasOwnProperty.call(body, 'backgroundImageURL');
     const hasSpotifyTrackField = Object.prototype.hasOwnProperty.call(body, 'spotifyTrackURL');
     const hasWikipediaField = Object.prototype.hasOwnProperty.call(body, 'wikipediaURL');
@@ -17628,6 +17711,9 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
     const nextBpm = hasBpmField
       ? normalizeGenreEditableText(body.bpm)
       : (genre.bpm ?? null);
+    const nextColor = hasColorField
+      ? normalizeGenreThemeColor(body.color)
+      : (normalizeGenreThemeColor(genre.color) ?? null);
     const nextBackgroundImageUrl = hasBackgroundImageField
       ? normalizeGenreEditableText(body.backgroundImageURL)
       : (genre.backgroundImageUrl ?? null);
@@ -17678,6 +17764,9 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
     if (hasBpmField) {
       updateData.bpm = nextBpm;
     }
+    if (hasColorField) {
+      updateData.color = nextColor;
+    }
     if (hasBackgroundImageField) {
       updateData.backgroundImageUrl = nextBackgroundImageUrl;
     }
@@ -17697,6 +17786,7 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
         origin: true,
         era: true,
         bpm: true,
+        color: true,
         backgroundImageUrl: true,
         spotifyTrackUrl: true,
         wikipediaUrl: true,
@@ -17715,6 +17805,7 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
       origin: updated.origin ?? '',
       era: updated.era ?? '',
       bpm: updated.bpm ?? '',
+      color: normalizeGenreThemeColor(updated.color) ?? '',
       backgroundImageURL: updated.backgroundImageUrl ?? '',
       spotifyTrackURL: updated.spotifyTrackUrl ?? '',
       wikipediaURL: updated.wikipediaUrl ?? '',
@@ -17832,6 +17923,7 @@ router.post('/learn/genres/admin/nodes', optionalAuth, async (req: Request, res:
         origin: true,
         era: true,
         bpm: true,
+        color: true,
         backgroundImageUrl: true,
         spotifyTrackUrl: true,
         wikipediaUrl: true,
@@ -17856,6 +17948,8 @@ router.post('/learn/genres/admin/nodes', optionalAuth, async (req: Request, res:
       origin: created.origin ?? '',
       era: created.era ?? '',
       bpm: created.bpm ?? '',
+      color: normalizeGenreThemeColor(created.color) ?? '',
+      effectiveThemeColor: normalizeGenreThemeColor(created.color) ?? '',
       backgroundImageURL: created.backgroundImageUrl ?? '',
       spotifyTrackURL: created.spotifyTrackUrl ?? '',
       wikipediaURL: created.wikipediaUrl ?? '',
@@ -17899,6 +17993,7 @@ router.patch('/learn/genres/admin/nodes/:id', optionalAuth, async (req: Request,
         origin: true,
         era: true,
         bpm: true,
+        color: true,
         backgroundImageUrl: true,
         spotifyTrackUrl: true,
         wikipediaUrl: true,
@@ -17965,13 +18060,14 @@ router.patch('/learn/genres/admin/nodes/:id', optionalAuth, async (req: Request,
           descriptionI18n: true,
           example: true,
           exampleI18n: true,
-          soundCueTracks: true,
-          origin: true,
-          era: true,
-          bpm: true,
-          backgroundImageUrl: true,
-          spotifyTrackUrl: true,
-          wikipediaUrl: true,
+        soundCueTracks: true,
+        origin: true,
+        era: true,
+        bpm: true,
+        color: true,
+        backgroundImageUrl: true,
+        spotifyTrackUrl: true,
+        wikipediaUrl: true,
           keyArtists: true,
           keyArtistBindings: true,
           parentId: true,
@@ -17998,6 +18094,8 @@ router.patch('/learn/genres/admin/nodes/:id', optionalAuth, async (req: Request,
       origin: updated.origin ?? '',
       era: updated.era ?? '',
       bpm: updated.bpm ?? '',
+      color: normalizeGenreThemeColor(updated.color) ?? '',
+      effectiveThemeColor: normalizeGenreThemeColor(updated.color) ?? '',
       backgroundImageURL: updated.backgroundImageUrl ?? '',
       spotifyTrackURL: updated.spotifyTrackUrl ?? '',
       wikipediaURL: updated.wikipediaUrl ?? '',

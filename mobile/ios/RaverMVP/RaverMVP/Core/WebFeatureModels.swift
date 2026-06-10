@@ -1964,6 +1964,7 @@ struct LearnGenreNode: Codable, Identifiable, Hashable {
     var name: String
     var nameI18n: WebBiText? = nil
     var path: String?
+    var themeColor: String? = nil
     var description: String
     var descriptionI18n: WebBiText? = nil
     var example: String?
@@ -1983,6 +1984,7 @@ struct LearnGenreTreeSummaryNode: Codable, Identifiable, Hashable {
     let id: String
     var name: String
     var path: String?
+    var themeColor: String? = nil
     var children: [LearnGenreTreeSummaryNode]?
 }
 
@@ -1991,6 +1993,7 @@ struct LearnGenreDetail: Codable, Identifiable, Hashable {
     var name: String
     var nameI18n: WebBiText? = nil
     var path: String?
+    var themeColor: String? = nil
     var description: String
     var descriptionI18n: WebBiText? = nil
     var example: String?

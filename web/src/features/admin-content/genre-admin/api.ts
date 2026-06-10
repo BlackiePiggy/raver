@@ -28,6 +28,8 @@ export type GenreAdminNode = {
   nameI18n: Record<string, string> | null;
   slug?: string;
   path: string;
+  color: string;
+  effectiveThemeColor: string;
   description: string;
   descriptionI18n: Record<string, string> | null;
   example: string;
@@ -86,6 +88,7 @@ export const genreAdminApi = {
       origin?: string | null;
       era?: string | null;
       bpm?: string | null;
+      color?: string | null;
       backgroundImageURL?: string | null;
       nameI18n?: Record<string, string> | null;
       spotifyTrackURL?: string | null;

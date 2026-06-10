@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronDown, ChevronRight, Languages, Plus, Trash2, Pencil, Search, RefreshCw, ExternalLink, Music4 } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Languages, Plus, Trash2, Pencil, Search, RefreshCw, ExternalLink, Music4 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
@@ -130,6 +130,30 @@ const makeSoundCueTrackDraft = (item?: GenreSoundCueTrack, index = 0): SoundCueT
   beatportUrl: item?.beatportUrl || '',
 });
 
+const ELECTRONIC_MUSIC_GENRE_ID = 'electronic-music';
+
+const GENRE_THEME_PRESETS = [
+  { value: '#2EB7F5', label: 'House / Garage' },
+  { value: '#F04CB9', label: 'Techno / Industrial' },
+  { value: '#75DB66', label: 'Trance / Psy' },
+  { value: '#F58A2E', label: 'DnB / Jungle' },
+  { value: '#7A6BEA', label: 'Bass / Dubstep' },
+  { value: '#14D1B3', label: 'Breaks / Electro' },
+  { value: '#E64159', label: 'Hard Dance' },
+  { value: '#B89EF5', label: 'Ambient / Downtempo' },
+  { value: '#DBC647', label: 'Disco / Funk' },
+  { value: '#4D7BEA', label: 'Progressive / Melodic' },
+] as const;
+
+const normalizeThemeColorValue = (value: string | null | undefined): string => {
+  const trimmed = String(value || '').trim().replace(/^#/, '');
+  if (!trimmed) return '';
+  const expanded = trimmed.length === 3
+    ? trimmed.split('').map((char) => `${char}${char}`).join('')
+    : trimmed;
+  return /^[0-9a-fA-F]{6}$/.test(expanded) ? `#${expanded.toUpperCase()}` : '';
+};
+
 // ─── Right-side tree node ─────────────────────────────────────────────────────
 
 function TreeNode({
@@ -185,6 +209,12 @@ function TreeNode({
         </button>
 
         {/* Label + count */}
+        {item.effectiveThemeColor ? (
+          <span
+            className="h-2.5 w-2.5 flex-shrink-0 rounded-full border border-white/80 shadow-sm"
+            style={{ backgroundColor: item.effectiveThemeColor }}
+          />
+        ) : null}
         <span className={`flex-1 min-w-0 truncate text-sm font-medium ${isSelected ? 'text-emerald-800 font-semibold' : ''}`}>
           {item.name}
         </span>
@@ -431,6 +461,7 @@ export default function AdminGenresPage() {
   const [originValue, setOriginValue] = useState('');
   const [eraValue, setEraValue] = useState('');
   const [bpmValue, setBpmValue] = useState('');
+  const [branchThemeColor, setBranchThemeColor] = useState('');
   const [backgroundImageURL, setBackgroundImageURL] = useState('');
 
   // Localized text
@@ -448,7 +479,26 @@ export default function AdminGenresPage() {
   const [soundCueTrackDrafts, setSoundCueTrackDrafts] = useState<SoundCueTrackDraft[]>([]);
 
   const flatNodes = useMemo(() => flattenTree(tree), [tree]);
+  const flatNodeById = useMemo(() => new Map(flatNodes.map((item) => [item.id, item])), [flatNodes]);
   const selectedNode = flatNodes.find((item) => item.id === selectedId) ?? null;
+  const selectedThemeSourceNode = useMemo(() => {
+    if (!selectedNode) return null;
+    let current: GenreAdminNode | undefined = selectedNode;
+    while (current?.parentId) {
+      const parent = flatNodeById.get(current.parentId);
+      if (!parent) break;
+      if (parent.id === ELECTRONIC_MUSIC_GENRE_ID) {
+        return current;
+      }
+      current = parent;
+    }
+    return null;
+  }, [flatNodeById, selectedNode]);
+  const canEditBranchThemeColor = Boolean(
+    selectedNode &&
+    selectedThemeSourceNode &&
+    selectedNode.id === selectedThemeSourceNode.id
+  );
 
   const treeSearchCandidates = useMemo<TreeSearchCandidate[]>(() => {
     const query = treeSearch.trim().toLowerCase();
@@ -510,6 +560,7 @@ export default function AdminGenresPage() {
     setOriginValue(selectedNode.origin || '');
     setEraValue(selectedNode.era || '');
     setBpmValue(selectedNode.bpm || '');
+    setBranchThemeColor(selectedNode.color || '');
     setBackgroundImageURL(selectedNode.backgroundImageURL || '');
     setDescriptionValue(normalizeLocalizedValue(selectedNode.descriptionI18n, selectedNode.description || ''));
     setExampleValue(normalizeLocalizedValue(selectedNode.exampleI18n, selectedNode.example || ''));
@@ -605,6 +656,9 @@ export default function AdminGenresPage() {
   const originDirty = selectedNode ? originValue !== (selectedNode.origin || '') : false;
   const eraDirty = selectedNode ? eraValue !== (selectedNode.era || '') : false;
   const bpmDirty = selectedNode ? bpmValue !== (selectedNode.bpm || '') : false;
+  const themeColorDirty = selectedNode
+    ? normalizeThemeColorValue(branchThemeColor) !== normalizeThemeColorValue(selectedNode.color || '')
+    : false;
   const backgroundImageDirty = selectedNode ? backgroundImageURL !== (selectedNode.backgroundImageURL || '') : false;
   const descriptionDirty = selectedNode ? !sameLocalizedValue(descriptionValue, initialDescriptionValue) : false;
   const keyArtistsDirty = selectedNode
@@ -617,6 +671,9 @@ export default function AdminGenresPage() {
   const wikipediaDirty = selectedNode ? wikipediaURL !== (selectedNode.wikipediaURL || '') : false;
   const basicInfoDirty = basicNameDirty || basicSlugDirty || nameI18nDirty || originDirty || eraDirty || bpmDirty || backgroundImageDirty;
   const externalLinksDirty = spotifyDirty || wikipediaDirty;
+  const themeColorPreview = normalizeThemeColorValue(
+    canEditBranchThemeColor ? branchThemeColor : selectedNode?.effectiveThemeColor
+  );
 
   const handleSaveContent = async () => {
     if (!selectedNode) return;
@@ -652,6 +709,7 @@ export default function AdminGenresPage() {
         origin: originValue.trim() || null,
         era: eraValue.trim() || null,
         bpm: bpmValue.trim() || null,
+        color: canEditBranchThemeColor ? normalizeThemeColorValue(branchThemeColor) || null : undefined,
         backgroundImageURL: backgroundImageURL.trim() || null,
         spotifyTrackURL: spotifyTrackURL.trim() || null,
         wikipediaURL: wikipediaURL.trim() || null,
@@ -855,6 +913,102 @@ export default function AdminGenresPage() {
               </div>
             )}
           </SectionCard>
+
+          {selectedNode && (
+            <SectionCard title={<SectionTitle title="分支主题色" dirty={themeColorDirty} />}>
+              <div className="space-y-4">
+                <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-gray-50/70 p-4 md:flex-row md:items-center">
+                  <div
+                    className={`h-20 w-20 flex-shrink-0 rounded-2xl border shadow-sm ${themeColorPreview ? 'border-white/70' : 'border-dashed border-gray-300 bg-white'}`}
+                    style={themeColorPreview ? { backgroundColor: themeColorPreview } : undefined}
+                  />
+                  <div className="space-y-1">
+                    <div className="text-sm font-semibold text-gray-900">
+                      {themeColorPreview || '未设置主题色'}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {canEditBranchThemeColor
+                        ? '这个颜色会绑定到当前顶层分类，并同步影响该分类所有子分类的旭日图颜色和详情页 hero 主题色。'
+                        : selectedThemeSourceNode
+                          ? `当前节点会继承顶层分类「${selectedThemeSourceNode.name}」的主题色。`
+                          : '只有旭日图第一层分类可以设置分支主题色，其他节点会自动继承所属顶层分类。'}
+                    </div>
+                  </div>
+                </div>
+
+                {canEditBranchThemeColor ? (
+                  <>
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-gray-500">推荐色卡</div>
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                        {GENRE_THEME_PRESETS.map((preset) => {
+                          const selected = normalizeThemeColorValue(branchThemeColor) === preset.value;
+                          return (
+                            <button
+                              key={preset.value}
+                              type="button"
+                              onClick={() => setBranchThemeColor(preset.value)}
+                              className={`group flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
+                                selected
+                                  ? 'border-gray-900 bg-gray-900 text-white'
+                                  : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                              }`}
+                              title={preset.label}
+                            >
+                              <span
+                                className="flex h-6 w-6 items-center justify-center rounded-full border border-white/80 shadow-sm"
+                                style={{ backgroundColor: preset.value }}
+                              >
+                                {selected ? <Check className="h-3.5 w-3.5 text-white" /> : null}
+                              </span>
+                              <span className="truncate text-xs font-medium">{preset.value}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-[auto_180px_auto] md:items-end">
+                      <div className="flex flex-col gap-1.5">
+                        <FieldLabel label="自定义选色" dirty={themeColorDirty} />
+                        <label className="flex h-[42px] w-[72px] cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                          <input
+                            type="color"
+                            value={themeColorPreview || GENRE_THEME_PRESETS[0].value}
+                            onChange={(event) => setBranchThemeColor(event.target.value)}
+                            className="h-full w-full cursor-pointer border-0 bg-transparent p-0"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <FieldLabel label="HEX 色值" dirty={themeColorDirty} />
+                        <input
+                          type="text"
+                          value={branchThemeColor}
+                          onChange={(event) => setBranchThemeColor(event.target.value)}
+                          placeholder="#2EB7F5"
+                          maxLength={7}
+                          className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-mono text-gray-800 outline-none transition-colors focus:border-gray-300 focus:bg-white"
+                          spellCheck={false}
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setBranchThemeColor('')}
+                        className="h-[42px] rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+                      >
+                        清除颜色
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </SectionCard>
+          )}
 
           {/* Section 2: Description */}
           {selectedNode && (

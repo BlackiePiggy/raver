@@ -119,29 +119,13 @@ struct DiscoverHomeView: View {
         case .sets:
             SetsModuleView(isActive: self.section == .sets)
         case .rankings:
-            LearnModuleView(
-                initialSection: .rankings,
-                showsSectionTabs: false,
-                isActive: self.section == .rankings
-            )
+            LearnRankingsRootView(isActive: self.section == .rankings)
         case .organizers:
-            LearnModuleView(
-                initialSection: .festivals,
-                showsSectionTabs: false,
-                isActive: self.section == .organizers
-            )
+            LearnOrganizersRootView(isActive: self.section == .organizers)
         case .labels:
-            LearnModuleView(
-                initialSection: .labels,
-                showsSectionTabs: false,
-                isActive: self.section == .labels
-            )
+            LearnLabelsRootView(isActive: self.section == .labels)
         case .genres:
-            LearnModuleView(
-                initialSection: .genres,
-                showsSectionTabs: false,
-                isActive: self.section == .genres
-            )
+            LearnGenresRootView(isActive: self.section == .genres)
         }
     }
 
