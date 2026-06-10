@@ -16,6 +16,7 @@ import {
   genreAdminApi,
   type GenreAdminNode,
   type GenreKeyArtistBinding,
+  type GenreSoundCueTrack,
 } from '@/features/admin-content/genre-admin';
 import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 
@@ -30,12 +31,28 @@ type KeyArtistDraft = {
   dj: GenreKeyArtistBinding['dj'];
 };
 
+type SoundCueTrackDraft = {
+  id: string;
+  title: string;
+  artist: string;
+  spotifyUrl: string;
+  appleMusicUrl: string;
+  neteaseUrl: string;
+  soundcloudUrl: string;
+  beatportUrl: string;
+};
+
 type CreateGenreDraft = {
   name: string;
   slug: string;
   sortOrder: string;
   parentMode: ParentMode;
   parentId: string;
+  nameI18nValue: LocalizedTextValue;
+  origin: string;
+  era: string;
+  bpm: string;
+  backgroundImageURL: string;
   spotifyTrackURL: string;
   wikipediaURL: string;
   descriptionValue: LocalizedTextValue;
@@ -80,6 +97,11 @@ const initialDraft = (): CreateGenreDraft => ({
   sortOrder: '',
   parentMode: 'root',
   parentId: '',
+  nameI18nValue: emptyLocalizedValue(),
+  origin: '',
+  era: '',
+  bpm: '',
+  backgroundImageURL: '',
   spotifyTrackURL: '',
   wikipediaURL: '',
   descriptionValue: emptyLocalizedValue(),
@@ -104,10 +126,22 @@ const makeDraftArtist = (): KeyArtistDraft => ({
   dj: null,
 });
 
+const makeSoundCueTrackDraft = (item?: GenreSoundCueTrack, index = 0): SoundCueTrackDraft => ({
+  id: `sound-cue-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+  title: item?.title || '',
+  artist: item?.artist || '',
+  spotifyUrl: item?.spotifyUrl || '',
+  appleMusicUrl: item?.appleMusicUrl || '',
+  neteaseUrl: item?.neteaseUrl || '',
+  soundcloudUrl: item?.soundcloudUrl || '',
+  beatportUrl: item?.beatportUrl || '',
+});
+
 export default function AdminGenreCreatePage() {
   const [draft, setDraft] = useState<CreateGenreDraft>(initialDraft);
   const [newParentDraft, setNewParentDraft] = useState<NewParentDraft>(initialNewParentDraft);
   const [keyArtistDrafts, setKeyArtistDrafts] = useState<KeyArtistDraft[]>([]);
+  const [soundCueTrackDrafts, setSoundCueTrackDrafts] = useState<SoundCueTrackDraft[]>([]);
   const [tree, setTree] = useState<GenreAdminNode[]>([]);
   const [loadingTree, setLoadingTree] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -150,6 +184,10 @@ export default function AdminGenreCreatePage() {
     setKeyArtistDrafts((current) => [...current, makeDraftArtist()]);
   };
 
+  const addSoundCueTrackDraft = () => {
+    setSoundCueTrackDrafts((current) => [...current, makeSoundCueTrackDraft(undefined, current.length)]);
+  };
+
   const updateKeyArtistDraft = (id: string, patch: Partial<KeyArtistDraft>) => {
     setKeyArtistDrafts((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   };
@@ -158,10 +196,19 @@ export default function AdminGenreCreatePage() {
     setKeyArtistDrafts((current) => current.filter((item) => item.id !== id));
   };
 
+  const updateSoundCueTrackDraft = (id: string, patch: Partial<SoundCueTrackDraft>) => {
+    setSoundCueTrackDrafts((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  };
+
+  const removeSoundCueTrackDraft = (id: string) => {
+    setSoundCueTrackDrafts((current) => current.filter((item) => item.id !== id));
+  };
+
   const resetForm = () => {
     setDraft(initialDraft());
     setNewParentDraft(initialNewParentDraft());
     setKeyArtistDrafts([]);
+    setSoundCueTrackDrafts([]);
     setError('');
     setCreated(null);
     setActiveLocalizedField(null);
@@ -219,10 +266,26 @@ export default function AdminGenreCreatePage() {
       });
 
       await genreAdminApi.updateContent(node.id, {
+        nameI18n: draft.nameI18nValue,
         description: draft.descriptionValue.zh.trim() || null,
         descriptionI18n: draft.descriptionValue,
         example: draft.exampleValue.zh.trim() || null,
         exampleI18n: draft.exampleValue,
+        soundCueTracks: soundCueTrackDrafts
+          .map((item) => ({
+            title: item.title.trim(),
+            artist: item.artist.trim(),
+            spotifyUrl: item.spotifyUrl.trim() || null,
+            appleMusicUrl: item.appleMusicUrl.trim() || null,
+            neteaseUrl: item.neteaseUrl.trim() || null,
+            soundcloudUrl: item.soundcloudUrl.trim() || null,
+            beatportUrl: item.beatportUrl.trim() || null,
+          }))
+          .filter((item) => item.title),
+        origin: draft.origin.trim() || null,
+        era: draft.era.trim() || null,
+        bpm: draft.bpm.trim() || null,
+        backgroundImageURL: draft.backgroundImageURL.trim() || null,
         spotifyTrackURL: draft.spotifyTrackURL.trim() || null,
         wikipediaURL: draft.wikipediaURL.trim() || null,
       });
@@ -554,6 +617,62 @@ export default function AdminGenreCreatePage() {
             </div>
 
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <AdminCountedControl count={countText(draft.nameI18nValue.zh)} maxLength={INPUT_LIMITS.genre.name}>
+                <input
+                  className="admin-studio-input"
+                  placeholder="中文名（可选）"
+                  value={draft.nameI18nValue.zh}
+                  maxLength={INPUT_LIMITS.genre.name}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      nameI18nValue: { ...current.nameI18nValue, zh: event.target.value },
+                    }))
+                  }
+                />
+              </AdminCountedControl>
+              <AdminCountedControl count={countText(draft.origin)} maxLength={INPUT_LIMITS.genre.shortText}>
+                <input
+                  className="admin-studio-input"
+                  placeholder="起源地（如 Chicago, United States）"
+                  value={draft.origin}
+                  maxLength={INPUT_LIMITS.genre.shortText}
+                  onChange={(event) => setDraft((current) => ({ ...current, origin: event.target.value }))}
+                />
+              </AdminCountedControl>
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-3">
+              <AdminCountedControl count={countText(draft.era)} maxLength={INPUT_LIMITS.genre.shortText}>
+                <input
+                  className="admin-studio-input"
+                  placeholder="年代（如 Early 1980s）"
+                  value={draft.era}
+                  maxLength={INPUT_LIMITS.genre.shortText}
+                  onChange={(event) => setDraft((current) => ({ ...current, era: event.target.value }))}
+                />
+              </AdminCountedControl>
+              <AdminCountedControl count={countText(draft.bpm)} maxLength={INPUT_LIMITS.genre.shortText}>
+                <input
+                  className="admin-studio-input"
+                  placeholder="BPM（如 118-130）"
+                  value={draft.bpm}
+                  maxLength={INPUT_LIMITS.genre.shortText}
+                  onChange={(event) => setDraft((current) => ({ ...current, bpm: event.target.value }))}
+                />
+              </AdminCountedControl>
+              <AdminCountedControl count={countText(draft.backgroundImageURL)} maxLength={INPUT_LIMITS.common.url}>
+                <input
+                  className="admin-studio-input"
+                  placeholder="背景图链接（可选）"
+                  value={draft.backgroundImageURL}
+                  maxLength={INPUT_LIMITS.common.url}
+                  onChange={(event) => setDraft((current) => ({ ...current, backgroundImageURL: event.target.value }))}
+                />
+              </AdminCountedControl>
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <AdminCountedControl count={countText(draft.spotifyTrackURL)} maxLength={INPUT_LIMITS.common.url}>
                 <input
                   className="admin-studio-input"
@@ -605,6 +724,93 @@ export default function AdminGenreCreatePage() {
                 }
                 onOpenOverlay={() => setActiveLocalizedField('example')}
               />
+            </div>
+          </section>
+
+          <section className="admin-reference-card p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-[0.14em] text-black/38">声音线索</div>
+                <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">声音线索歌曲</h2>
+                <div className="mt-1 text-sm text-black/48">
+                  可添加多首代表曲目，并补充 Spotify、Apple Music、网易云、SoundCloud、Beatport 链接。
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={addSoundCueTrackDraft}
+                className="rounded-full border border-[#d7ded9] bg-white px-4 py-2 text-sm text-[#18211f]"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  添加歌曲
+                </span>
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              {soundCueTrackDrafts.map((item, index) => (
+                <div key={item.id} className="rounded-[18px] border border-[#e8eceb] bg-white p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold text-[#111827]">声音线索歌曲 #{index + 1}</div>
+                    <button
+                      type="button"
+                      className="rounded-full border border-[#ead6d6] bg-white p-2 text-[#8b3a3a]"
+                      onClick={() => removeSoundCueTrackDraft(item.id)}
+                      aria-label="删除声音线索歌曲"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                    <AdminCountedControl count={countText(item.title)} maxLength={INPUT_LIMITS.genre.soundCueTrackTitle}>
+                      <input
+                        className="admin-reference-soft-card w-full px-4 py-3 text-sm"
+                        placeholder="歌名"
+                        value={item.title}
+                        maxLength={INPUT_LIMITS.genre.soundCueTrackTitle}
+                        onChange={(event) => updateSoundCueTrackDraft(item.id, { title: event.target.value })}
+                      />
+                    </AdminCountedControl>
+                    <AdminCountedControl count={countText(item.artist)} maxLength={INPUT_LIMITS.genre.soundCueTrackArtist}>
+                      <input
+                        className="admin-reference-soft-card w-full px-4 py-3 text-sm"
+                        placeholder="艺人"
+                        value={item.artist}
+                        maxLength={INPUT_LIMITS.genre.soundCueTrackArtist}
+                        onChange={(event) => updateSoundCueTrackDraft(item.id, { artist: event.target.value })}
+                      />
+                    </AdminCountedControl>
+                  </div>
+
+                  <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                    {[
+                      ['Spotify', 'spotifyUrl', 'https://open.spotify.com/track/...'],
+                      ['Apple Music', 'appleMusicUrl', 'https://music.apple.com/...'],
+                      ['网易云音乐', 'neteaseUrl', 'https://music.163.com/...'],
+                      ['SoundCloud', 'soundcloudUrl', 'https://soundcloud.com/...'],
+                      ['Beatport', 'beatportUrl', 'https://www.beatport.com/track/...'],
+                    ].map(([label, key, placeholder]) => (
+                      <AdminCountedControl key={key} count={countText(item[key as keyof SoundCueTrackDraft] as string)} maxLength={INPUT_LIMITS.common.url}>
+                        <input
+                          className="admin-reference-soft-card w-full px-4 py-3 text-sm"
+                          placeholder={`${label} 链接`}
+                          value={item[key as keyof SoundCueTrackDraft] as string}
+                          maxLength={INPUT_LIMITS.common.url}
+                          onChange={(event) => updateSoundCueTrackDraft(item.id, { [key]: event.target.value } as Partial<SoundCueTrackDraft>)}
+                        />
+                      </AdminCountedControl>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              {!soundCueTrackDrafts.length ? (
+                <div className="rounded-[16px] border border-dashed border-[#d7ded9] px-4 py-6 text-sm text-black/48">
+                  暂无声音线索歌曲。可先创建流派，也可以现在一次性把代表歌曲和各平台链接补齐。
+                </div>
+              ) : null}
             </div>
           </section>
 

@@ -974,6 +974,7 @@ private struct LearnGenreSunburstSection: View {
     let bottomInset: CGFloat
 
     @Environment(\.appPush) private var appPush
+    @Environment(\.discoverPush) private var discoverPush
     @State private var focusedId: String?
     @State private var selectedNode: GenreSunburstNode?
     @State private var rootNode: GenreSunburstNode
@@ -1046,7 +1047,8 @@ private struct LearnGenreSunburstSection: View {
                         node: currentDisplayNode,
                         pathText: pathText(for: currentDisplayNode),
                         detail: currentGenreDetail,
-                        onArtistTap: openArtistDetail
+                        onArtistTap: openArtistDetail,
+                        onDetailTap: openGenreDetail
                     )
                 }
                 .padding(.horizontal, horizontalPadding)
@@ -1116,6 +1118,12 @@ private struct LearnGenreSunburstSection: View {
         appPush(.djDetail(djID: djID))
     }
 
+    private func openGenreDetail() {
+        let node = currentDisplayNode
+        guard node.id != rootNode.id else { return }
+        discoverPush(.genreDetail(genreID: node.id, prefetchedGenre: genreDetails[node.id]))
+    }
+
     private func hideKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
@@ -1175,14 +1183,39 @@ private struct GenreSunburstSelectionCard: View {
     let pathText: String
     let detail: LearnGenreDetail?
     let onArtistTap: (LearnGenreKeyArtistBinding) -> Void
+    let onDetailTap: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(node.name)
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(primaryText)
-                .lineLimit(2)
-                .minimumScaleFactor(0.86)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(node.name)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(primaryText)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.86)
+
+                Spacer(minLength: 8)
+
+                if !isRootNode {
+                    Button(action: onDetailTap) {
+                        HStack(spacing: 4) {
+                            Text(LT("查看详情", "Details", "詳細"))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .black))
+                        }
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(detailButtonText)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(detailButtonBackground, in: Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(detailButtonStroke, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
 
             if !pathText.isEmpty {
                 Text(pathText)
@@ -1228,6 +1261,18 @@ private struct GenreSunburstSelectionCard: View {
         colorScheme == .dark
             ? Color(red: 0.46, green: 0.88, blue: 1.0).opacity(0.92)
             : Color.black.opacity(0.82)
+    }
+
+    private var detailButtonText: Color {
+        colorScheme == .dark ? Color(red: 0.72, green: 0.94, blue: 1.0) : Color(red: 0.05, green: 0.37, blue: 0.48)
+    }
+
+    private var detailButtonBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color(red: 0.86, green: 0.97, blue: 1.0).opacity(0.88)
+    }
+
+    private var detailButtonStroke: Color {
+        colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.06)
     }
 
     private var infoItems: [GenreSunburstInfoItem] {
@@ -1517,6 +1562,311 @@ private struct GenreSunburstSearchItem: Identifiable, Sendable {
         if nameLower.hasPrefix(query) { score += 700 }
         if nameLower.contains(query) { score += 300 }
         return score
+    }
+}
+
+struct LearnGenreDetailView: View {
+    @Environment(\.openURL) private var openURL
+    let genre: LearnGenreDetail
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 18) {
+                heroSection
+
+                VStack(alignment: .leading, spacing: 16) {
+                    if !descriptionText.isEmpty {
+                        detailCard(title: LT("风格介绍", "Overview", "概要"), icon: "text.alignleft") {
+                            Text(descriptionText)
+                                .font(.subheadline)
+                                .foregroundStyle(RaverTheme.secondaryText)
+                                .lineSpacing(3)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    if hasMetadata {
+                        detailCard(title: LT("基础信息", "Key Facts", "基本情報"), icon: "info.circle.fill") {
+                            VStack(spacing: 10) {
+                                LearnLabelInfoRow(title: LT("起源地", "Origin", "発祥地"), value: genre.origin)
+                                LearnLabelInfoRow(title: LT("年代", "Era", "年代"), value: genre.era)
+                                LearnLabelInfoRow(title: "BPM", value: genre.bpm)
+                            }
+                        }
+                    }
+
+                    if !soundCueTracks.isEmpty || !exampleText.isEmpty {
+                        detailCard(title: LT("声音线索", "Sound Cue", "サウンド"), icon: "waveform") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                if !soundCueTracks.isEmpty {
+                                    ForEach(soundCueTracks) { track in
+                                        soundCueTrackRow(track)
+                                    }
+                                }
+
+                                if !exampleText.isEmpty {
+                                    Text(exampleText)
+                                        .font(.subheadline)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                        .lineSpacing(3)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                    }
+
+                    if !artistBindings.isEmpty {
+                        detailCard(title: LT("代表艺人", "Key Artists", "代表アーティスト"), icon: "person.2.fill") {
+                            WrapFlowLayout(items: artistBindings) { artist in
+                                Text(artist.name)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 7)
+                                    .background(RaverTheme.card.opacity(0.82), in: Capsule())
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(RaverTheme.cardBorder, lineWidth: 1)
+                                    )
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 28)
+            }
+        }
+        .background(RaverTheme.background.ignoresSafeArea())
+        .navigationTitle(LT("风格详情", "Genre Detail", "ジャンル詳細"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var heroSection: some View {
+        ZStack(alignment: .bottomLeading) {
+            genreBackground
+                .frame(height: 260)
+                .clipped()
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.12),
+                            Color.black.opacity(0.46),
+                            RaverTheme.background.opacity(0.98),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(genre.name)
+                    .font(.system(size: 34, weight: .black, design: .rounded))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.72)
+
+                if let chineseName {
+                    Text(chineseName)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.86))
+                }
+
+                if let path = genre.path?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
+                    Text(path.replacingOccurrences(of: "/", with: " / "))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.72))
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 22)
+        }
+    }
+
+    @ViewBuilder
+    private var genreBackground: some View {
+        if let resolved = AppConfig.resolvedURLString(genre.backgroundImageURL) {
+            ImageLoaderView(urlString: resolved, resizingMode: .fill, showsIndicator: false)
+        } else {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.10, green: 0.18, blue: 0.23),
+                    Color(red: 0.04, green: 0.08, blue: 0.11),
+                    Color(red: 0.13, green: 0.11, blue: 0.09),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .overlay(alignment: .topTrailing) {
+                Circle()
+                    .fill(Color.cyan.opacity(0.24))
+                    .frame(width: 170, height: 170)
+                    .blur(radius: 38)
+                    .offset(x: 44, y: -30)
+            }
+        }
+    }
+
+    private func detailCard<Content: View>(
+        title: String,
+        icon: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(RaverTheme.accent)
+
+                Text(title)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(RaverTheme.primaryText)
+            }
+
+            content()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RaverTheme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(RaverTheme.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private var chineseName: String? {
+        let value = genre.nameI18n?.zh.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !value.isEmpty else { return nil }
+        guard value.caseInsensitiveCompare(genre.name.trimmingCharacters(in: .whitespacesAndNewlines)) != .orderedSame else {
+            return nil
+        }
+        return value
+    }
+
+    private var descriptionText: String {
+        localizedGenreText(genre.descriptionI18n, fallback: genre.description)
+    }
+
+    private var exampleText: String {
+        localizedGenreText(genre.exampleI18n, fallback: genre.example)
+    }
+
+    private var soundCueTracks: [LearnGenreSoundCueTrack] {
+        genre.soundCueTracks ?? []
+    }
+
+    private var hasMetadata: Bool {
+        [genre.origin, genre.era, genre.bpm].contains { value in
+            !(value?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        }
+    }
+
+    private var artistBindings: [LearnGenreKeyArtistBinding] {
+        let bindings = genre.keyArtistBindings ?? []
+        if !bindings.isEmpty {
+            return bindings
+        }
+        return (genre.keyArtists ?? []).map { LearnGenreKeyArtistBinding(name: $0, djId: nil, dj: nil) }
+    }
+
+    private func localizedGenreText(_ value: WebBiText?, fallback: String?) -> String {
+        let localized = value?.text(for: AppLanguagePreference.current.effectiveLanguage)
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !localized.isEmpty {
+            return localized
+        }
+        return fallback?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    @ViewBuilder
+    private func soundCueTrackRow(_ track: LearnGenreSoundCueTrack) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(track.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(RaverTheme.primaryText)
+                if !track.artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(track.artist)
+                        .font(.caption)
+                        .foregroundStyle(RaverTheme.secondaryText)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 8) {
+                if let spotify = resolvedExternalURL(track.spotifyUrl) {
+                    Button {
+                        openURL(spotify)
+                    } label: {
+                        Image("SpotifyIcon")
+                            .resizable()
+                            .interpolation(.high)
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if let appleMusic = resolvedExternalURL(track.appleMusicUrl) {
+                    Button {
+                        openURL(appleMusic)
+                    } label: {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Color.white)
+                            .frame(width: 20, height: 20)
+                            .background(Color(red: 0.95, green: 0.20, blue: 0.43), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if let netease = resolvedExternalURL(track.neteaseUrl) {
+                    Button {
+                        openURL(netease)
+                    } label: {
+                        Image("NeteaseIcon")
+                            .resizable()
+                            .interpolation(.high)
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if let soundcloud = resolvedExternalURL(track.soundcloudUrl) {
+                    Button {
+                        openURL(soundcloud)
+                    } label: {
+                        Image(systemName: "waveform")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Color.white)
+                            .frame(width: 20, height: 20)
+                            .background(Color.orange, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if let beatport = resolvedExternalURL(track.beatportUrl) {
+                    Button {
+                        openURL(beatport)
+                    } label: {
+                        Image(systemName: "record.circle")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Color.black)
+                            .frame(width: 20, height: 20)
+                            .background(Color(red: 0.73, green: 0.97, blue: 0.27), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func resolvedExternalURL(_ raw: String?) -> URL? {
+        guard let raw, let resolved = AppConfig.resolvedURLString(raw), !resolved.isEmpty else {
+            return nil
+        }
+        return URL(string: resolved)
     }
 }
 
@@ -1836,11 +2186,11 @@ private struct GenreSunburstSegment: Identifiable, Hashable {
     }
 }
 
-private struct GenreSunburstFocus: Equatable, Sendable {
-    let angleStart: Double
-    let angleEnd: Double
-    let depthStart: Double
-    let depthEnd: Double
+private struct GenreSunburstFocus: Equatable, Sendable, VectorArithmetic {
+    var angleStart: Double
+    var angleEnd: Double
+    var depthStart: Double
+    var depthEnd: Double
 
     static let root = GenreSunburstFocus(
         angleStart: 0,
@@ -1848,50 +2198,127 @@ private struct GenreSunburstFocus: Equatable, Sendable {
         depthStart: 0,
         depthEnd: 1
     )
-}
 
-private enum GenreSunburstLayout {
-    static func partitionSegments(
-        root: GenreSunburstNode,
-        canvasSize: CGSize,
-        focus: GenreSunburstFocus
-    ) -> [GenreSunburstSegment] {
-        let maxDepth = max(1, maxDepth(from: root))
-        let chartRadius = max(10, min(canvasSize.width, canvasSize.height) * 0.485)
-        let topLevelPalette = paletteMap(root: root)
-        let baseSegments = partition(root: root, maxDepth: maxDepth, topLevelPalette: topLevelPalette)
-
-        return baseSegments.compactMap { segment in
-            project(segment, radius: chartRadius, focus: focus)
-        }
+    static var zero: GenreSunburstFocus {
+        GenreSunburstFocus(angleStart: 0, angleEnd: 0, depthStart: 0, depthEnd: 0)
     }
 
-    static func focus(for nodeId: String?, root: GenreSunburstNode) -> GenreSunburstFocus {
-        guard
-            let nodeId,
-            let segment = partition(
-                root: root,
-                maxDepth: max(1, maxDepth(from: root)),
-                topLevelPalette: paletteMap(root: root)
-            ).first(where: { $0.id == nodeId })
-        else {
-            return .root
-        }
-
-        return GenreSunburstFocus(
-            angleStart: segment.x0,
-            angleEnd: segment.x1,
-            depthStart: segment.y0,
-            depthEnd: 1
+    static func + (lhs: GenreSunburstFocus, rhs: GenreSunburstFocus) -> GenreSunburstFocus {
+        GenreSunburstFocus(
+            angleStart: lhs.angleStart + rhs.angleStart,
+            angleEnd: lhs.angleEnd + rhs.angleEnd,
+            depthStart: lhs.depthStart + rhs.depthStart,
+            depthEnd: lhs.depthEnd + rhs.depthEnd
         )
     }
 
-    private static func partition(
+    static func - (lhs: GenreSunburstFocus, rhs: GenreSunburstFocus) -> GenreSunburstFocus {
+        GenreSunburstFocus(
+            angleStart: lhs.angleStart - rhs.angleStart,
+            angleEnd: lhs.angleEnd - rhs.angleEnd,
+            depthStart: lhs.depthStart - rhs.depthStart,
+            depthEnd: lhs.depthEnd - rhs.depthEnd
+        )
+    }
+
+    mutating func scale(by rhs: Double) {
+        angleStart *= rhs
+        angleEnd *= rhs
+        depthStart *= rhs
+        depthEnd *= rhs
+    }
+
+    var magnitudeSquared: Double {
+        angleStart * angleStart +
+            angleEnd * angleEnd +
+            depthStart * depthStart +
+            depthEnd * depthEnd
+    }
+}
+
+private struct GenreSunburstLayoutCache: Equatable {
+    let rootId: String
+    let baseSegments: [GenreSunburstSegment]
+    let focusById: [String: GenreSunburstFocus]
+    let nodeById: [String: GenreSunburstNode]
+    let pathById: [String: [GenreSunburstNode]]
+
+    init(root: GenreSunburstNode) {
+        let maxDepth = max(1, GenreSunburstLayout.maxDepth(from: root))
+        let palette = GenreSunburstLayout.paletteMap(root: root)
+        var nodes: [String: GenreSunburstNode] = [root.id: root]
+        var paths: [String: [GenreSunburstNode]] = [root.id: [root]]
+        var segments: [GenreSunburstSegment] = []
+
+        GenreSunburstLayout.partition(
+            root: root,
+            maxDepth: maxDepth,
+            topLevelPalette: palette,
+            output: &segments
+        )
+        Self.collectIndexes(node: root, path: [root], nodes: &nodes, paths: &paths)
+
+        self.rootId = root.id
+        self.baseSegments = segments
+        self.nodeById = nodes
+        self.pathById = paths
+        self.focusById = Dictionary(uniqueKeysWithValues: segments.map { segment in
+            (
+                segment.id,
+                GenreSunburstFocus(
+                    angleStart: segment.x0,
+                    angleEnd: segment.x1,
+                    depthStart: segment.y0,
+                    depthEnd: 1
+                )
+            )
+        })
+    }
+
+    func focus(for nodeId: String?) -> GenreSunburstFocus {
+        guard let nodeId else { return .root }
+        return focusById[nodeId] ?? .root
+    }
+
+    func node(withId nodeId: String?) -> GenreSunburstNode? {
+        guard let nodeId else { return nil }
+        return nodeById[nodeId]
+    }
+
+    func path(to nodeId: String?) -> [GenreSunburstNode]? {
+        guard let nodeId else { return nil }
+        return pathById[nodeId]
+    }
+
+    func segments(in size: CGSize, focus: GenreSunburstFocus) -> [GenreSunburstSegment] {
+        let chartRadius = max(10, min(size.width, size.height) * 0.485)
+        return baseSegments.compactMap { segment in
+            GenreSunburstLayout.project(segment, radius: chartRadius, focus: focus)
+        }
+    }
+
+    private static func collectIndexes(
+        node: GenreSunburstNode,
+        path: [GenreSunburstNode],
+        nodes: inout [String: GenreSunburstNode],
+        paths: inout [String: [GenreSunburstNode]]
+    ) {
+        nodes[node.id] = node
+        paths[node.id] = path
+
+        for child in node.children {
+            collectIndexes(node: child, path: path + [child], nodes: &nodes, paths: &paths)
+        }
+    }
+}
+
+private enum GenreSunburstLayout {
+    static func partition(
         root: GenreSunburstNode,
         maxDepth: Int,
-        topLevelPalette: [String: Color]
-    ) -> [GenreSunburstSegment] {
-        var output: [GenreSunburstSegment] = []
+        topLevelPalette: [String: Color],
+        output: inout [GenreSunburstSegment]
+    ) {
         let totalWeight = Double(root.children.reduce(0) { $0 + $1.leafCount })
         var cursor = 0.0
 
@@ -1900,16 +2327,25 @@ private enum GenreSunburstLayout {
             appendPartition(
                 node: child,
                 parentId: root.id,
-                root: root,
                 depth: 1,
                 maxDepth: maxDepth,
                 x0: cursor,
                 x1: cursor + span,
                 topLevelPalette: topLevelPalette,
+                topLevelId: child.id,
                 output: &output
             )
             cursor += span
         }
+    }
+
+    private static func partition(
+        root: GenreSunburstNode,
+        maxDepth: Int,
+        topLevelPalette: [String: Color]
+    ) -> [GenreSunburstSegment] {
+        var output: [GenreSunburstSegment] = []
+        partition(root: root, maxDepth: maxDepth, topLevelPalette: topLevelPalette, output: &output)
 
         return output
     }
@@ -1917,17 +2353,16 @@ private enum GenreSunburstLayout {
     private static func appendPartition(
         node: GenreSunburstNode,
         parentId: String?,
-        root: GenreSunburstNode,
         depth: Int,
         maxDepth: Int,
         x0: Double,
         x1: Double,
         topLevelPalette: [String: Color],
+        topLevelId: String,
         output: inout [GenreSunburstSegment]
     ) {
         let y0 = Double(depth - 1) / Double(maxDepth)
         let y1 = Double(depth) / Double(maxDepth)
-        let topLevelId = root.pathToNode(withId: node.id)?.dropFirst().first?.id ?? node.id
 
         output.append(
             GenreSunburstSegment(
@@ -1957,19 +2392,19 @@ private enum GenreSunburstLayout {
             appendPartition(
                 node: child,
                 parentId: node.id,
-                root: root,
                 depth: depth + 1,
                 maxDepth: maxDepth,
                 x0: cursor,
                 x1: cursor + span,
                 topLevelPalette: topLevelPalette,
+                topLevelId: topLevelId,
                 output: &output
             )
             cursor += span
         }
     }
 
-    private static func project(
+    static func project(
         _ segment: GenreSunburstSegment,
         radius: CGFloat,
         focus: GenreSunburstFocus
@@ -2018,12 +2453,12 @@ private enum GenreSunburstLayout {
         )
     }
 
-    private static func maxDepth(from node: GenreSunburstNode) -> Int {
+    static func maxDepth(from node: GenreSunburstNode) -> Int {
         if node.children.isEmpty { return 0 }
         return 1 + (node.children.map(maxDepth).max() ?? 0)
     }
 
-    private static func paletteMap(root: GenreSunburstNode) -> [String: Color] {
+    static func paletteMap(root: GenreSunburstNode) -> [String: Color] {
         let colors: [Color] = [
             Color(red: 0.18, green: 0.72, blue: 0.96),
             Color(red: 0.94, green: 0.30, blue: 0.74),
@@ -2142,18 +2577,163 @@ private struct GenreSunburstStaticRecordBackground: View {
 }
 
 private struct GenreSunburstCanvasView: View {
-    @Environment(\.colorScheme) private var colorScheme
     let root: GenreSunburstNode
     @Binding var focusedId: String?
     @Binding var selectedNode: GenreSunburstNode?
 
-    @State private var currentFocus: GenreSunburstFocus = .root
-    @State private var fromFocus: GenreSunburstFocus = .root
-    @State private var toFocus: GenreSunburstFocus = .root
-    @State private var animationStart: Date?
+    @State private var layoutCache: GenreSunburstLayoutCache
+    @State private var animatedFocus: GenreSunburstFocus = .root
+    @State private var isAnimating = false
     @State private var lastCanvasSize: CGSize = .zero
+    @State private var animationCompletionTask: Task<Void, Never>?
 
     private let animationDuration: TimeInterval = 0.4
+
+    init(
+        root: GenreSunburstNode,
+        focusedId: Binding<String?>,
+        selectedNode: Binding<GenreSunburstNode?>
+    ) {
+        self.root = root
+        _focusedId = focusedId
+        _selectedNode = selectedNode
+        _layoutCache = State(initialValue: GenreSunburstLayoutCache(root: root))
+    }
+
+    var body: some View {
+        let cache = layoutCache
+
+        GeometryReader { geometry in
+            ZStack {
+                GenreSunburstStaticRecordBackground()
+                    .drawingGroup()
+
+                GenreSunburstRenderableCanvas(
+                    layoutCache: cache,
+                    focus: animatedFocus,
+                    focusedId: focusedId,
+                    selectedNodeId: selectedNode?.id,
+                    isAnimating: isAnimating,
+                    lastCanvasSize: lastCanvasSize
+                )
+            }
+            .contentShape(Rectangle())
+            .onAppear {
+                lastCanvasSize = geometry.size
+                animatedFocus = cache.focus(for: focusedId)
+            }
+            .onDisappear {
+                animationCompletionTask?.cancel()
+            }
+            .onChange(of: root) { _, newRoot in
+                let updatedCache = GenreSunburstLayoutCache(root: newRoot)
+                layoutCache = updatedCache
+                animatedFocus = updatedCache.focus(for: focusedId)
+            }
+            .onChange(of: geometry.size) { _, newSize in
+                lastCanvasSize = newSize
+            }
+            .onChange(of: focusedId) { _, newFocusId in
+                let nextFocus = cache.focus(for: newFocusId)
+                guard nextFocus != animatedFocus else { return }
+                let selected = cache.node(withId: newFocusId)
+                transition(to: newFocusId, focus: nextFocus, selected: selected, updateBinding: false)
+            }
+            .simultaneousGesture(
+                SpatialTapGesture()
+                    .onEnded { value in
+                        handleTap(value.location, size: geometry.size, cache: cache)
+                    }
+            )
+        }
+    }
+
+    private func handleTap(_ point: CGPoint, size: CGSize, cache: GenreSunburstLayoutCache) {
+        let segments = cache.segments(in: size, focus: animatedFocus)
+
+        if GenreSunburstHitTesting.isCenterTap(at: point, in: size, segments: segments) {
+            goToParent(cache: cache)
+            return
+        }
+
+        guard let segment = GenreSunburstHitTesting.hitSegment(at: point, in: size, segments: segments) else {
+            return
+        }
+
+        let targetId = nextFocusId(forTapped: segment.node.id, cache: cache)
+        transition(to: targetId, focus: cache.focus(for: targetId), selected: cache.node(withId: targetId))
+    }
+
+    private func goToParent(cache: GenreSunburstLayoutCache) {
+        guard let currentFocusId = focusedId else {
+            selectedNode = nil
+            return
+        }
+
+        let path = cache.path(to: currentFocusId) ?? []
+        if path.count > 2 {
+            let parent = path[path.count - 2]
+            transition(to: parent.id, focus: cache.focus(for: parent.id), selected: parent)
+        } else {
+            transition(to: nil, focus: .root, selected: nil)
+        }
+    }
+
+    private func transition(
+        to newFocusId: String?,
+        focus newFocus: GenreSunburstFocus,
+        selected newSelectedNode: GenreSunburstNode?,
+        updateBinding: Bool = true
+    ) {
+        animationCompletionTask?.cancel()
+        isAnimating = true
+
+        if updateBinding {
+            focusedId = newFocusId
+        }
+        selectedNode = newSelectedNode
+
+        withAnimation(.easeInOut(duration: animationDuration)) {
+            animatedFocus = newFocus
+        }
+
+        animationCompletionTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64((animationDuration + 0.04) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                isAnimating = false
+            }
+        }
+    }
+
+    private func nextFocusId(forTapped nodeId: String, cache: GenreSunburstLayoutCache) -> String? {
+        let focusPath = focusedId.flatMap { cache.path(to: $0) } ?? [root]
+        guard let nodePath = cache.path(to: nodeId), nodePath.count > focusPath.count else {
+            return focusedId
+        }
+
+        for index in focusPath.indices where focusPath[index].id != nodePath[index].id {
+            return focusedId
+        }
+
+        return nodePath[focusPath.count].id
+    }
+}
+
+private struct GenreSunburstRenderableCanvas: View, Animatable {
+    @Environment(\.colorScheme) private var colorScheme
+    let layoutCache: GenreSunburstLayoutCache
+    var focus: GenreSunburstFocus
+    let focusedId: String?
+    let selectedNodeId: String?
+    let isAnimating: Bool
+    let lastCanvasSize: CGSize
+
+    var animatableData: GenreSunburstFocus {
+        get { focus }
+        set { focus = newValue }
+    }
+
     private let labelStrokeWidth: CGFloat = 5
 
     private struct LabelPlacement {
@@ -2168,57 +2748,16 @@ private struct GenreSunburstCanvasView: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                GenreSunburstStaticRecordBackground()
-
-                if animationStart != nil {
-                    TimelineView(.animation) { timeline in
-                        Canvas { context, size in
-                            let focus = focusForFrame(at: timeline.date)
-                            renderSunburst(in: size, focus: focus, context: &context)
-                        }
-                    }
-                } else {
-                    Canvas { context, size in
-                        renderSunburst(in: size, focus: currentFocus, context: &context)
-                    }
-                }
-            }
-            .contentShape(Rectangle())
-            .onAppear {
-                lastCanvasSize = geometry.size
-                currentFocus = GenreSunburstLayout.focus(for: focusedId, root: root)
-                fromFocus = currentFocus
-                toFocus = currentFocus
-            }
-            .onChange(of: geometry.size) { _, newSize in
-                lastCanvasSize = newSize
-            }
-            .onChange(of: focusedId) { _, newFocusId in
-                guard GenreSunburstLayout.focus(for: newFocusId, root: root) != toFocus else { return }
-                let selected = newFocusId.flatMap { root.firstNode(withId: $0) }
-                transition(to: newFocusId, selected: selected, updateBinding: false)
-            }
-            .simultaneousGesture(
-                SpatialTapGesture()
-                    .onEnded { value in
-                        handleTap(value.location, size: geometry.size)
-                    }
-            )
+        Canvas { context, size in
+            renderSunburst(in: size, context: &context)
         }
     }
 
     private func renderSunburst(
         in size: CGSize,
-        focus: GenreSunburstFocus,
         context: inout GraphicsContext
     ) {
-        let segments = GenreSunburstLayout.partitionSegments(
-            root: root,
-            canvasSize: size,
-            focus: focus
-        )
+        let segments = layoutCache.segments(in: size, focus: focus)
         let center = CGPoint(x: size.width / 2, y: size.height / 2)
 
         for segment in segments {
@@ -2226,102 +2765,9 @@ private struct GenreSunburstCanvasView: View {
         }
 
         drawCenterLabel(context: &context, center: center, size: size, segments: segments)
-        if animationStart == nil {
+        if !isAnimating {
             drawLabels(context: &context, center: center, size: size, segments: segments)
         }
-    }
-
-    private func handleTap(_ point: CGPoint, size: CGSize) {
-        let focus = animationStart == nil ? currentFocus : interpolatedFocus(now: Date())
-        let segments = GenreSunburstLayout.partitionSegments(root: root, canvasSize: size, focus: focus)
-
-        if GenreSunburstHitTesting.isCenterTap(at: point, in: size, segments: segments) {
-            goToParent()
-            return
-        }
-
-        guard let segment = GenreSunburstHitTesting.hitSegment(at: point, in: size, segments: segments) else {
-            return
-        }
-
-        let targetId = nextFocusId(forTapped: segment.node.id)
-        let targetNode = targetId.flatMap { root.firstNode(withId: $0) }
-        transition(to: targetId, selected: targetNode)
-    }
-
-    private func goToParent() {
-        guard let currentFocusId = focusedId else {
-            selectedNode = nil
-            return
-        }
-
-        let path = root.pathToNode(withId: currentFocusId) ?? []
-        if path.count > 2 {
-            transition(to: path[path.count - 2].id, selected: path[path.count - 2])
-        } else {
-            transition(to: nil, selected: nil)
-        }
-    }
-
-    private func transition(
-        to newFocusId: String?,
-        selected newSelectedNode: GenreSunburstNode?,
-        updateBinding: Bool = true
-    ) {
-        fromFocus = animationStart == nil ? currentFocus : interpolatedFocus(now: Date())
-        toFocus = GenreSunburstLayout.focus(for: newFocusId, root: root)
-        if updateBinding {
-            focusedId = newFocusId
-        }
-        selectedNode = newSelectedNode
-        animationStart = Date()
-    }
-
-    private func focusForFrame(at date: Date) -> GenreSunburstFocus {
-        guard let animationStart else {
-            return currentFocus
-        }
-
-        let elapsed = date.timeIntervalSince(animationStart)
-        let rawProgress = min(1, elapsed / animationDuration)
-        let eased = easeInOutCubic(CGFloat(rawProgress))
-        let focus = interpolate(from: fromFocus, to: toFocus, progress: eased)
-
-        if rawProgress >= 1 {
-            DispatchQueue.main.async {
-                currentFocus = toFocus
-                self.animationStart = nil
-            }
-        }
-
-        return focus
-    }
-
-    private func interpolatedFocus(now: Date) -> GenreSunburstFocus {
-        guard let animationStart else { return currentFocus }
-        let elapsed = now.timeIntervalSince(animationStart)
-        let rawProgress = min(1, elapsed / animationDuration)
-        let eased = easeInOutCubic(CGFloat(rawProgress))
-        return interpolate(from: fromFocus, to: toFocus, progress: eased)
-    }
-
-    private func interpolate(from: GenreSunburstFocus, to: GenreSunburstFocus, progress: CGFloat) -> GenreSunburstFocus {
-        GenreSunburstFocus(
-            angleStart: lerp(from.angleStart, to.angleStart, progress),
-            angleEnd: lerp(from.angleEnd, to.angleEnd, progress),
-            depthStart: lerp(from.depthStart, to.depthStart, progress),
-            depthEnd: lerp(from.depthEnd, to.depthEnd, progress)
-        )
-    }
-
-    private func lerp(_ from: Double, _ to: Double, _ progress: CGFloat) -> Double {
-        from + (to - from) * Double(progress)
-    }
-
-    private func easeInOutCubic(_ value: CGFloat) -> CGFloat {
-        value < 0.5
-            ? 4 * value * value * value
-            : 1 - pow(-2 * value + 2, 3) / 2
     }
 
     private func labelFontSize(for size: CGSize) -> CGFloat {
@@ -2333,12 +2779,12 @@ private struct GenreSunburstCanvasView: View {
     }
 
     private func opacity(for segment: GenreSunburstSegment) -> Double {
-        guard let selectedNode else { return 0.82 }
-        return segment.node.id == selectedNode.id ? 0.96 : 0.66
+        guard let selectedNodeId else { return 0.82 }
+        return segment.node.id == selectedNodeId ? 0.96 : 0.66
     }
 
     private func strokeColor(for segment: GenreSunburstSegment) -> Color {
-        if segment.node.id == selectedNode?.id {
+        if segment.node.id == selectedNodeId {
             return colorScheme == .dark
                 ? Color(red: 0.84, green: 0.98, blue: 1.0).opacity(0.88)
                 : Color.black.opacity(0.46)
@@ -2350,12 +2796,12 @@ private struct GenreSunburstCanvasView: View {
     }
 
     private func strokeWidth(for segment: GenreSunburstSegment) -> CGFloat {
-        segment.node.id == selectedNode?.id ? 1.4 : 0.65
+        segment.node.id == selectedNodeId ? 1.4 : 0.65
     }
 
     private func drawSegment(_ segment: GenreSunburstSegment, center: CGPoint, context: inout GraphicsContext) {
         let path = segmentPath(segment, center: center)
-        let selected = segment.node.id == selectedNode?.id
+        let selected = segment.node.id == selectedNodeId
 
         context.fill(path, with: .color(segment.color.opacity(selected ? 0.92 : opacity(for: segment))))
         context.stroke(
@@ -2634,7 +3080,7 @@ private struct GenreSunburstCanvasView: View {
     }
 
     private func centerLabelLines() -> [String] {
-        guard let focusedId, let node = root.firstNode(withId: focusedId) else {
+        guard let node = layoutCache.node(withId: focusedId) else {
             return ["EDM"]
         }
 
@@ -2683,8 +3129,8 @@ private struct GenreSunburstCanvasView: View {
     }
 
     private func labeledRelativeDepth(for nodeId: String) -> Int? {
-        let focusPath = focusPath()
-        guard let nodePath = root.pathToNode(withId: nodeId), nodePath.count > focusPath.count else {
+        let focusPath = focusedId.flatMap { layoutCache.path(to: $0) } ?? layoutCache.path(to: layoutCache.rootId) ?? []
+        guard let nodePath = layoutCache.path(to: nodeId), nodePath.count > focusPath.count else {
             return nil
         }
 
@@ -2694,27 +3140,6 @@ private struct GenreSunburstCanvasView: View {
 
         let relativeDepth = nodePath.count - focusPath.count
         return relativeDepth == 1 ? relativeDepth : nil
-    }
-
-    private func focusPath() -> [GenreSunburstNode] {
-        guard let focusedId, let path = root.pathToNode(withId: focusedId) else {
-            return [root]
-        }
-
-        return path
-    }
-
-    private func nextFocusId(forTapped nodeId: String) -> String? {
-        let focusPath = focusPath()
-        guard let nodePath = root.pathToNode(withId: nodeId), nodePath.count > focusPath.count else {
-            return focusedId
-        }
-
-        for index in focusPath.indices where focusPath[index].id != nodePath[index].id {
-            return focusedId
-        }
-
-        return nodePath[focusPath.count].id
     }
 }
 

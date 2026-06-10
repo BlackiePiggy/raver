@@ -77,9 +77,12 @@ export const INPUT_LIMITS = {
     name: 120,
     slug: 80,
     sortOrder: 20,
+    shortText: 160,
     description: 4000,
     example: 2000,
     keyArtistName: 120,
+    soundCueTrackTitle: 160,
+    soundCueTrackArtist: 160,
   },
 } as const;
 

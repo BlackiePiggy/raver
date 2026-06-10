@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronDown, ChevronRight, Languages, Plus, Trash2, Pencil, Search, RefreshCw, ExternalLink } from 'lucide-react';
+import { ChevronDown, ChevronRight, Languages, Plus, Trash2, Pencil, Search, RefreshCw, ExternalLink, Music4 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
@@ -11,7 +11,7 @@ import {
   type LocalizedLocaleKey,
   type LocalizedTextValue,
 } from '@/components/admin/LocalizedTextEditor';
-import { genreAdminApi, type GenreAdminNode, type GenreKeyArtistBinding } from '@/features/admin-content/genre-admin';
+import { genreAdminApi, type GenreAdminNode, type GenreKeyArtistBinding, type GenreSoundCueTrack } from '@/features/admin-content/genre-admin';
 import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -33,6 +33,17 @@ type KeyArtistDraft = {
   name: string;
   djId: string | null;
   dj: GenreKeyArtistBinding['dj'];
+};
+
+type SoundCueTrackDraft = {
+  id: string;
+  title: string;
+  artist: string;
+  spotifyUrl: string;
+  appleMusicUrl: string;
+  neteaseUrl: string;
+  soundcloudUrl: string;
+  beatportUrl: string;
 };
 
 type TreeSearchCandidate = {
@@ -94,6 +105,30 @@ const normalizeGenreKeyArtistsForCompare = (node: GenreAdminNode | null) =>
         }))
         .filter((item) => item.name)
     : [];
+
+const normalizeSoundCueTracksForCompare = (items: SoundCueTrackDraft[] | GenreSoundCueTrack[]) =>
+  items
+    .map((item) => ({
+      title: item.title.trim(),
+      artist: item.artist.trim(),
+      spotifyUrl: ('spotifyUrl' in item ? item.spotifyUrl : '')?.trim() || '',
+      appleMusicUrl: ('appleMusicUrl' in item ? item.appleMusicUrl : '')?.trim() || '',
+      neteaseUrl: ('neteaseUrl' in item ? item.neteaseUrl : '')?.trim() || '',
+      soundcloudUrl: ('soundcloudUrl' in item ? item.soundcloudUrl : '')?.trim() || '',
+      beatportUrl: ('beatportUrl' in item ? item.beatportUrl : '')?.trim() || '',
+    }))
+    .filter((item) => item.title);
+
+const makeSoundCueTrackDraft = (item?: GenreSoundCueTrack, index = 0): SoundCueTrackDraft => ({
+  id: `sound-cue-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+  title: item?.title || '',
+  artist: item?.artist || '',
+  spotifyUrl: item?.spotifyUrl || '',
+  appleMusicUrl: item?.appleMusicUrl || '',
+  neteaseUrl: item?.neteaseUrl || '',
+  soundcloudUrl: item?.soundcloudUrl || '',
+  beatportUrl: item?.beatportUrl || '',
+});
 
 // ─── Right-side tree node ─────────────────────────────────────────────────────
 
@@ -392,6 +427,11 @@ export default function AdminGenresPage() {
   const treeNodeRefs = useRef(new Map<string, HTMLDivElement>());
   const [basicName, setBasicName] = useState('');
   const [basicSlug, setBasicSlug] = useState('');
+  const [nameI18nValue, setNameI18nValue] = useState<LocalizedTextValue>(() => normalizeLocalizedValue(null));
+  const [originValue, setOriginValue] = useState('');
+  const [eraValue, setEraValue] = useState('');
+  const [bpmValue, setBpmValue] = useState('');
+  const [backgroundImageURL, setBackgroundImageURL] = useState('');
 
   // Localized text
   const [descriptionValue, setDescriptionValue] = useState<LocalizedTextValue>(() => normalizeLocalizedValue(null));
@@ -405,6 +445,7 @@ export default function AdminGenresPage() {
 
   // Key artists
   const [keyArtistDrafts, setKeyArtistDrafts] = useState<KeyArtistDraft[]>([]);
+  const [soundCueTrackDrafts, setSoundCueTrackDrafts] = useState<SoundCueTrackDraft[]>([]);
 
   const flatNodes = useMemo(() => flattenTree(tree), [tree]);
   const selectedNode = flatNodes.find((item) => item.id === selectedId) ?? null;
@@ -465,6 +506,11 @@ export default function AdminGenresPage() {
     if (!selectedNode) return;
     setBasicName(selectedNode.name || '');
     setBasicSlug(selectedNode.slug || '');
+    setNameI18nValue(normalizeLocalizedValue(selectedNode.nameI18n, selectedNode.name || ''));
+    setOriginValue(selectedNode.origin || '');
+    setEraValue(selectedNode.era || '');
+    setBpmValue(selectedNode.bpm || '');
+    setBackgroundImageURL(selectedNode.backgroundImageURL || '');
     setDescriptionValue(normalizeLocalizedValue(selectedNode.descriptionI18n, selectedNode.description || ''));
     setExampleValue(normalizeLocalizedValue(selectedNode.exampleI18n, selectedNode.example || ''));
     setSpotifyTrackURL(selectedNode.spotifyTrackURL || '');
@@ -481,6 +527,7 @@ export default function AdminGenresPage() {
         dj: item.dj,
       }))
     );
+    setSoundCueTrackDrafts((selectedNode.soundCueTracks || []).map((item, index) => makeSoundCueTrackDraft(item, index)));
   }, [selectedNode]);
 
   useEffect(() => {
@@ -549,15 +596,26 @@ export default function AdminGenresPage() {
   const initialDescriptionValue = selectedNode
     ? normalizeLocalizedValue(selectedNode.descriptionI18n, selectedNode.description || '')
     : normalizeLocalizedValue(null);
+  const initialNameI18nValue = selectedNode
+    ? normalizeLocalizedValue(selectedNode.nameI18n, selectedNode.name || '')
+    : normalizeLocalizedValue(null);
   const basicNameDirty = selectedNode ? basicName !== (selectedNode.name || '') : false;
   const basicSlugDirty = selectedNode ? basicSlug !== (selectedNode.slug || '') : false;
+  const nameI18nDirty = selectedNode ? !sameLocalizedValue(nameI18nValue, initialNameI18nValue) : false;
+  const originDirty = selectedNode ? originValue !== (selectedNode.origin || '') : false;
+  const eraDirty = selectedNode ? eraValue !== (selectedNode.era || '') : false;
+  const bpmDirty = selectedNode ? bpmValue !== (selectedNode.bpm || '') : false;
+  const backgroundImageDirty = selectedNode ? backgroundImageURL !== (selectedNode.backgroundImageURL || '') : false;
   const descriptionDirty = selectedNode ? !sameLocalizedValue(descriptionValue, initialDescriptionValue) : false;
   const keyArtistsDirty = selectedNode
     ? JSON.stringify(normalizeKeyArtistDraftsForCompare(keyArtistDrafts)) !== JSON.stringify(normalizeGenreKeyArtistsForCompare(selectedNode))
     : false;
+  const soundCueTracksDirty = selectedNode
+    ? JSON.stringify(normalizeSoundCueTracksForCompare(soundCueTrackDrafts)) !== JSON.stringify(normalizeSoundCueTracksForCompare(selectedNode.soundCueTracks || []))
+    : false;
   const spotifyDirty = selectedNode ? spotifyTrackURL !== (selectedNode.spotifyTrackURL || '') : false;
   const wikipediaDirty = selectedNode ? wikipediaURL !== (selectedNode.wikipediaURL || '') : false;
-  const basicInfoDirty = basicNameDirty || basicSlugDirty;
+  const basicInfoDirty = basicNameDirty || basicSlugDirty || nameI18nDirty || originDirty || eraDirty || bpmDirty || backgroundImageDirty;
   const externalLinksDirty = spotifyDirty || wikipediaDirty;
 
   const handleSaveContent = async () => {
@@ -575,10 +633,26 @@ export default function AdminGenresPage() {
         slug: basicSlug.trim() || null,
       });
       await genreAdminApi.updateContent(selectedNode.id, {
+        nameI18n: nameI18nValue,
         description: descriptionValue.zh,
         descriptionI18n: descriptionValue,
         example: exampleValue.zh,
         exampleI18n: exampleValue,
+        soundCueTracks: soundCueTrackDrafts
+          .map((item) => ({
+            title: item.title.trim(),
+            artist: item.artist.trim(),
+            spotifyUrl: item.spotifyUrl.trim() || null,
+            appleMusicUrl: item.appleMusicUrl.trim() || null,
+            neteaseUrl: item.neteaseUrl.trim() || null,
+            soundcloudUrl: item.soundcloudUrl.trim() || null,
+            beatportUrl: item.beatportUrl.trim() || null,
+          }))
+          .filter((item) => item.title),
+        origin: originValue.trim() || null,
+        era: eraValue.trim() || null,
+        bpm: bpmValue.trim() || null,
+        backgroundImageURL: backgroundImageURL.trim() || null,
         spotifyTrackURL: spotifyTrackURL.trim() || null,
         wikipediaURL: wikipediaURL.trim() || null,
       });
@@ -630,6 +704,15 @@ export default function AdminGenresPage() {
     if (field === 'description') { setDescriptionValue((cur) => ({ ...cur, [locale]: value })); return; }
     setExampleValue((cur) => ({ ...cur, [locale]: value }));
   };
+
+  const addSoundCueTrackDraft = () =>
+    setSoundCueTrackDrafts((cur) => [...cur, makeSoundCueTrackDraft(undefined, cur.length)]);
+
+  const updateSoundCueTrackDraft = (id: string, patch: Partial<SoundCueTrackDraft>) =>
+    setSoundCueTrackDrafts((cur) => cur.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+
+  const removeSoundCueTrackDraft = (id: string) =>
+    setSoundCueTrackDrafts((cur) => cur.filter((item) => item.id !== id));
 
   const addKeyArtistDraft = () =>
     setKeyArtistDrafts((cur) => [...cur, { id: `draft-${Date.now()}-${cur.length}`, name: '', djId: null, dj: null }]);
@@ -713,6 +796,50 @@ export default function AdminGenresPage() {
                     onChange={setBasicSlug}
                     dirty={basicSlugDirty}
                     monospace
+                  />
+                </div>
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <BasicInfoField
+                    label="中文名"
+                    value={nameI18nValue.zh}
+                    placeholder="可选，填写中文名"
+                    maxLength={INPUT_LIMITS.genre.name}
+                    onChange={(value) => setNameI18nValue((cur) => ({ ...cur, zh: value }))}
+                    dirty={nameI18nDirty}
+                  />
+                  <BasicInfoField
+                    label="起源地"
+                    value={originValue}
+                    placeholder="如 Chicago, United States"
+                    maxLength={INPUT_LIMITS.genre.shortText}
+                    onChange={setOriginValue}
+                    dirty={originDirty}
+                  />
+                </div>
+                <div className="grid gap-4 xl:grid-cols-3">
+                  <BasicInfoField
+                    label="年代"
+                    value={eraValue}
+                    placeholder="如 Early 1980s"
+                    maxLength={INPUT_LIMITS.genre.shortText}
+                    onChange={setEraValue}
+                    dirty={eraDirty}
+                  />
+                  <BasicInfoField
+                    label="BPM"
+                    value={bpmValue}
+                    placeholder="如 118-130"
+                    maxLength={INPUT_LIMITS.genre.shortText}
+                    onChange={setBpmValue}
+                    dirty={bpmDirty}
+                  />
+                  <UrlField
+                    label="背景图"
+                    value={backgroundImageURL}
+                    placeholder="https://..."
+                    maxLength={INPUT_LIMITS.common.url}
+                    onChange={setBackgroundImageURL}
+                    dirty={backgroundImageDirty}
                   />
                 </div>
                 <div className="grid grid-cols-1 gap-4">
@@ -914,6 +1041,104 @@ export default function AdminGenresPage() {
               ) : (
                 <div className="rounded-lg border border-dashed border-gray-200 py-8 text-center text-sm text-gray-400">
                   暂无代表艺人，可通过上方按钮按需添加。
+                </div>
+              )}
+            </SectionCard>
+          )}
+
+          {selectedNode && (
+            <SectionCard
+              title={<SectionTitle title="声音线索歌曲" dirty={soundCueTracksDirty} />}
+              action={
+                <button
+                  type="button"
+                  onClick={addSoundCueTrackDraft}
+                  className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  添加歌曲
+                </button>
+              }
+            >
+              {soundCueTrackDrafts.length ? (
+                <div className="space-y-4">
+                  {soundCueTrackDrafts.map((item, index) => (
+                    <div key={item.id} className="rounded-xl border border-gray-200 bg-gray-50/55 p-4">
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                          <Music4 className="h-4 w-4 text-emerald-600" />
+                          歌曲 #{index + 1}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeSoundCueTrackDraft(item.id)}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg border border-red-200 bg-white text-red-500 hover:bg-red-50 transition-colors"
+                          aria-label="删除歌曲"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="grid gap-4 xl:grid-cols-2">
+                        <BasicInfoField
+                          label="歌名"
+                          value={item.title}
+                          placeholder="输入歌名"
+                          maxLength={INPUT_LIMITS.genre.soundCueTrackTitle}
+                          onChange={(value) => updateSoundCueTrackDraft(item.id, { title: value })}
+                        />
+                        <BasicInfoField
+                          label="艺人"
+                          value={item.artist}
+                          placeholder="输入艺人名"
+                          maxLength={INPUT_LIMITS.genre.soundCueTrackArtist}
+                          onChange={(value) => updateSoundCueTrackDraft(item.id, { artist: value })}
+                        />
+                      </div>
+
+                      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                        <UrlField
+                          label="Spotify"
+                          value={item.spotifyUrl}
+                          placeholder="https://open.spotify.com/track/..."
+                          maxLength={INPUT_LIMITS.common.url}
+                          onChange={(value) => updateSoundCueTrackDraft(item.id, { spotifyUrl: value })}
+                        />
+                        <UrlField
+                          label="Apple Music"
+                          value={item.appleMusicUrl}
+                          placeholder="https://music.apple.com/..."
+                          maxLength={INPUT_LIMITS.common.url}
+                          onChange={(value) => updateSoundCueTrackDraft(item.id, { appleMusicUrl: value })}
+                        />
+                        <UrlField
+                          label="网易云音乐"
+                          value={item.neteaseUrl}
+                          placeholder="https://music.163.com/..."
+                          maxLength={INPUT_LIMITS.common.url}
+                          onChange={(value) => updateSoundCueTrackDraft(item.id, { neteaseUrl: value })}
+                        />
+                        <UrlField
+                          label="SoundCloud"
+                          value={item.soundcloudUrl}
+                          placeholder="https://soundcloud.com/..."
+                          maxLength={INPUT_LIMITS.common.url}
+                          onChange={(value) => updateSoundCueTrackDraft(item.id, { soundcloudUrl: value })}
+                        />
+                        <UrlField
+                          label="Beatport"
+                          value={item.beatportUrl}
+                          placeholder="https://www.beatport.com/track/..."
+                          maxLength={INPUT_LIMITS.common.url}
+                          onChange={(value) => updateSoundCueTrackDraft(item.id, { beatportUrl: value })}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-gray-200 py-8 text-center text-sm text-gray-400">
+                  暂无声音线索歌曲，可添加多首代表歌曲并附上不同平台链接。
                 </div>
               )}
             </SectionCard>

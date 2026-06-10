@@ -16632,11 +16632,17 @@ router.post('/rating-units/:id/comments', optionalAuth, async (req: Request, res
 type LearnGenreTreeNode = {
   id: string;
   name: string;
+  nameI18n: TriTextPayload | null;
   path: string;
   description: string;
   descriptionI18n: TriTextPayload | null;
   example: string;
   exampleI18n: TriTextPayload | null;
+  soundCueTracks: LearnGenreSoundCueTrack[];
+  origin: string;
+  era: string;
+  bpm: string;
+  backgroundImageURL: string;
   spotifyTrackURL: string;
   wikipediaURL: string;
   keyArtists: string[];
@@ -16654,11 +16660,17 @@ type LearnGenreTreeSummaryNode = {
 type LearnGenreDetailNode = {
   id: string;
   name: string;
+  nameI18n: TriTextPayload | null;
   path: string;
   description: string;
   descriptionI18n: TriTextPayload | null;
   example: string;
   exampleI18n: TriTextPayload | null;
+  soundCueTracks: LearnGenreSoundCueTrack[];
+  origin: string;
+  era: string;
+  bpm: string;
+  backgroundImageURL: string;
   spotifyTrackURL: string;
   wikipediaURL: string;
   keyArtists: string[];
@@ -16674,6 +16686,16 @@ type LearnGenreKeyArtistBinding = {
     avatarUrl: string | null;
     avatarMediumUrl: string | null;
   } | null;
+};
+
+type LearnGenreSoundCueTrack = {
+  title: string;
+  artist: string;
+  spotifyUrl: string | null;
+  appleMusicUrl: string | null;
+  neteaseUrl: string | null;
+  soundcloudUrl: string | null;
+  beatportUrl: string | null;
 };
 
 const normalizeGenreKeyArtistBindings = (
@@ -16716,6 +16738,28 @@ const normalizeGenreEditableText = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const text = value.trim();
   return text ? text : null;
+};
+
+const normalizeGenreSoundCueTracks = (value: unknown): LearnGenreSoundCueTrack[] => {
+  if (!Array.isArray(value)) return [];
+  const out: LearnGenreSoundCueTrack[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const title = typeof row.title === 'string' ? row.title.trim() : '';
+    const artist = typeof row.artist === 'string' ? row.artist.trim() : '';
+    if (!title) continue;
+    out.push({
+      title,
+      artist,
+      spotifyUrl: normalizeGenreEditableText(row.spotifyUrl),
+      appleMusicUrl: normalizeGenreEditableText(row.appleMusicUrl),
+      neteaseUrl: normalizeGenreEditableText(row.neteaseUrl),
+      soundcloudUrl: normalizeGenreEditableText(row.soundcloudUrl),
+      beatportUrl: normalizeGenreEditableText(row.beatportUrl),
+    });
+  }
+  return out;
 };
 
 const normalizeGenreKeyArtistsInput = (value: unknown): string[] => {
@@ -17210,11 +17254,17 @@ router.get('/learn/genres', async (_req: Request, res: Response): Promise<void> 
       select: {
         id: true,
         name: true,
+        nameI18n: true,
         path: true,
         description: true,
         descriptionI18n: true,
         example: true,
         exampleI18n: true,
+        soundCueTracks: true,
+        origin: true,
+        era: true,
+        bpm: true,
+        backgroundImageUrl: true,
         spotifyTrackUrl: true,
         wikipediaUrl: true,
         keyArtists: true,
@@ -17248,11 +17298,17 @@ router.get('/learn/genres', async (_req: Request, res: Response): Promise<void> 
     const buildNode = (row: (typeof rows)[number]): LearnGenreTreeNode => ({
       id: row.id,
       name: row.name,
+      nameI18n: resolveTriTextWithFallback(row.nameI18n ?? null, row.name ?? ''),
       path: row.path,
       description: row.description ?? '',
       descriptionI18n: resolveTriTextWithFallback(row.descriptionI18n ?? null, row.description ?? ''),
       example: row.example ?? '',
       exampleI18n: resolveTriTextWithFallback(row.exampleI18n ?? null, row.example ?? ''),
+      soundCueTracks: normalizeGenreSoundCueTracks(row.soundCueTracks),
+      origin: row.origin ?? '',
+      era: row.era ?? '',
+      bpm: row.bpm ?? '',
+      backgroundImageURL: row.backgroundImageUrl ?? '',
       spotifyTrackURL: row.spotifyTrackUrl ?? '',
       wikipediaURL: row.wikipediaUrl ?? '',
       keyArtists: row.keyArtists,
@@ -17276,6 +17332,7 @@ router.get('/learn/genres/tree-summary', async (_req: Request, res: Response): P
       select: {
         id: true,
         name: true,
+        nameI18n: true,
         path: true,
         parentId: true,
       },
@@ -17317,11 +17374,17 @@ router.get('/learn/genres/:id', async (req: Request, res: Response): Promise<voi
       select: {
         id: true,
         name: true,
+        nameI18n: true,
         path: true,
         description: true,
         descriptionI18n: true,
         example: true,
         exampleI18n: true,
+        soundCueTracks: true,
+        origin: true,
+        era: true,
+        bpm: true,
+        backgroundImageUrl: true,
         spotifyTrackUrl: true,
         wikipediaUrl: true,
         keyArtists: true,
@@ -17350,11 +17413,17 @@ router.get('/learn/genres/:id', async (req: Request, res: Response): Promise<voi
     const detail: LearnGenreDetailNode = {
       id: row.id,
       name: row.name,
+      nameI18n: resolveTriTextWithFallback(row.nameI18n ?? null, row.name ?? ''),
       path: row.path,
       description: row.description ?? '',
       descriptionI18n: resolveTriTextWithFallback(row.descriptionI18n ?? null, row.description ?? ''),
       example: row.example ?? '',
       exampleI18n: resolveTriTextWithFallback(row.exampleI18n ?? null, row.example ?? ''),
+      soundCueTracks: normalizeGenreSoundCueTracks(row.soundCueTracks),
+      origin: row.origin ?? '',
+      era: row.era ?? '',
+      bpm: row.bpm ?? '',
+      backgroundImageURL: row.backgroundImageUrl ?? '',
       spotifyTrackURL: row.spotifyTrackUrl ?? '',
       wikipediaURL: row.wikipediaUrl ?? '',
       keyArtists: row.keyArtists,
@@ -17375,11 +17444,17 @@ router.get('/learn/genres/admin/tree', optionalAuth, async (_req: Request, res: 
       select: {
         id: true,
         name: true,
+        nameI18n: true,
         path: true,
         description: true,
         descriptionI18n: true,
         example: true,
         exampleI18n: true,
+        soundCueTracks: true,
+        origin: true,
+        era: true,
+        bpm: true,
+        backgroundImageUrl: true,
         spotifyTrackUrl: true,
         wikipediaUrl: true,
         keyArtists: true,
@@ -17402,11 +17477,17 @@ router.get('/learn/genres/admin/tree', optionalAuth, async (_req: Request, res: 
       items: rows.map((row) => ({
         id: row.id,
         name: row.name,
+        nameI18n: resolveTriTextWithFallback(row.nameI18n ?? null, row.name ?? ''),
         path: row.path,
         description: row.description ?? '',
         descriptionI18n: resolveTriTextWithFallback(row.descriptionI18n ?? null, row.description ?? ''),
         example: row.example ?? '',
         exampleI18n: resolveTriTextWithFallback(row.exampleI18n ?? null, row.example ?? ''),
+        soundCueTracks: normalizeGenreSoundCueTracks(row.soundCueTracks),
+        origin: row.origin ?? '',
+        era: row.era ?? '',
+        bpm: row.bpm ?? '',
+        backgroundImageURL: row.backgroundImageUrl ?? '',
         spotifyTrackURL: row.spotifyTrackUrl ?? '',
         wikipediaURL: row.wikipediaUrl ?? '',
         keyArtists: row.keyArtists,
@@ -17492,8 +17573,15 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
       where: { id: genreId },
       select: {
         id: true,
+        name: true,
+        nameI18n: true,
         description: true,
         example: true,
+        soundCueTracks: true,
+        origin: true,
+        era: true,
+        bpm: true,
+        backgroundImageUrl: true,
         spotifyTrackUrl: true,
         wikipediaUrl: true,
       },
@@ -17505,8 +17593,14 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
 
     const hasDescriptionField = Object.prototype.hasOwnProperty.call(body, 'description');
     const hasDescriptionI18nField = Object.prototype.hasOwnProperty.call(body, 'descriptionI18n');
+    const hasNameI18nField = Object.prototype.hasOwnProperty.call(body, 'nameI18n');
     const hasExampleField = Object.prototype.hasOwnProperty.call(body, 'example');
     const hasExampleI18nField = Object.prototype.hasOwnProperty.call(body, 'exampleI18n');
+    const hasSoundCueTracksField = Object.prototype.hasOwnProperty.call(body, 'soundCueTracks');
+    const hasOriginField = Object.prototype.hasOwnProperty.call(body, 'origin');
+    const hasEraField = Object.prototype.hasOwnProperty.call(body, 'era');
+    const hasBpmField = Object.prototype.hasOwnProperty.call(body, 'bpm');
+    const hasBackgroundImageField = Object.prototype.hasOwnProperty.call(body, 'backgroundImageURL');
     const hasSpotifyTrackField = Object.prototype.hasOwnProperty.call(body, 'spotifyTrackURL');
     const hasWikipediaField = Object.prototype.hasOwnProperty.call(body, 'wikipediaURL');
 
@@ -17516,12 +17610,27 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
     const nextExample = hasExampleField
       ? normalizeGenreEditableText(body.example)
       : (genre.example ?? null);
+    const nextSoundCueTracks = hasSoundCueTracksField
+      ? normalizeGenreSoundCueTracks(body.soundCueTracks)
+      : normalizeGenreSoundCueTracks(genre.soundCueTracks);
     const nextSpotifyTrackUrl = hasSpotifyTrackField
       ? normalizeGenreEditableText(body.spotifyTrackURL)
       : (genre.spotifyTrackUrl ?? null);
     const nextWikipediaUrl = hasWikipediaField
       ? normalizeGenreEditableText(body.wikipediaURL)
       : (genre.wikipediaUrl ?? null);
+    const nextOrigin = hasOriginField
+      ? normalizeGenreEditableText(body.origin)
+      : (genre.origin ?? null);
+    const nextEra = hasEraField
+      ? normalizeGenreEditableText(body.era)
+      : (genre.era ?? null);
+    const nextBpm = hasBpmField
+      ? normalizeGenreEditableText(body.bpm)
+      : (genre.bpm ?? null);
+    const nextBackgroundImageUrl = hasBackgroundImageField
+      ? normalizeGenreEditableText(body.backgroundImageURL)
+      : (genre.backgroundImageUrl ?? null);
 
     const descriptionI18n = hasDescriptionField || hasDescriptionI18nField
       ? normalizeTriTextPayload(body.descriptionI18n, nextDescription ?? '')
@@ -17531,6 +17640,12 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
       : undefined;
 
     const updateData: Prisma.GenreUpdateInput = {};
+    if (hasNameI18nField) {
+      const nameI18n = normalizeTriTextPayload(body.nameI18n, genre.name ?? '');
+      updateData.nameI18n = nameI18n
+        ? (nameI18n as unknown as Prisma.InputJsonValue)
+        : Prisma.DbNull;
+    }
     if (hasDescriptionField || hasDescriptionI18nField) {
       updateData.description = nextDescription;
       updateData.descriptionI18n = descriptionI18n
@@ -17543,11 +17658,28 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
         ? (exampleI18n as unknown as Prisma.InputJsonValue)
         : Prisma.DbNull;
     }
+    if (hasSoundCueTracksField) {
+      updateData.soundCueTracks = nextSoundCueTracks.length
+        ? (nextSoundCueTracks as unknown as Prisma.InputJsonValue)
+        : Prisma.DbNull;
+    }
     if (hasSpotifyTrackField) {
       updateData.spotifyTrackUrl = nextSpotifyTrackUrl;
     }
     if (hasWikipediaField) {
       updateData.wikipediaUrl = nextWikipediaUrl;
+    }
+    if (hasOriginField) {
+      updateData.origin = nextOrigin;
+    }
+    if (hasEraField) {
+      updateData.era = nextEra;
+    }
+    if (hasBpmField) {
+      updateData.bpm = nextBpm;
+    }
+    if (hasBackgroundImageField) {
+      updateData.backgroundImageUrl = nextBackgroundImageUrl;
     }
 
     const updated = await prisma.genre.update({
@@ -17555,10 +17687,17 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
       data: updateData,
       select: {
         id: true,
+        name: true,
+        nameI18n: true,
         description: true,
         descriptionI18n: true,
         example: true,
         exampleI18n: true,
+        soundCueTracks: true,
+        origin: true,
+        era: true,
+        bpm: true,
+        backgroundImageUrl: true,
         spotifyTrackUrl: true,
         wikipediaUrl: true,
       },
@@ -17566,10 +17705,17 @@ router.post('/learn/genres/:id/content', optionalAuth, async (req: Request, res:
 
     ok(res, {
       id: updated.id,
+      name: updated.name,
+      nameI18n: resolveTriTextWithFallback(updated.nameI18n ?? null, updated.name ?? ''),
       description: updated.description ?? '',
       descriptionI18n: resolveTriTextWithFallback(updated.descriptionI18n ?? null, updated.description ?? ''),
       example: updated.example ?? '',
       exampleI18n: resolveTriTextWithFallback(updated.exampleI18n ?? null, updated.example ?? ''),
+      soundCueTracks: normalizeGenreSoundCueTracks(updated.soundCueTracks),
+      origin: updated.origin ?? '',
+      era: updated.era ?? '',
+      bpm: updated.bpm ?? '',
+      backgroundImageURL: updated.backgroundImageUrl ?? '',
       spotifyTrackURL: updated.spotifyTrackUrl ?? '',
       wikipediaURL: updated.wikipediaUrl ?? '',
     });
@@ -17675,12 +17821,18 @@ router.post('/learn/genres/admin/nodes', optionalAuth, async (req: Request, res:
       select: {
         id: true,
         name: true,
+        nameI18n: true,
         slug: true,
         path: true,
         description: true,
         descriptionI18n: true,
         example: true,
         exampleI18n: true,
+        soundCueTracks: true,
+        origin: true,
+        era: true,
+        bpm: true,
+        backgroundImageUrl: true,
         spotifyTrackUrl: true,
         wikipediaUrl: true,
         keyArtists: true,
@@ -17693,12 +17845,18 @@ router.post('/learn/genres/admin/nodes', optionalAuth, async (req: Request, res:
     ok(res, {
       id: created.id,
       name: created.name,
+      nameI18n: resolveTriTextWithFallback(created.nameI18n ?? null, created.name ?? ''),
       slug: created.slug,
       path: created.path,
       description: created.description ?? '',
       descriptionI18n: resolveTriTextWithFallback(created.descriptionI18n ?? null, created.description ?? ''),
       example: created.example ?? '',
       exampleI18n: resolveTriTextWithFallback(created.exampleI18n ?? null, created.example ?? ''),
+      soundCueTracks: normalizeGenreSoundCueTracks(created.soundCueTracks),
+      origin: created.origin ?? '',
+      era: created.era ?? '',
+      bpm: created.bpm ?? '',
+      backgroundImageURL: created.backgroundImageUrl ?? '',
       spotifyTrackURL: created.spotifyTrackUrl ?? '',
       wikipediaURL: created.wikipediaUrl ?? '',
       keyArtists: created.keyArtists,
@@ -17728,6 +17886,7 @@ router.patch('/learn/genres/admin/nodes/:id', optionalAuth, async (req: Request,
       select: {
         id: true,
         name: true,
+        nameI18n: true,
         slug: true,
         path: true,
         parentId: true,
@@ -17736,6 +17895,11 @@ router.patch('/learn/genres/admin/nodes/:id', optionalAuth, async (req: Request,
         descriptionI18n: true,
         example: true,
         exampleI18n: true,
+        soundCueTracks: true,
+        origin: true,
+        era: true,
+        bpm: true,
+        backgroundImageUrl: true,
         spotifyTrackUrl: true,
         wikipediaUrl: true,
         keyArtists: true,
@@ -17794,12 +17958,18 @@ router.patch('/learn/genres/admin/nodes/:id', optionalAuth, async (req: Request,
         select: {
           id: true,
           name: true,
+          nameI18n: true,
           slug: true,
           path: true,
           description: true,
           descriptionI18n: true,
           example: true,
           exampleI18n: true,
+          soundCueTracks: true,
+          origin: true,
+          era: true,
+          bpm: true,
+          backgroundImageUrl: true,
           spotifyTrackUrl: true,
           wikipediaUrl: true,
           keyArtists: true,
@@ -17817,12 +17987,18 @@ router.patch('/learn/genres/admin/nodes/:id', optionalAuth, async (req: Request,
     ok(res, {
       id: updated.id,
       name: updated.name,
+      nameI18n: resolveTriTextWithFallback(updated.nameI18n ?? null, updated.name ?? ''),
       slug: updated.slug,
       path: updated.path,
       description: updated.description ?? '',
       descriptionI18n: resolveTriTextWithFallback(updated.descriptionI18n ?? null, updated.description ?? ''),
       example: updated.example ?? '',
       exampleI18n: resolveTriTextWithFallback(updated.exampleI18n ?? null, updated.example ?? ''),
+      soundCueTracks: normalizeGenreSoundCueTracks(updated.soundCueTracks),
+      origin: updated.origin ?? '',
+      era: updated.era ?? '',
+      bpm: updated.bpm ?? '',
+      backgroundImageURL: updated.backgroundImageUrl ?? '',
       spotifyTrackURL: updated.spotifyTrackUrl ?? '',
       wikipediaURL: updated.wikipediaUrl ?? '',
       keyArtists: updated.keyArtists,

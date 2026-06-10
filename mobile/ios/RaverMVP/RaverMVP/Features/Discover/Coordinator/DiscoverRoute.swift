@@ -1,6 +1,7 @@
 import SwiftUI
 
 enum DiscoverRoute: Hashable {
+    case genreDetail(genreID: String, prefetchedGenre: LearnGenreDetail? = nil)
     case labelDetail(labelID: String, prefetchedLabel: LearnLabel? = nil)
     case festivalDetail(festivalID: String, prefetchedFestival: LearnFestival? = nil)
     case setDetail(setID: String)
@@ -57,6 +58,13 @@ func makeDiscoverRouteDestination(
     appContainer: AppContainer
 ) -> some View {
     switch route {
+    case .genreDetail(let genreID, let prefetchedGenre):
+        DiscoverGenreDetailLoaderView(
+            genreID: genreID,
+            prefetchedGenre: prefetchedGenre,
+            repository: appContainer.discoverWikiRepository
+        )
+
     case .labelDetail(let labelID, let prefetchedLabel):
         DiscoverLabelDetailLoaderView(
             labelID: labelID,
@@ -146,6 +154,48 @@ private struct DiscoverRouteLoaderScaffold<Content: View>: View {
             case .success:
                 content()
             }
+        }
+    }
+}
+
+private struct DiscoverGenreDetailLoaderView: View {
+    let genreID: String
+    let prefetchedGenre: LearnGenreDetail?
+    let repository: DiscoverWikiRepository
+
+    @State private var genre: LearnGenreDetail?
+    @State private var phase: LoadPhase = .idle
+
+    var body: some View {
+        DiscoverRouteLoaderScaffold(phase: phase) {
+            Task { await loadGenre(force: true) }
+        } content: {
+            if let genre {
+                LearnGenreDetailView(genre: genre)
+            } else {
+                Color.clear
+            }
+        }
+        .task {
+            if let prefetchedGenre, genre == nil {
+                genre = prefetchedGenre
+                phase = .success
+            }
+            await loadGenre(force: false)
+        }
+    }
+
+    @MainActor
+    private func loadGenre(force: Bool) async {
+        if genre != nil && !force { return }
+        if genre == nil {
+            phase = .initialLoading
+        }
+        do {
+            genre = try await repository.fetchLearnGenreDetail(id: genreID)
+            phase = .success
+        } catch {
+            phase = .failure(message: error.userFacingMessage ?? LT("风格加载失败，请稍后重试", "Failed to load genre. Please try again later.", "ジャンルを読み込めませんでした。時間をおいて再試行してください。"))
         }
     }
 }

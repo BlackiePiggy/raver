@@ -1962,11 +1962,16 @@ struct CreateRatingCommentInput: Codable {
 struct LearnGenreNode: Codable, Identifiable, Hashable {
     let id: String
     var name: String
+    var nameI18n: WebBiText? = nil
     var path: String?
     var description: String
     var descriptionI18n: WebBiText? = nil
     var example: String?
     var exampleI18n: WebBiText? = nil
+    var origin: String? = nil
+    var era: String? = nil
+    var bpm: String? = nil
+    var backgroundImageURL: String? = nil
     var spotifyTrackURL: String?
     var wikipediaURL: String?
     var keyArtists: [String]?
@@ -1984,15 +1989,37 @@ struct LearnGenreTreeSummaryNode: Codable, Identifiable, Hashable {
 struct LearnGenreDetail: Codable, Identifiable, Hashable {
     let id: String
     var name: String
+    var nameI18n: WebBiText? = nil
     var path: String?
     var description: String
     var descriptionI18n: WebBiText? = nil
     var example: String?
     var exampleI18n: WebBiText? = nil
+    var soundCueTracks: [LearnGenreSoundCueTrack]? = nil
+    var origin: String? = nil
+    var era: String? = nil
+    var bpm: String? = nil
+    var backgroundImageURL: String? = nil
     var spotifyTrackURL: String?
     var wikipediaURL: String?
     var keyArtists: [String]?
     var keyArtistBindings: [LearnGenreKeyArtistBinding]?
+}
+
+struct LearnGenreSoundCueTrack: Codable, Hashable, Identifiable {
+    var id: String {
+        let titlePart = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let artistPart = artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return "\(titlePart)|\(artistPart)"
+    }
+
+    var title: String
+    var artist: String
+    var spotifyUrl: String? = nil
+    var appleMusicUrl: String? = nil
+    var neteaseUrl: String? = nil
+    var soundcloudUrl: String? = nil
+    var beatportUrl: String? = nil
 }
 
 struct LearnGenreKeyArtistBinding: Codable, Identifiable, Hashable {

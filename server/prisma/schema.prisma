@@ -1070,12 +1070,18 @@ model RankingEntry {
 model Genre {
   id                String   @id @default(uuid())
   name              String
+  nameI18n          Json?    @map("name_i18n")
   slug              String   @unique
   path              String   @unique
   description       String?  @db.Text
   descriptionI18n   Json?    @map("description_i18n")
   example           String?
   exampleI18n       Json?    @map("example_i18n")
+  soundCueTracks    Json?    @map("sound_cue_tracks")
+  origin            String?
+  era               String?
+  bpm               String?
+  backgroundImageUrl String?  @map("background_image_url") @db.Text
   spotifyTrackUrl   String?  @map("spotify_track_url") @db.Text
   wikipediaUrl      String?  @map("wikipedia_url") @db.Text
   keyArtists        String[] @default([]) @map("key_artists")

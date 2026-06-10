@@ -12,15 +12,31 @@ export type GenreKeyArtistBinding = {
   } | null;
 };
 
+export type GenreSoundCueTrack = {
+  title: string;
+  artist: string;
+  spotifyUrl: string | null;
+  appleMusicUrl: string | null;
+  neteaseUrl: string | null;
+  soundcloudUrl: string | null;
+  beatportUrl: string | null;
+};
+
 export type GenreAdminNode = {
   id: string;
   name: string;
+  nameI18n: Record<string, string> | null;
   slug?: string;
   path: string;
   description: string;
   descriptionI18n: Record<string, string> | null;
   example: string;
   exampleI18n: Record<string, string> | null;
+  soundCueTracks: GenreSoundCueTrack[];
+  origin: string;
+  era: string;
+  bpm: string;
+  backgroundImageURL: string;
   spotifyTrackURL: string;
   wikipediaURL: string;
   keyArtists: string[];
@@ -66,6 +82,12 @@ export const genreAdminApi = {
       descriptionI18n?: Record<string, string> | null;
       example?: string | null;
       exampleI18n?: Record<string, string> | null;
+      soundCueTracks?: GenreSoundCueTrack[];
+      origin?: string | null;
+      era?: string | null;
+      bpm?: string | null;
+      backgroundImageURL?: string | null;
+      nameI18n?: Record<string, string> | null;
       spotifyTrackURL?: string | null;
       wikipediaURL?: string | null;
     }
