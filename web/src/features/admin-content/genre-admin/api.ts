@@ -1,4 +1,5 @@
 import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
+import { uploadMediaWithFetcher } from '@/lib/api/upload-media';
 import { getApiUrl } from '@/lib/config';
 
 export type GenreKeyArtistBinding = {
@@ -52,6 +53,12 @@ type Envelope<T> = {
   data: T;
 };
 
+type GenreImageUploadResponse = {
+  url: string;
+  originalUrl?: string | null;
+  fileName?: string | null;
+};
+
 const buildGenreTree = (items: GenreAdminNode[]): GenreAdminNode[] => {
   const map = new Map<string, GenreAdminNode>();
   for (const item of items) {
@@ -70,6 +77,38 @@ const buildGenreTree = (items: GenreAdminNode[]): GenreAdminNode[] => {
 };
 
 export const genreAdminApi = {
+  async uploadImage(
+    file: File,
+    options: {
+      usage: 'background';
+      draftId: string;
+    }
+  ): Promise<GenreImageUploadResponse> {
+    return uploadMediaWithFetcher({
+      url: getApiUrl('/v1/learn/genres/upload-image'),
+      file,
+      fields: {
+        usage: options.usage,
+        draftId: options.draftId,
+      },
+      fallbackError: '流派背景图上传失败',
+      invalidResponseError: '流派背景图上传成功，但未返回有效图片地址',
+    });
+  },
+
+  async deleteImages(input: {
+    draftId: string;
+    urls: string[];
+  }): Promise<void> {
+    await authenticatedJsonFetch<{ success: true }>(
+      getApiUrl('/v1/learn/genres/delete-images'),
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
+    );
+  },
+
   async fetchTree(): Promise<{ items: GenreAdminNode[] }> {
     const payload = await authenticatedJsonFetch<Envelope<{ items: GenreAdminNode[] }>>(getApiUrl('/v1/learn/genres/admin/tree'));
     return {

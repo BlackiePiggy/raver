@@ -19,6 +19,8 @@
     "genres:import:sunburst": "ts-node prisma/import-sunburst-genres.ts",
     "genres:backfill:i18n": "ts-node prisma/backfill-genre-i18n.ts",
     "genres:apply:i18n": "ts-node prisma/apply-genre-i18n-translations.ts",
+    "genres:backfill:bindings": "ts-node prisma/backfill-genre-id-bindings.ts",
+    "genres:backfill:bindings:apply": "ts-node prisma/backfill-genre-id-bindings.ts --apply",
     "djs:import:edmdd": "ts-node prisma/import-edmdancedirectory-djs.ts",
     "djs:avatars:oss": "ts-node prisma/upload-dj-avatars-to-oss.ts",
     "avatars:defaults:oss": "ts-node prisma/upload-default-avatars-to-oss.ts",

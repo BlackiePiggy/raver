@@ -26,6 +26,7 @@ export const createDJStudioDraft = (initialName = ''): DJStudioDraft => ({
   name: emptyLocalizedText(initialName),
   aliases: [''],
   genres: [''],
+  genreBindings: [],
   bio: emptyLocalizedText(),
   country: emptyLocalizedText(),
   avatarImage: null,
@@ -59,6 +60,7 @@ export const hydrateDJStudioDraftFromDJ = (dj: DJStudioLoadedDJ): DJStudioDraft 
   name: fromNullableLocalizedText(dj.nameI18n, dj.name),
   aliases: (dj.aliases ?? []).length ? [...(dj.aliases ?? [])] : [''],
   genres: (dj.genres ?? []).length ? [...(dj.genres ?? [])] : [''],
+  genreBindings: Array.isArray(dj.genreBindings) ? [...dj.genreBindings] : [],
   bio: fromNullableLocalizedText(dj.bioI18n, dj.bio ?? ''),
   country: fromNullableLocalizedText(dj.countryI18n, dj.country ?? ''),
   avatarImage: dj.avatarUrl

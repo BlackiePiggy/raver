@@ -55,6 +55,13 @@ export const mapDJStudioDraftToCreateInput = (draft: DJStudioDraft): DJStudioCre
   spotifyId: trimIdOrNull(draft.spotifyId),
   aliases: normalizeStringArray(draft.aliases, INPUT_LIMITS.dj.alias, INPUT_LIMITS.dj.aliasesMaxItems),
   genres: normalizeStringArray(draft.genres, INPUT_LIMITS.dj.genre, INPUT_LIMITS.dj.genresMaxItems),
+  genreBindings: draft.genreBindings
+    .map((binding) => ({
+      genreId: trimSingleLineOrNull(binding.genreId, 128) || '',
+      label: trimSingleLineOrNull(binding.label, INPUT_LIMITS.dj.genre) || '',
+      path: trimSingleLineOrNull(binding.path, 255),
+    }))
+    .filter((binding) => Boolean(binding.genreId)),
   bio: trimMultilineOrNull(primaryText(draft.bio), INPUT_LIMITS.dj.bio),
   bioI18n: normalizedLocalizedText(draft.bio, INPUT_LIMITS.dj.bio, true),
   country: trimSingleLineOrNull(primaryText(draft.country), INPUT_LIMITS.dj.country),
@@ -90,6 +97,13 @@ export const mapDJStudioDraftToUpdateInput = (draft: DJStudioDraft): DJStudioUpd
   nameI18n: normalizedLocalizedText(draft.name, INPUT_LIMITS.dj.name),
   aliases: normalizeStringArray(draft.aliases, INPUT_LIMITS.dj.alias, INPUT_LIMITS.dj.aliasesMaxItems),
   genres: normalizeStringArray(draft.genres, INPUT_LIMITS.dj.genre, INPUT_LIMITS.dj.genresMaxItems),
+  genreBindings: draft.genreBindings
+    .map((binding) => ({
+      genreId: trimSingleLineOrNull(binding.genreId, 128) || '',
+      label: trimSingleLineOrNull(binding.label, INPUT_LIMITS.dj.genre) || '',
+      path: trimSingleLineOrNull(binding.path, 255),
+    }))
+    .filter((binding) => Boolean(binding.genreId)),
   bio: trimMultilineOrNull(primaryText(draft.bio), INPUT_LIMITS.dj.bio),
   bioI18n: normalizedLocalizedText(draft.bio, INPUT_LIMITS.dj.bio, true),
   avatarUrl: trimUrlOrNull(draft.avatarImage?.remoteUrl),

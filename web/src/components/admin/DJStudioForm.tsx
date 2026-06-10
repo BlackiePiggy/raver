@@ -9,6 +9,8 @@ import { Loader2, RefreshCw, X } from 'lucide-react';
 import { LocalizedTextField, MultilingualEditorOverlay, type LocalizedFieldKind, type LocalizedLocaleKey } from '@/components/admin/LocalizedTextEditor';
 import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
+import { authenticatedJsonFetch } from '@/lib/auth/authenticated-fetch';
+import { getApiUrl } from '@/lib/config';
 import { INPUT_LIMITS, countText } from '@/lib/input-rules';
 import {
   djStudioApi,
@@ -17,6 +19,7 @@ import {
   validateDJStudioDraft,
   type DJStudioCreateResult,
   type DJStudioDraft,
+  type DJStudioGenreBinding,
   type DJStudioSourceCandidate,
   type DJStudioSourceFieldKey,
   type DJStudioSourceKey,
@@ -95,6 +98,25 @@ type DJStudioSourceReplaceState = {
   sources: Record<Exclude<DJStudioSourceKey, 'keep'>, DJStudioSourceGroupState>;
   fieldSource: Record<DJStudioSourceFieldKey, DJStudioSourceKey>;
   avatarSource: DJStudioSourceKey;
+};
+
+type GenreTreeSummaryNode = {
+  id: string;
+  name: string;
+  path?: string | null;
+  children?: GenreTreeSummaryNode[];
+};
+
+type GenreSearchCandidate = {
+  id: string;
+  name: string;
+  path: string;
+};
+
+type DJGenreChip = {
+  key: string;
+  label: string;
+  binding: DJStudioGenreBinding | null;
 };
 
 function Section({
@@ -221,6 +243,31 @@ const sourceValueToList = (value: unknown): string[] => {
     .filter(Boolean);
 };
 
+const normalizeGenreLabel = (value: string) => value.trim().toLowerCase();
+
+const dedupeGenreLabels = (items: string[]): string[] => {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const trimmed = item.trim();
+    const key = normalizeGenreLabel(trimmed);
+    if (!trimmed || seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+};
+
+const flattenGenreTree = (items: GenreTreeSummaryNode[]): GenreSearchCandidate[] =>
+  items.flatMap((item) => [
+    {
+      id: item.id,
+      name: item.name,
+      path: String(item.path || item.name || '').trim(),
+    },
+    ...flattenGenreTree(item.children ?? []),
+  ]);
+
 const createInitialSourceReplaceState = (query: string): DJStudioSourceReplaceState => ({
   query,
   sourceEnabled: { spotify: true, discogs: true, soundcloud: true },
@@ -293,6 +340,9 @@ export default function DJStudioForm({
   const [sourceReplace, setSourceReplace] = useState<DJStudioSourceReplaceState>(() =>
     createInitialSourceReplaceState(firstFilledText(draft.name.zh, draft.name.en, draft.name.ja, draft.name.enFull))
   );
+  const [genreTree, setGenreTree] = useState<GenreTreeSummaryNode[]>([]);
+  const [genreSearch, setGenreSearch] = useState('');
+  const [genreSearchFocused, setGenreSearchFocused] = useState(false);
 
   useOverlayBodyLock(showSourceOverlay);
 
@@ -316,11 +366,85 @@ export default function DJStudioForm({
     }
   }, [currentStep, mode]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadGenreTree = async () => {
+      try {
+        const payload = await authenticatedJsonFetch<{ data: GenreTreeSummaryNode[] }>(
+          getApiUrl('/v1/learn/genres/tree-summary')
+        );
+        if (!cancelled) {
+          setGenreTree(Array.isArray(payload.data) ? payload.data : []);
+        }
+      } catch {
+        if (!cancelled) {
+          setGenreTree([]);
+        }
+      }
+    };
+
+    void loadGenreTree();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const canSubmit = useMemo(() => Object.keys(validateDJStudioDraft(draft)).length === 0, [draft]);
   const currentStepItem = DJ_STUDIO_STEPS[currentStep];
   const totalSteps = DJ_STUDIO_STEPS.length;
   const displayName = firstFilledText(draft.name.zh, draft.name.en, draft.name.ja, draft.name.enFull) || 'DJ 草稿';
   const currentDraftFieldMap = useMemo(() => buildCurrentDraftFieldValueMap(draft), [draft]);
+  const genreLabels = useMemo(() => dedupeGenreLabels(draft.genres), [draft.genres]);
+  const flattenedGenres = useMemo(() => flattenGenreTree(genreTree), [genreTree]);
+  const genreChips = useMemo<DJGenreChip[]>(() => {
+    const chips: DJGenreChip[] = [];
+    const seen = new Set<string>();
+
+    draft.genreBindings.forEach((binding) => {
+      const label = binding.label.trim();
+      const genreId = binding.genreId.trim();
+      if (!label || !genreId || seen.has(`genre:${genreId}`)) return;
+      seen.add(`genre:${genreId}`);
+      seen.add(`label:${normalizeGenreLabel(label)}`);
+      chips.push({
+        key: `genre:${genreId}`,
+        label,
+        binding,
+      });
+    });
+
+    genreLabels.forEach((label) => {
+      const key = `label:${normalizeGenreLabel(label)}`;
+      if (!label.trim() || seen.has(key)) return;
+      seen.add(key);
+      chips.push({
+        key,
+        label,
+        binding: null,
+      });
+    });
+
+    return chips;
+  }, [draft.genreBindings, genreLabels]);
+  const selectedGenreIds = useMemo(
+    () => new Set(draft.genreBindings.map((binding) => binding.genreId.trim()).filter(Boolean)),
+    [draft.genreBindings]
+  );
+  const genreSearchCandidates = useMemo(() => {
+    const keyword = genreSearch.trim().toLowerCase();
+    if (!keyword) return [];
+    return flattenedGenres
+      .filter((genre) => !selectedGenreIds.has(genre.id))
+      .filter((genre) => [genre.name, genre.path].some((value) => value.toLowerCase().includes(keyword)))
+      .slice(0, 8);
+  }, [flattenedGenres, genreSearch, selectedGenreIds]);
+  const canAddCustomGenreTag = useMemo(() => {
+    const keyword = genreSearch.trim();
+    if (!keyword || countText(keyword) > INPUT_LIMITS.dj.genre) return false;
+    return !genreLabels.some((label) => normalizeGenreLabel(label) === normalizeGenreLabel(keyword));
+  }, [genreLabels, genreSearch]);
   const hasPlatformLink = [
     draft.spotifyUrl,
     draft.instagramUrl,
@@ -402,6 +526,47 @@ export default function DJStudioForm({
       const next = current.filter((_, itemIndex) => itemIndex !== index);
       return next.length ? next : [''];
     });
+  };
+
+  const updateGenreLabels = (updater: (current: string[]) => string[]) => {
+    setDraft((current) => ({
+      ...current,
+      genres: dedupeGenreLabels(updater(dedupeGenreLabels(current.genres))).slice(0, INPUT_LIMITS.dj.genresMaxItems),
+    }));
+  };
+
+  const handleSelectGenreCandidate = (candidate: GenreSearchCandidate) => {
+    setDraft((current) => {
+      const hasBinding = current.genreBindings.some((binding) => binding.genreId === candidate.id);
+      const nextBindings = hasBinding
+        ? current.genreBindings
+        : [...current.genreBindings, { genreId: candidate.id, label: candidate.name, path: candidate.path }];
+      return {
+        ...current,
+        genreBindings: nextBindings,
+        genres: dedupeGenreLabels([...dedupeGenreLabels(current.genres), candidate.name]).slice(0, INPUT_LIMITS.dj.genresMaxItems),
+      };
+    });
+    setGenreSearch('');
+  };
+
+  const handleAddCustomGenreTag = () => {
+    const keyword = genreSearch.trim();
+    if (!keyword || !canAddCustomGenreTag) return;
+    updateGenreLabels((current) => [...current, keyword.slice(0, INPUT_LIMITS.dj.genre)]);
+    setGenreSearch('');
+  };
+
+  const handleRemoveGenreTag = (chip: DJGenreChip) => {
+    setDraft((current) => ({
+      ...current,
+      genreBindings: chip.binding
+        ? current.genreBindings.filter((binding) => binding.genreId !== chip.binding?.genreId)
+        : current.genreBindings,
+      genres: dedupeGenreLabels(current.genres).filter(
+        (item) => normalizeGenreLabel(item) !== normalizeGenreLabel(chip.label)
+      ),
+    }));
   };
 
   const getSelectedSourceCandidate = (
@@ -576,6 +741,7 @@ export default function DJStudioForm({
             nextDraft.genres = sourceValueToList(selectedCandidate?.genres).length
               ? sourceValueToList(selectedCandidate?.genres)
               : [''];
+            nextDraft.genreBindings = [];
             break;
           case 'bio':
             nextDraft.bio = {
@@ -1268,17 +1434,85 @@ export default function DJStudioForm({
               onRemove={(index) => handleListRemove('aliases', index)}
             />
 
-            <DynamicStringListField
+            <Field
               label="风格（Genres）"
-              items={draft.genres}
-              placeholder="例如：Progressive House"
-              hint="风格也按显式加号新增，不再依赖换行。"
-              itemMax={INPUT_LIMITS.dj.genre}
-              maxItems={INPUT_LIMITS.dj.genresMaxItems}
-              onChange={(index, value) => handleListChange('genres', index, value)}
-              onAdd={() => handleListAdd('genres')}
-              onRemove={(index) => handleListRemove('genres', index)}
-            />
+              hint={`最多 ${INPUT_LIMITS.dj.genresMaxItems} 个；点击候选绑定库内流派，也可以把库里没有的风格作为自定义标签加入。`}
+            >
+              <div className="rounded-[28px] border border-black/10 bg-white/80 p-4">
+                <div className="flex flex-wrap gap-2">
+                  {genreChips.map((chip) => (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      onClick={() => handleRemoveGenreTag(chip)}
+                      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                        chip.binding
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                          : 'border-dashed border-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100'
+                      }`}
+                      title={chip.binding?.path || chip.label}
+                    >
+                      <span>{chip.label}</span>
+                      <span className="text-[10px] opacity-70">{chip.binding ? '已绑定' : '自定义'}</span>
+                      <X className="h-3.5 w-3.5 opacity-60" />
+                    </button>
+                  ))}
+                  {genreChips.length === 0 ? (
+                    <div className="rounded-full border border-dashed border-gray-200 px-3 py-1.5 text-xs text-gray-400">
+                      还没有添加任何流派标签
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="relative mt-4">
+                  <input
+                    value={genreSearch}
+                    onChange={(event) => setGenreSearch(event.target.value)}
+                    onFocus={() => setGenreSearchFocused(true)}
+                    onBlur={() => window.setTimeout(() => setGenreSearchFocused(false), 120)}
+                    placeholder="搜索流派名称或路径，也可以直接添加自定义标签"
+                    className={textInputClassName}
+                    disabled={submitting || genreChips.length >= INPUT_LIMITS.dj.genresMaxItems}
+                    maxLength={INPUT_LIMITS.dj.genre}
+                  />
+                  {genreSearchFocused && genreSearchCandidates.length > 0 ? (
+                    <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
+                      {genreSearchCandidates.map((candidate) => (
+                        <button
+                          key={candidate.id}
+                          type="button"
+                          onClick={() => handleSelectGenreCandidate(candidate)}
+                          className="block w-full border-b border-gray-100 px-4 py-3 text-left transition last:border-b-0 hover:bg-gray-50"
+                        >
+                          <div className="text-sm font-medium text-gray-900">{candidate.name}</div>
+                          <div className="mt-1 text-xs text-gray-500">{candidate.path}</div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAddCustomGenreTag}
+                    disabled={
+                      submitting ||
+                      genreChips.length >= INPUT_LIMITS.dj.genresMaxItems ||
+                      !canAddCustomGenreTag
+                    }
+                    className="rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 disabled:opacity-50"
+                  >
+                    添加自定义标签
+                  </button>
+                  <p className="text-xs text-black/40">
+                    {genreChips.length >= INPUT_LIMITS.dj.genresMaxItems
+                      ? `已达到 ${INPUT_LIMITS.dj.genresMaxItems} 个标签上限`
+                      : `当前 ${genreChips.length}/${INPUT_LIMITS.dj.genresMaxItems} 个标签`}
+                  </p>
+                </div>
+              </div>
+            </Field>
 
             <LocalizedTextField
               label="国家 / 地区"

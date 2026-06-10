@@ -21,6 +21,7 @@ private struct UserProfileScreen: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.appPush) private var appPush
+    @Environment(\.discoverPush) private var discoverPush
     @Environment(\.profilePush) private var profilePush
     @StateObject private var viewModel: UserProfileViewModel
     @State private var isStartingDirectChat = false
@@ -114,6 +115,10 @@ private struct UserProfileScreen: View {
                                 },
                                 onFriendsTap: {
                                     profilePush(.followList(userID: profile.id, kind: .friends))
+                                },
+                                onGenreTap: { binding in
+                                    guard let genreID = binding.normalizedGenreID else { return }
+                                    discoverPush(.genreDetail(genreID: genreID))
                                 }
                             ) {
                                 if !isCurrentUser(profile) {

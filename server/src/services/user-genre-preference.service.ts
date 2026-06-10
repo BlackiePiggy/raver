@@ -1,5 +1,11 @@
 import { Prisma } from '@prisma/client';
 
+export type UserGenrePreferenceBinding = {
+  genreId: string | null;
+  label: string;
+  path: string | null;
+};
+
 const normalizeGenreKey = (value: unknown): string => String(value || '').trim().toLowerCase();
 
 export const normalizeGenrePreferenceKeys = (values: unknown): string[] => {
@@ -70,4 +76,33 @@ export const resolveUserGenrePreferenceMap = async (
     result.set(row.userId, bucket);
   }
   return result;
+};
+
+export const resolveUserGenrePreferenceBindings = async (
+  db: Prisma.TransactionClient | Prisma.DefaultPrismaClient,
+  userId: string
+): Promise<UserGenrePreferenceBinding[]> => {
+  const keys = await resolveUserGenrePreferences(db, userId);
+  if (keys.length === 0) return [];
+
+  const genres = await db.genre.findMany({
+    where: {
+      id: { in: keys },
+    },
+    select: {
+      id: true,
+      name: true,
+      path: true,
+    },
+  });
+
+  const genreMap = new Map(genres.map((genre) => [genre.id, genre] as const));
+  return keys.map((key) => {
+    const matched = genreMap.get(key) || null;
+    return {
+      genreId: matched?.id ?? null,
+      label: matched?.name ?? key,
+      path: matched?.path ?? null,
+    };
+  });
 };

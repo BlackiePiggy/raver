@@ -366,6 +366,7 @@ struct PersonalityResultPayload: Decodable, Hashable {
     let subtitle: String?
     let slangTagline: String?
     let genreMapping: String?
+    let genreBindings: [WebGenreTagBinding]?
     let description: String
     let imageUrl: String?
     let isHidden: Bool

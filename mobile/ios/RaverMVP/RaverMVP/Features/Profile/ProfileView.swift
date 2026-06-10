@@ -49,7 +49,9 @@ enum PersonalitySubmissionErrorMapper {
 
 struct ProfileView: View {
     @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var appContainer: AppContainer
     @Environment(\.appPush) private var appPush
+    @Environment(\.discoverPush) private var discoverPush
     @Environment(\.profilePush) private var profilePush
     @ObservedObject private var viewModel: ProfileViewModel
     @Namespace private var profilePostTabNamespace
@@ -154,6 +156,9 @@ struct ProfileView: View {
                                 },
                                 onFriendsTap: {
                                     profilePush(.followList(userID: currentUserID, kind: .friends))
+                                },
+                                onGenreTap: { binding in
+                                    openGenreDetailIfAvailable(binding)
                                 }
                             )
 
@@ -304,6 +309,11 @@ struct ProfileView: View {
         } catch {
             viewModel.error = error.userFacingMessage ?? LT("打开二维码失败，请稍后重试。", "Failed to open QR code. Please try again later.", "Failed to open QR code. Please try again later.")
         }
+    }
+
+    private func openGenreDetailIfAvailable(_ binding: WebGenreTagBinding) {
+        guard let genreID = binding.normalizedGenreID else { return }
+        discoverPush(.genreDetail(genreID: genreID))
     }
 
     private var profileQuickActions: some View {
@@ -807,6 +817,7 @@ struct ProfileHeaderCard<Actions: View>: View {
     let onFollowersTap: (() -> Void)?
     let onFollowingTap: (() -> Void)?
     let onFriendsTap: (() -> Void)?
+    let onGenreTap: ((WebGenreTagBinding) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
     @State private var isBioExpanded = false
     @ViewBuilder let actions: () -> Actions
@@ -822,6 +833,7 @@ struct ProfileHeaderCard<Actions: View>: View {
         onFollowersTap: (() -> Void)? = nil,
         onFollowingTap: (() -> Void)? = nil,
         onFriendsTap: (() -> Void)? = nil,
+        onGenreTap: ((WebGenreTagBinding) -> Void)? = nil,
         @ViewBuilder actions: @escaping () -> Actions = { EmptyView() }
     ) {
         self.profile = profile
@@ -834,6 +846,7 @@ struct ProfileHeaderCard<Actions: View>: View {
         self.onFollowersTap = onFollowersTap
         self.onFollowingTap = onFollowingTap
         self.onFriendsTap = onFriendsTap
+        self.onGenreTap = onGenreTap
         self.actions = actions
     }
 
@@ -846,8 +859,9 @@ struct ProfileHeaderCard<Actions: View>: View {
                     bioView
                 }
 
-                if !profile.tags.isEmpty {
-                    tagsFlow(profile.tags)
+                let tagBindings = normalizedTagBindings
+                if !tagBindings.isEmpty {
+                    tagsFlow(tagBindings)
                 }
 
                 actions()
@@ -950,6 +964,36 @@ struct ProfileHeaderCard<Actions: View>: View {
             }
         }
         .frame(height: 250)
+    }
+
+    private var normalizedTagBindings: [WebGenreTagBinding] {
+        var result: [WebGenreTagBinding] = []
+        var seenGenreIDs = Set<String>()
+        var seenLabels = Set<String>()
+
+        for binding in profile.tagBindings ?? [] {
+            let label = binding.label.trimmingCharacters(in: .whitespacesAndNewlines)
+            let genreID = binding.normalizedGenreID
+            let labelKey = label.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
+            guard !label.isEmpty else { continue }
+            if let genreID {
+                guard seenGenreIDs.insert(genreID).inserted else { continue }
+            } else if seenLabels.contains(labelKey) {
+                continue
+            }
+            seenLabels.insert(labelKey)
+            result.append(WebGenreTagBinding(genreId: genreID, label: label, path: binding.path))
+        }
+
+        for tag in profile.tags {
+            let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
+            guard !trimmed.isEmpty, !seenLabels.contains(key) else { continue }
+            seenLabels.insert(key)
+            result.append(WebGenreTagBinding(genreId: nil, label: trimmed, path: nil))
+        }
+
+        return result
     }
 
     @ViewBuilder
@@ -1162,22 +1206,26 @@ struct ProfileHeaderCard<Actions: View>: View {
     }
 
     @ViewBuilder
-    private func tagsFlow(_ tags: [String]) -> some View {
+    private func tagsFlow(_ bindings: [WebGenreTagBinding]) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(Array(tags.prefix(12).enumerated()), id: \.offset) { _, tag in
-                    Text(formattedTagText(tag))
-                        .font(.caption)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(RaverTheme.card)
-                        .clipShape(Rectangle())
+                ForEach(Array(bindings.prefix(12).enumerated()), id: \.offset) { _, binding in
+                    if binding.normalizedGenreID != nil, let onGenreTap {
+                        Button {
+                            onGenreTap(binding)
+                        } label: {
+                            tagChipLabel(formattedTagText(binding.label))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint(LT("查看该流派详情", "View genre details", "ジャンル詳細を見る"))
+                        .accessibilityIdentifier("profile.genre.\(binding.normalizedGenreID ?? binding.id)")
+                    } else {
+                        tagChipLabel(formattedTagText(binding.label))
+                    }
                 }
 
-                if tags.count > 12 {
-                    Text("+\(tags.count - 12)")
+                if bindings.count > 12 {
+                    Text("+\(bindings.count - 12)")
                         .font(.caption.bold())
                         .foregroundStyle(RaverTheme.secondaryText)
                         .padding(.horizontal, 10)
@@ -1188,6 +1236,17 @@ struct ProfileHeaderCard<Actions: View>: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func tagChipLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.caption)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(RaverTheme.card)
+            .clipShape(Rectangle())
     }
 
     @ViewBuilder
@@ -5893,6 +5952,7 @@ final class PersonalityFlowViewModel: ObservableObject {
 
 struct PersonalityFlowView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.discoverPush) private var discoverPush
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: PersonalityFlowViewModel
     private let optionLetters = ["A", "B", "C", "D", "E", "F"]
@@ -6497,18 +6557,14 @@ struct PersonalityFlowView: View {
 
                     VStack(spacing: 14) {
                         // 专属曲风卡片（genre 拆成 chip tags）
-                        if let genre = result.result.genreMapping, !genre.isEmpty {
+                        let genreBindings = normalizedGenreBindings(from: result.result)
+                        if !genreBindings.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 Label(LT("你的专属曲风", "Your Genre Match", "あなたのジャンル"), systemImage: "music.note")
                                     .font(.headline)
                                     .foregroundStyle(RaverTheme.accent)
 
-                                let genreTags = genre
-                                    .components(separatedBy: CharacterSet(charactersIn: ",，、/"))
-                                    .map { $0.trimmingCharacters(in: .whitespaces) }
-                                    .filter { !$0.isEmpty }
-
-                                genreChipsFlow(genreTags)
+                                genreChipsFlow(genreBindings)
                             }
                         }
 
@@ -6575,26 +6631,23 @@ struct PersonalityFlowView: View {
     }
 
     @ViewBuilder
-    private func genreChipsFlow(_ tags: [String]) -> some View {
+    private func genreChipsFlow(_ bindings: [WebGenreTagBinding]) -> some View {
         // 简单的自动换行 flow layout（使用 LazyVStack + HStack 模拟）
-        let rows = buildRows(tags: tags, containerWidth: UIScreen.main.bounds.width - 80, font: UIFont.systemFont(ofSize: 13, weight: .semibold), spacing: 8)
+        let rows = buildRows(bindings: bindings, containerWidth: UIScreen.main.bounds.width - 80, font: UIFont.systemFont(ofSize: 13, weight: .semibold), spacing: 8)
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 HStack(spacing: 8) {
-                    ForEach(row, id: \.self) { tag in
-                        Text(tag)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(RaverTheme.primaryText)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(RaverTheme.accent.opacity(0.16))
-                            )
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .stroke(RaverTheme.accent.opacity(0.32), lineWidth: 1)
-                            )
+                    ForEach(row) { binding in
+                        if binding.normalizedGenreID != nil {
+                            Button {
+                                openGenreDetailIfAvailable(binding)
+                            } label: {
+                                genreChipLabel(binding.label)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            genreChipLabel(binding.label)
+                        }
                     }
                 }
             }
@@ -6602,25 +6655,55 @@ struct PersonalityFlowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func buildRows(tags: [String], containerWidth: CGFloat, font: UIFont, spacing: CGFloat) -> [[String]] {
-        var rows: [[String]] = []
-        var currentRow: [String] = []
+    private func buildRows(bindings: [WebGenreTagBinding], containerWidth: CGFloat, font: UIFont, spacing: CGFloat) -> [[WebGenreTagBinding]] {
+        var rows: [[WebGenreTagBinding]] = []
+        var currentRow: [WebGenreTagBinding] = []
         var currentWidth: CGFloat = 0
         let paddingH: CGFloat = 24 + 8 // horizontal padding inside chip + spacing
 
-        for tag in tags {
-            let tagWidth = (tag as NSString).size(withAttributes: [.font: font]).width + paddingH
+        for binding in bindings {
+            let tagWidth = (binding.label as NSString).size(withAttributes: [.font: font]).width + paddingH
             if currentWidth + tagWidth + spacing > containerWidth, !currentRow.isEmpty {
                 rows.append(currentRow)
-                currentRow = [tag]
+                currentRow = [binding]
                 currentWidth = tagWidth
             } else {
-                currentRow.append(tag)
+                currentRow.append(binding)
                 currentWidth += tagWidth + spacing
             }
         }
         if !currentRow.isEmpty { rows.append(currentRow) }
         return rows
+    }
+
+    private func genreChipLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(RaverTheme.primaryText)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(RaverTheme.accent.opacity(0.16))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(RaverTheme.accent.opacity(0.32), lineWidth: 1)
+            )
+    }
+
+    private func normalizedGenreBindings(from result: PersonalityResultPayload) -> [WebGenreTagBinding] {
+        if let bindings = result.genreBindings, !bindings.isEmpty {
+            return bindings.filter { !$0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        }
+
+        return LearnGenreTagLookup.splitTags(from: result.genreMapping ?? "")
+            .map { WebGenreTagBinding(genreId: nil, label: $0, path: nil) }
+    }
+
+    private func openGenreDetailIfAvailable(_ binding: WebGenreTagBinding) {
+        guard let genreID = binding.normalizedGenreID else { return }
+        discoverPush(.genreDetail(genreID: genreID))
     }
 
     private func disabledReasonText(_ code: String?) -> String {

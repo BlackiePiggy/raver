@@ -3048,6 +3048,7 @@ const ossDjsPrefix = (cleanEnv(process.env.OSS_DJS_PREFIX) || 'wen-jasonlee/djs'
 const ossDjSetsPrefix = (cleanEnv(process.env.OSS_DJ_SETS_PREFIX) || 'wen-jasonlee/dj-sets').replace(/^\/+|\/+$/g, '');
 const ossRatingsPrefix = (cleanEnv(process.env.OSS_RATINGS_PREFIX) || 'wen-jasonlee/ratings').replace(/^\/+|\/+$/g, '');
 const ossWikiBrandsPrefix = (cleanEnv(process.env.OSS_WIKI_BRANDS_PREFIX) || 'wiki/brands').replace(/^\/+|\/+$/g, '');
+const ossLearnGenresPrefix = (cleanEnv(process.env.OSS_LEARN_GENRES_PREFIX) || 'learn/genres').replace(/^\/+|\/+$/g, '');
 const getRuntimeCozeConfig = () =>
   getServerCozeRuntimeConfig({
     ossBucket,
@@ -3634,6 +3635,13 @@ const isWikiBrandDraftOssObjectKey = (objectKey: string, userId: string, draftId
   return objectKey.startsWith(`${ossWikiBrandsPrefix}/drafts/${safeUserId}/${safeDraftId}/`);
 };
 
+const isGenreDraftOssObjectKey = (objectKey: string, userId: string, draftId: string): boolean => {
+  const safeUserId = sanitizeOssPathSegment(userId);
+  const safeDraftId = sanitizeOssPathSegment(draftId);
+  if (!safeUserId || !safeDraftId) return false;
+  return objectKey.startsWith(`${ossLearnGenresPrefix}/drafts/${safeUserId}/${safeDraftId}/`);
+};
+
 const isRatingOssObjectKey = (objectKey: string): boolean => objectKey.startsWith(`${ossRatingsPrefix}/`);
 
 const normalizeDJNameKey = (value: string): string => value.trim().toLowerCase();
@@ -3755,6 +3763,12 @@ type DJStatsInfo = {
   setCount: number;
 };
 
+type DJGenreBindingInfo = {
+  genreId: string;
+  label: string;
+  path: string | null;
+};
+
 const emptyDJStatsInfo: DJStatsInfo = {
   eventCount: 0,
   setCount: 0,
@@ -3762,6 +3776,9 @@ const emptyDJStatsInfo: DJStatsInfo = {
 
 const statsInfoFromRow = (row: any): DJStatsInfo =>
   (row?.__statsInfo as DJStatsInfo | undefined) ?? emptyDJStatsInfo;
+
+const genreBindingInfoFromRow = (row: any): DJGenreBindingInfo[] =>
+  Array.isArray(row?.__genreBindingInfo) ? (row.__genreBindingInfo as DJGenreBindingInfo[]) : [];
 
 const fetchDJContributorInfoMap = async (djIds: string[]) =>
   fetchContributorInfoMap(prisma, 'dj', djIds);
@@ -3819,30 +3836,75 @@ const fetchDJStatsInfoMap = async (djIds: string[]): Promise<Map<string, DJStats
   return map;
 };
 
+const fetchDJGenreBindingInfoMap = async (djIds: string[]): Promise<Map<string, DJGenreBindingInfo[]>> => {
+  const validIds = Array.from(new Set(djIds.map((id) => id.trim()).filter(Boolean)));
+  if (validIds.length === 0) {
+    return new Map();
+  }
+
+  const rows = await prisma.dJGenreBinding.findMany({
+    where: {
+      djId: { in: validIds },
+    },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      djId: true,
+      genreId: true,
+      genre: {
+        select: {
+          name: true,
+          path: true,
+        },
+      },
+    },
+  });
+
+  const map = new Map<string, DJGenreBindingInfo[]>();
+  for (const id of validIds) {
+    map.set(id, []);
+  }
+
+  for (const row of rows) {
+    const bucket = map.get(row.djId) ?? [];
+    bucket.push({
+      genreId: row.genreId,
+      label: row.genre.name,
+      path: row.genre.path ?? null,
+    });
+    map.set(row.djId, bucket);
+  }
+
+  return map;
+};
+
 const attachDJContributorInfo = async (row: any): Promise<any> => {
   if (!row?.id) return row;
-  const [contributorMap, statsMap] = await Promise.all([
+  const [contributorMap, statsMap, genreBindingMap] = await Promise.all([
     fetchDJContributorInfoMap([String(row.id)]),
     fetchDJStatsInfoMap([String(row.id)]),
+    fetchDJGenreBindingInfoMap([String(row.id)]),
   ]);
   return {
     ...row,
     __contributorInfo: contributorMap.get(String(row.id)) ?? emptyContributorInfo,
     __statsInfo: statsMap.get(String(row.id)) ?? emptyDJStatsInfo,
+    __genreBindingInfo: genreBindingMap.get(String(row.id)) ?? [],
   };
 };
 
 const attachDJContributorInfoList = async (rows: any[]): Promise<any[]> => {
   if (rows.length === 0) return rows;
   const ids = rows.map((row) => String(row.id));
-  const [contributorMap, statsMap] = await Promise.all([
+  const [contributorMap, statsMap, genreBindingMap] = await Promise.all([
     fetchDJContributorInfoMap(ids),
     fetchDJStatsInfoMap(ids),
+    fetchDJGenreBindingInfoMap(ids),
   ]);
   return rows.map((row) => ({
     ...row,
     __contributorInfo: contributorMap.get(String(row.id)) ?? emptyContributorInfo,
     __statsInfo: statsMap.get(String(row.id)) ?? emptyDJStatsInfo,
+    __genreBindingInfo: genreBindingMap.get(String(row.id)) ?? [],
   }));
 };
 
@@ -3935,6 +3997,66 @@ const fetchDJWithContributorsById = async (djId: string) =>
     where: { id: djId },
     })
   );
+
+type NormalizedDJGenreBindingInput = {
+  genreId: string;
+  sortOrder: number;
+};
+
+const normalizeDJGenreBindingsInput = (value: unknown): NormalizedDJGenreBindingInput[] => {
+  if (!Array.isArray(value)) return [];
+
+  const items: NormalizedDJGenreBindingInput[] = [];
+  const seen = new Set<string>();
+
+  for (const [index, raw] of value.entries()) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const row = raw as Record<string, unknown>;
+    const genreId = normalizeSubmittedSingleLine(row.genreId, 128);
+    if (!genreId || seen.has(genreId)) continue;
+    seen.add(genreId);
+    items.push({
+      genreId,
+      sortOrder: index + 1,
+    });
+  }
+
+  return items.slice(0, INPUT_LIMITS.dj.genresMaxItems);
+};
+
+const assertValidDJGenreBindingIds = async (bindings: NormalizedDJGenreBindingInput[]): Promise<void> => {
+  if (bindings.length === 0) return;
+  const ids = bindings.map((binding) => binding.genreId);
+  const count = await prisma.genre.count({
+    where: {
+      id: { in: ids },
+    },
+  });
+  if (count !== ids.length) {
+    throw new Error('genreBindings contains unknown genreId');
+  }
+};
+
+const syncDJGenreBindings = async (
+  tx: Prisma.TransactionClient,
+  djId: string,
+  bindings: NormalizedDJGenreBindingInput[]
+): Promise<void> => {
+  await tx.dJGenreBinding.deleteMany({
+    where: { djId },
+  });
+
+  if (bindings.length === 0) return;
+
+  await tx.dJGenreBinding.createMany({
+    data: bindings.map((binding) => ({
+      djId,
+      genreId: binding.genreId,
+      sortOrder: binding.sortOrder,
+    })),
+    skipDuplicates: true,
+  });
+};
 
 const uniqueDJSlugForName = async (name: string): Promise<string> => {
   const base = slugify(name) || `dj-${Date.now()}`;
@@ -4163,6 +4285,22 @@ const buildWikiBrandDraftMediaObjectKey = (
   const safeDraftId = sanitizeOssPathSegment(draftId) || 'unknown-draft';
   const safeUsage = sanitizeOssPathSegment(usage || '') || 'image';
   return `${ossWikiBrandsPrefix}/drafts/${safeUserId}/${safeDraftId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+};
+
+const buildGenreDraftMediaObjectKey = (
+  userId: string,
+  draftId: string,
+  fileName: string,
+  mimeType: string,
+  usage: string | null
+): string => {
+  const rawExt = path.extname(fileName || '').toLowerCase();
+  const mimeExt = normalizedImageExtensionFromMimeType(mimeType);
+  const ext = rawExt === mimeExt ? rawExt : mimeExt;
+  const safeUserId = sanitizeOssPathSegment(userId) || 'unknown-user';
+  const safeDraftId = sanitizeOssPathSegment(draftId) || 'unknown-draft';
+  const safeUsage = sanitizeOssPathSegment(usage || '') || 'image';
+  return `${ossLearnGenresPrefix}/drafts/${safeUserId}/${safeDraftId}/${safeUsage}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
 };
 
 const uploadRemoteDJAvatarToOss = async (
@@ -5286,6 +5424,85 @@ const uploadWikiBrandDraftMediaToOss = async (
     });
 
     return buildWikiBrandUploadResponseFromAsset(asset, normalizedSort);
+  } finally {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+  }
+};
+
+const uploadGenreDraftMediaToOss = async (
+  file: Express.Multer.File,
+  userId: string,
+  draftId: string,
+  usage: 'background'
+): Promise<{
+  assetId: string;
+  url: string;
+  originalUrl: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  width: number | null;
+  height: number | null;
+  ownerType: string;
+  ownerId: string | null;
+}> => {
+  if (!postMediaOssClient) {
+    await fs.promises.unlink(file.path).catch(() => undefined);
+    throw new Error('OSS is not configured. Require OSS_REGION/OSS_ACCESS_KEY_ID/OSS_ACCESS_KEY_SECRET/OSS_BUCKET');
+  }
+
+  try {
+    const fileBuffer = await fs.promises.readFile(file.path);
+    const normalizedUpload = normalizeWikiBrandUploadImage(fileBuffer, file.mimetype, usage);
+    const mimeType = normalizedUpload.mimeType;
+    const normalizedBuffer = normalizedUpload.buffer;
+    const dimensions = inferImageDimensionsFromBuffer(normalizedBuffer, mimeType);
+    const objectKey = buildGenreDraftMediaObjectKey(
+      userId,
+      draftId,
+      file.originalname || file.filename || 'background.jpg',
+      mimeType,
+      usage
+    );
+
+    const putResult = await postMediaOssClient.put(objectKey, normalizedBuffer, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+    const url = normalizeUploadedOssUrl(putResult.url, objectKey);
+    const asset = await mediaAssetService.register({
+      ownerType: 'genre_draft',
+      ownerId: draftId,
+      purpose: usage,
+      provider: 'oss',
+      objectKey,
+      url,
+      mimeType,
+      sizeBytes: file.size,
+      width: dimensions.width,
+      height: dimensions.height,
+      uploadedById: userId,
+      metadata: {
+        originalName: file.originalname,
+        originalUrl: url,
+        source: 'v1/learn/genres/upload-image',
+      },
+    });
+
+    return {
+      assetId: asset.id,
+      url,
+      originalUrl: url,
+      fileName: path.basename(objectKey),
+      mimeType,
+      size: file.size,
+      width: dimensions.width,
+      height: dimensions.height,
+      ownerType: asset.ownerType,
+      ownerId: asset.ownerId,
+    };
   } finally {
     await fs.promises.unlink(file.path).catch(() => undefined);
   }
@@ -6930,6 +7147,7 @@ const mapDJ = (
   const isContributor = isDJContributorByRow(row, viewerId);
   const canEdit = viewerRole === 'admin' || isContributor;
   const eventCount = Number(statsInfo.eventCount ?? 0);
+  const genreBindings = genreBindingInfoFromRow(row);
   const setCount = Math.max(
     Number(row.setCount ?? 0),
     Number(row.setsCount ?? 0),
@@ -6943,6 +7161,7 @@ const mapDJ = (
     nameI18n: nameI18n ?? null,
     aliases: Array.isArray(row.aliases) ? row.aliases : [],
     genres: Array.isArray(row.genres) ? row.genres : [],
+    genreBindings,
     slug: row.slug,
     bio: row.bio,
     bioI18n: bioI18n ?? null,
@@ -13257,6 +13476,20 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
       itemMax: INPUT_LIMITS.common.url,
       maxItems: 50,
     });
+    if (Object.prototype.hasOwnProperty.call(payload, 'genreBindings')
+      && payload.genreBindings !== null
+      && !Array.isArray(payload.genreBindings)) {
+      res.status(400).json({ error: 'genreBindings must be an array or null' });
+      return;
+    }
+    let submittedGenreBindings: NormalizedDJGenreBindingInput[] = [];
+    try {
+      submittedGenreBindings = normalizeDJGenreBindingsInput(payload.genreBindings);
+      await assertValidDJGenreBindingIds(submittedGenreBindings);
+    } catch (error) {
+      res.status(400).json({ error: (error as Error).message });
+      return;
+    }
     const hasProofLink = [
       spotifyIdForProof,
       spotifyUrl,
@@ -13319,6 +13552,7 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
             itemMax: INPUT_LIMITS.dj.genre,
             maxItems: INPUT_LIMITS.dj.genresMaxItems,
           }),
+          genreBindings: submittedGenreBindings,
           importSource: 'manual',
         },
       });
@@ -13443,87 +13677,99 @@ router.post('/djs/manual/import', optionalAuth, async (req: Request, res: Respon
     let persisted: any;
     if (target) {
       action = 'updated';
-      persisted = await prisma.dJ.update({
-        where: { id: target.id },
-        data: {
-          name: target.name || name,
-          nameI18n: (normalizeDJBiText(target.nameI18n ?? null, target.name || name) as unknown as Prisma.InputJsonValue | null) ?? undefined,
-          aliases: mergedAliases,
-          genres: hasGenresInput ? genres : (target.genres ?? []),
-          bio: bio || target.bio || null,
-          bioI18n: (normalizeDJBiText(target.bioI18n ?? null, bio || target.bio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
-          avatarUrl: avatarUrl || target.avatarUrl || null,
-          avatarSourceUrl: avatarUrl || target.avatarSourceUrl || null,
-          bannerUrl: bannerUrl || target.bannerUrl || null,
-          country: country || target.country || null,
-          countryI18n: (normalizeCountryBiText(target.countryI18n ?? null, country || target.country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
-          spotifyUrl: spotifyUrl || target.spotifyUrl || null,
-          spotifyId: spotifyId || target.spotifyId || null,
-          spotifyFollowers: hasSpotifyFollowersInput ? spotifyFollowers : (target.spotifyFollowers ?? null),
-          appleMusicId: appleMusicId || target.appleMusicId || null,
-          instagramUrl: instagramUrl || target.instagramUrl || null,
-          facebookUrl: facebookUrl || target.facebookUrl || null,
-          soundcloudUrl: soundcloudUrl || target.soundcloudUrl || null,
-          soundcloudId: soundcloudId || target.soundcloudId || null,
-          neteaseUrl: neteaseUrl || target.neteaseUrl || null,
-          qqMusicUrl: qqMusicUrl || target.qqMusicUrl || null,
-          website: website || target.website || null,
-          sourceWikipedia: sourceWikipedia || target.sourceWikipedia || null,
-          sourceWebsite: sourceWebsite || target.sourceWebsite || null,
-          sourceSameAs: sourceSameAs.length ? sourceSameAs : (target.sourceSameAs ?? []),
-          trackCount: hasTrackCountInput ? trackCount : (target.trackCount ?? null),
-          playlistCount: hasPlaylistCountInput ? playlistCount : (target.playlistCount ?? null),
-          soundCloudFollowers: hasSoundCloudFollowersInput
-            ? soundCloudFollowers
-            : (target.soundCloudFollowers ?? null),
-          soundCloudFavorites: hasSoundCloudFavoritesInput
-            ? soundCloudFavorites
-            : (target.soundCloudFavorites ?? null),
-          twitterUrl: twitterUrl || target.twitterUrl || null,
-          youtubeUrl: youtubeUrl || target.youtubeUrl || null,
-          isVerified: target.isVerified || isVerified,
-          sourceDataSource: mergeDJDataSources(target.sourceDataSource, ['manual']),
-        },
+      persisted = await prisma.$transaction(async (tx) => {
+        const updated = await tx.dJ.update({
+          where: { id: target.id },
+          data: {
+            name: target.name || name,
+            nameI18n: (normalizeDJBiText(target.nameI18n ?? null, target.name || name) as unknown as Prisma.InputJsonValue | null) ?? undefined,
+            aliases: mergedAliases,
+            genres: hasGenresInput ? genres : (target.genres ?? []),
+            bio: bio || target.bio || null,
+            bioI18n: (normalizeDJBiText(target.bioI18n ?? null, bio || target.bio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+            avatarUrl: avatarUrl || target.avatarUrl || null,
+            avatarSourceUrl: avatarUrl || target.avatarSourceUrl || null,
+            bannerUrl: bannerUrl || target.bannerUrl || null,
+            country: country || target.country || null,
+            countryI18n: (normalizeCountryBiText(target.countryI18n ?? null, country || target.country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+            spotifyUrl: spotifyUrl || target.spotifyUrl || null,
+            spotifyId: spotifyId || target.spotifyId || null,
+            spotifyFollowers: hasSpotifyFollowersInput ? spotifyFollowers : (target.spotifyFollowers ?? null),
+            appleMusicId: appleMusicId || target.appleMusicId || null,
+            instagramUrl: instagramUrl || target.instagramUrl || null,
+            facebookUrl: facebookUrl || target.facebookUrl || null,
+            soundcloudUrl: soundcloudUrl || target.soundcloudUrl || null,
+            soundcloudId: soundcloudId || target.soundcloudId || null,
+            neteaseUrl: neteaseUrl || target.neteaseUrl || null,
+            qqMusicUrl: qqMusicUrl || target.qqMusicUrl || null,
+            website: website || target.website || null,
+            sourceWikipedia: sourceWikipedia || target.sourceWikipedia || null,
+            sourceWebsite: sourceWebsite || target.sourceWebsite || null,
+            sourceSameAs: sourceSameAs.length ? sourceSameAs : (target.sourceSameAs ?? []),
+            trackCount: hasTrackCountInput ? trackCount : (target.trackCount ?? null),
+            playlistCount: hasPlaylistCountInput ? playlistCount : (target.playlistCount ?? null),
+            soundCloudFollowers: hasSoundCloudFollowersInput
+              ? soundCloudFollowers
+              : (target.soundCloudFollowers ?? null),
+            soundCloudFavorites: hasSoundCloudFavoritesInput
+              ? soundCloudFavorites
+              : (target.soundCloudFavorites ?? null),
+            twitterUrl: twitterUrl || target.twitterUrl || null,
+            youtubeUrl: youtubeUrl || target.youtubeUrl || null,
+            isVerified: target.isVerified || isVerified,
+            sourceDataSource: mergeDJDataSources(target.sourceDataSource, ['manual']),
+          },
+        });
+        if (Object.prototype.hasOwnProperty.call(payload, 'genreBindings')) {
+          await syncDJGenreBindings(tx, target.id, submittedGenreBindings);
+        }
+        return updated;
       });
     } else {
       const slug = await uniqueDJSlugForName(name);
-      persisted = await prisma.dJ.create({
-        data: {
-          name,
-          nameI18n: (normalizeDJBiText(payload.nameI18n ?? null, name) as unknown as Prisma.InputJsonValue | null) ?? undefined,
-          aliases: mergedAliases,
-          genres,
-          slug,
-          bio: bio || null,
-          bioI18n: (normalizeDJBiText(payload.bioI18n ?? null, bio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
-          avatarUrl,
-          avatarSourceUrl: avatarUrl,
-          bannerUrl: bannerUrl || null,
-          country: country || null,
-          countryI18n: (normalizeCountryBiText(payload.countryI18n ?? null, country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
-          spotifyUrl: spotifyUrl || null,
-          spotifyId: spotifyId || null,
-          spotifyFollowers,
-          appleMusicId: appleMusicId || null,
-          instagramUrl: instagramUrl || null,
-          facebookUrl: facebookUrl || null,
-          soundcloudUrl: soundcloudUrl || null,
-          soundcloudId: soundcloudId || null,
-          neteaseUrl: neteaseUrl || null,
-          qqMusicUrl: qqMusicUrl || null,
-          website: website || null,
-          sourceWikipedia: sourceWikipedia || null,
-          sourceWebsite: sourceWebsite || null,
-          sourceSameAs,
-          trackCount: hasTrackCountInput ? trackCount : null,
-          playlistCount: hasPlaylistCountInput ? playlistCount : null,
-          soundCloudFollowers: hasSoundCloudFollowersInput ? soundCloudFollowers : null,
-          soundCloudFavorites: hasSoundCloudFavoritesInput ? soundCloudFavorites : null,
-          twitterUrl: twitterUrl || null,
-          youtubeUrl: youtubeUrl || null,
-          isVerified,
-          sourceDataSource: mergeDJDataSources(null, ['manual']),
-        },
+      persisted = await prisma.$transaction(async (tx) => {
+        const created = await tx.dJ.create({
+          data: {
+            name,
+            nameI18n: (normalizeDJBiText(payload.nameI18n ?? null, name) as unknown as Prisma.InputJsonValue | null) ?? undefined,
+            aliases: mergedAliases,
+            genres,
+            slug,
+            bio: bio || null,
+            bioI18n: (normalizeDJBiText(payload.bioI18n ?? null, bio || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+            avatarUrl,
+            avatarSourceUrl: avatarUrl,
+            bannerUrl: bannerUrl || null,
+            country: country || null,
+            countryI18n: (normalizeCountryBiText(payload.countryI18n ?? null, country || '') as unknown as Prisma.InputJsonValue | null) ?? undefined,
+            spotifyUrl: spotifyUrl || null,
+            spotifyId: spotifyId || null,
+            spotifyFollowers,
+            appleMusicId: appleMusicId || null,
+            instagramUrl: instagramUrl || null,
+            facebookUrl: facebookUrl || null,
+            soundcloudUrl: soundcloudUrl || null,
+            soundcloudId: soundcloudId || null,
+            neteaseUrl: neteaseUrl || null,
+            qqMusicUrl: qqMusicUrl || null,
+            website: website || null,
+            sourceWikipedia: sourceWikipedia || null,
+            sourceWebsite: sourceWebsite || null,
+            sourceSameAs,
+            trackCount: hasTrackCountInput ? trackCount : null,
+            playlistCount: hasPlaylistCountInput ? playlistCount : null,
+            soundCloudFollowers: hasSoundCloudFollowersInput ? soundCloudFollowers : null,
+            soundCloudFavorites: hasSoundCloudFavoritesInput ? soundCloudFavorites : null,
+            twitterUrl: twitterUrl || null,
+            youtubeUrl: youtubeUrl || null,
+            isVerified,
+            sourceDataSource: mergeDJDataSources(null, ['manual']),
+          },
+        });
+        if (submittedGenreBindings.length > 0) {
+          await syncDJGenreBindings(tx, created.id, submittedGenreBindings);
+        }
+        return created;
       });
     }
 
@@ -13935,9 +14181,24 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
 
     const payload = (req.body ?? {}) as Record<string, unknown>;
     const updateData: Prisma.DJUpdateInput = {};
+    let submittedGenreBindings: NormalizedDJGenreBindingInput[] | null = null;
     const hasNameI18nField = Object.prototype.hasOwnProperty.call(payload, 'nameI18n');
     const hasBioI18nField = Object.prototype.hasOwnProperty.call(payload, 'bioI18n');
     const hasCountryI18nField = Object.prototype.hasOwnProperty.call(payload, 'countryI18n');
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'genreBindings')) {
+      if (payload.genreBindings !== null && !Array.isArray(payload.genreBindings)) {
+        res.status(400).json({ error: 'genreBindings must be an array or null' });
+        return;
+      }
+      try {
+        submittedGenreBindings = normalizeDJGenreBindingsInput(payload.genreBindings);
+        await assertValidDJGenreBindingIds(submittedGenreBindings);
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+        return;
+      }
+    }
 
     let nextName = existing.name;
     let hasNameInput = false;
@@ -14261,7 +14522,7 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
       updateData.isVerified = payload.isVerified;
     }
 
-    if (Object.keys(updateData).length === 0) {
+    if (Object.keys(updateData).length === 0 && submittedGenreBindings === null) {
       ok(res, mapDJ(existing, false, userId, viewerRole));
       return;
     }
@@ -14274,6 +14535,7 @@ router.patch('/djs/:id', optionalAuth, async (req: Request, res: Response): Prom
         ...payload,
         name: nextName,
         targetDJId: djId,
+        ...(submittedGenreBindings !== null ? { genreBindings: submittedGenreBindings } : {}),
       },
     });
     acceptedSubmission(res, submission, 'DJ 编辑任务已提交，当前正在处理中，后续状态会通过通知更新');
@@ -17423,6 +17685,105 @@ router.get('/learn/genres/tree-summary', async (_req: Request, res: Response): P
     ok(res, electronicRoot?.children ?? roots);
   } catch (error) {
     console.error('BFF web learn genres tree summary error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/learn/genres/upload-image', optionalAuth, wikiBrandImageUpload.single('image'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    if (!postMediaOssClient) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(503).json({ error: 'OSS is not configured for genre image upload' });
+      return;
+    }
+
+    const formBody = req.body as Record<string, unknown>;
+    const draftId = typeof formBody.draftId === 'string' ? formBody.draftId.trim() : '';
+    const usageRaw = typeof formBody.usage === 'string' ? formBody.usage.trim().toLowerCase() : '';
+    const usage: 'background' | null = usageRaw === 'background' ? usageRaw : null;
+
+    if (!draftId) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(400).json({ error: 'draftId is required' });
+      return;
+    }
+    if (!usage) {
+      await fs.promises.unlink(file.path).catch(() => undefined);
+      res.status(400).json({ error: 'usage must be background' });
+      return;
+    }
+
+    const uploaded = await uploadGenreDraftMediaToOss(file, userId, draftId, usage);
+    ok(res, uploaded);
+  } catch (error) {
+    if (error instanceof WikiBrandImageValidationError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    console.error('BFF web upload genre image error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/learn/genres/delete-images', optionalAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as BFFAuthRequest;
+    const userId = requireAuth(authReq, res);
+    if (!userId) return;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const draftId = typeof body.draftId === 'string' ? body.draftId.trim() : '';
+    const urls = Array.isArray(body.urls)
+      ? body.urls
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter(Boolean)
+      : [];
+
+    if (!draftId) {
+      res.status(400).json({ error: 'draftId is required' });
+      return;
+    }
+    if (!urls.length) {
+      ok(res, { success: true });
+      return;
+    }
+
+    const assets = await prisma.mediaAsset.findMany({
+      where: {
+        ownerType: 'genre_draft',
+        ownerId: draftId,
+        uploadedById: userId,
+        url: { in: urls },
+        status: { in: ['active', 'replaced'] },
+      },
+      select: {
+        id: true,
+        url: true,
+        objectKey: true,
+      },
+    });
+
+    const keys = assets
+      .filter((asset) => typeof asset.objectKey === 'string' && isGenreDraftOssObjectKey(asset.objectKey, userId, draftId))
+      .map((asset) => asset.objectKey as string);
+
+    for (const asset of assets) {
+      await mediaAssetService.markDeletedByUrl(asset.url);
+    }
+    await deleteOssObjects(keys);
+    ok(res, { success: true });
+  } catch (error) {
+    console.error('BFF web delete genre images error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

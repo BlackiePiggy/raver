@@ -5,9 +5,24 @@ export const buildDJChangeSnapshot = async (input: {
   entityId: string;
   db: EntityChangeDb;
 }): Promise<EntitySnapshot | null> => {
-  const dj = await input.db.dJ.findUnique({
-    where: { id: input.entityId },
-  });
+  const [dj, genreBindings] = await Promise.all([
+    input.db.dJ.findUnique({
+      where: { id: input.entityId },
+    }),
+    input.db.dJGenreBinding.findMany({
+      where: { djId: input.entityId },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+      select: {
+        genreId: true,
+        genre: {
+          select: {
+            name: true,
+            path: true,
+          },
+        },
+      },
+    }),
+  ]);
 
   if (!dj) return null;
 
@@ -16,7 +31,7 @@ export const buildDJChangeSnapshot = async (input: {
     entityId: dj.id,
     displayName: dj.name,
     revision: null,
-    schemaVersion: 1,
+    schemaVersion: 2,
     capturedAt: new Date().toISOString(),
     data: {
       profile: {
@@ -24,6 +39,11 @@ export const buildDJChangeSnapshot = async (input: {
         nameI18n: normalizeJson(dj.nameI18n),
         aliases: sortedStrings(dj.aliases),
         genres: sortedStrings(dj.genres),
+        genreBindings: genreBindings.map((binding) => ({
+          genreId: binding.genreId,
+          label: binding.genre.name,
+          path: binding.genre.path,
+        })),
         bio: dj.bio,
         bioI18n: normalizeJson(dj.bioI18n),
         country: dj.country,

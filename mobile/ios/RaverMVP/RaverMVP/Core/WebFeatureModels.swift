@@ -1471,6 +1471,7 @@ struct WebDJ: Codable, Identifiable, Hashable {
     var nameI18n: WebBiText? = nil
     var aliases: [String]?
     var genres: [String]? = nil
+    var genreBindings: [WebGenreTagBinding]? = nil
     var slug: String?
     var bio: String?
     var bioI18n: WebBiText? = nil
@@ -1986,6 +1987,149 @@ struct LearnGenreTreeSummaryNode: Codable, Identifiable, Hashable {
     var path: String?
     var themeColor: String? = nil
     var children: [LearnGenreTreeSummaryNode]?
+}
+
+struct WebGenreTagBinding: Codable, Hashable, Identifiable {
+    var genreId: String?
+    var label: String
+    var path: String? = nil
+
+    var id: String {
+        if let genreId, !genreId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return genreId
+        }
+        return "label:\(label.lowercased())"
+    }
+
+    var normalizedGenreID: String? {
+        let trimmed = genreId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+struct LearnGenreTagLookup: Hashable {
+    static let empty = LearnGenreTagLookup(genreIDByNormalizedName: [:])
+
+    private static let splitSeparators = CharacterSet(charactersIn: ",，、/\n")
+
+    private let genreIDByNormalizedName: [String: String]
+
+    init(nodes: [LearnGenreTreeSummaryNode]) {
+        var mapping: [String: String] = [:]
+
+        func visit(_ node: LearnGenreTreeSummaryNode) {
+            let key = Self.normalizedLookupKey(for: node.name)
+            if !key.isEmpty, mapping[key] == nil {
+                mapping[key] = node.id
+            }
+            for child in node.children ?? [] {
+                visit(child)
+            }
+        }
+
+        for node in nodes {
+            visit(node)
+        }
+
+        genreIDByNormalizedName = mapping
+    }
+
+    private init(genreIDByNormalizedName: [String: String]) {
+        self.genreIDByNormalizedName = genreIDByNormalizedName
+    }
+
+    var isEmpty: Bool {
+        genreIDByNormalizedName.isEmpty
+    }
+
+    func genreID(forExactName name: String) -> String? {
+        genreIDByNormalizedName[Self.normalizedLookupKey(for: name)]
+    }
+
+    static func splitTags(from rawText: String) -> [String] {
+        splitTags(from: [rawText])
+    }
+
+    static func splitTags(from rawValues: [String]) -> [String] {
+        var result: [String] = []
+        var seen = Set<String>()
+
+        for rawValue in rawValues {
+            let parts = rawValue
+                .components(separatedBy: splitSeparators)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            for part in parts {
+                let key = normalizedLookupKey(for: part)
+                guard !key.isEmpty, seen.insert(key).inserted else { continue }
+                result.append(part)
+            }
+        }
+
+        return result
+    }
+
+    static func normalizedLookupKey(for rawValue: String) -> String {
+        let collapsed = rawValue
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !collapsed.isEmpty else { return "" }
+
+        let trimmedHashPrefix = collapsed.hasPrefix("#")
+            ? String(collapsed.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+            : collapsed
+
+        return trimmedHashPrefix
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+    }
+}
+
+actor LearnGenreTagLookupCache {
+    static let shared = LearnGenreTagLookupCache()
+
+    private var cachedLookup: LearnGenreTagLookup?
+    private var inFlightLookup: Task<LearnGenreTagLookup, Error>?
+
+    func lookup(using service: WebFeatureService) async throws -> LearnGenreTagLookup {
+        if let cachedLookup {
+            return cachedLookup
+        }
+
+        if let inFlightLookup {
+            return try await inFlightLookup.value
+        }
+
+        let task = Task {
+            let nodes = try await service.fetchLearnGenreTreeSummary()
+            return LearnGenreTagLookup(nodes: nodes)
+        }
+        inFlightLookup = task
+
+        do {
+            let lookup = try await task.value
+            cachedLookup = lookup
+            inFlightLookup = nil
+            return lookup
+        } catch {
+            inFlightLookup = nil
+            throw error
+        }
+    }
+
+    func store(nodes: [LearnGenreTreeSummaryNode]) {
+        cachedLookup = LearnGenreTagLookup(nodes: nodes)
+        inFlightLookup = nil
+    }
+
+    func reset() {
+        cachedLookup = nil
+        inFlightLookup = nil
+    }
 }
 
 struct LearnGenreDetail: Codable, Identifiable, Hashable {
@@ -2593,6 +2737,7 @@ struct ImportManualDJInput: Codable, Hashable {
     var spotifyId: String?
     var aliases: [String]?
     var genres: [String]? = nil
+    var genreBindings: [WebGenreTagBinding]? = nil
     var bio: String?
     var bioI18n: WebBiText? = nil
     var country: String?
@@ -2630,6 +2775,7 @@ struct UpdateDJInput: Encodable, Hashable {
     var nameI18n: WebBiText? = nil
     var aliases: [String]?
     var genres: [String]? = nil
+    var genreBindings: [WebGenreTagBinding]? = nil
     var bio: String?
     var bioI18n: WebBiText? = nil
     var avatarUrl: String? = nil
@@ -2661,6 +2807,7 @@ struct UpdateDJInput: Encodable, Hashable {
         case nameI18n
         case aliases
         case genres
+        case genreBindings
         case bio
         case bioI18n
         case avatarUrl
@@ -2694,6 +2841,7 @@ struct UpdateDJInput: Encodable, Hashable {
         try container.encode(nameI18n, forKey: .nameI18n)
         try container.encode(aliases, forKey: .aliases)
         try container.encode(genres, forKey: .genres)
+        try container.encode(genreBindings, forKey: .genreBindings)
         try container.encode(bio, forKey: .bio)
         try container.encode(bioI18n, forKey: .bioI18n)
         try container.encode(avatarUrl, forKey: .avatarUrl)

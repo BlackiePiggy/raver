@@ -43,6 +43,7 @@ import {
 } from '../services/user-entity-follow.service';
 import {
   normalizeGenrePreferenceKeys,
+  resolveUserGenrePreferenceBindings,
   resolveUserGenrePreferences,
   syncUserGenrePreferences,
 } from '../services/user-genre-preference.service';
@@ -7862,7 +7863,7 @@ router.get('/users/:id/profile', optionalAuth, async (req: Request, res: Respons
       return;
     }
 
-    const [followersCount, followingCount, postsCount, followRow, viewerFriendIds, targetFriendIds, genreTags] = await Promise.all([
+    const [followersCount, followingCount, postsCount, followRow, viewerFriendIds, targetFriendIds, genreTags, tagBindings] = await Promise.all([
       prisma.userEntityFollow.count({
         where: {
           relationType: USER_ENTITY_RELATION_FOLLOW,
@@ -7892,6 +7893,7 @@ router.get('/users/:id/profile', optionalAuth, async (req: Request, res: Respons
       viewerId === targetUserId ? Promise.resolve(new Set<string>()) : buildFriendUserIds(viewerId, [targetUserId]),
       buildFriendUserIds(targetUserId),
       resolveUserGenrePreferences(prisma, targetUserId),
+      resolveUserGenrePreferenceBindings(prisma, targetUserId),
     ]);
 
     const profileShareLink = await resolveOrCreateShareLink({
@@ -7914,6 +7916,7 @@ router.get('/users/:id/profile', optionalAuth, async (req: Request, res: Respons
       avatarURL: user.avatarUrl,
       backgroundURL: user.backgroundUrl,
       tags: genreTags,
+      tagBindings,
       isFollowersListPublic: user.isFollowersListPublic,
       isFollowingListPublic: user.isFollowingListPublic,
       canViewFollowersList,
@@ -11986,6 +11989,8 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
       preferPermanent: true,
     });
 
+    const tagBindings = await resolveUserGenrePreferenceBindings(prisma, user.id);
+
     res.json({
       id: user.id,
       username: user.username,
@@ -11999,6 +12004,7 @@ router.get('/profile/me', optionalAuth, async (req: Request, res: Response): Pro
       createdAt: user.createdAt,
       birthYear: user.birthYear ?? null,
       tags: await resolveUserGenrePreferences(prisma, user.id),
+      tagBindings,
       isFollowersListPublic: user.isFollowersListPublic,
       isFollowingListPublic: user.isFollowingListPublic,
       canViewFollowersList: true,
@@ -12021,7 +12027,7 @@ router.get('/profile/bootstrap', optionalAuth, async (req: Request, res: Respons
     const userId = requireAuth(req as BFFAuthRequest, res);
     if (!userId) return;
 
-    const [user, followersCount, followingCount, postsCount, friendIds, tags, appearance, checkinRows] = await Promise.all([
+    const [user, followersCount, followingCount, postsCount, friendIds, tags, tagBindings, appearance, checkinRows] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
         select: {
@@ -12057,6 +12063,7 @@ router.get('/profile/bootstrap', optionalAuth, async (req: Request, res: Respons
       }),
       buildFriendUserIds(userId),
       resolveUserGenrePreferences(prisma, userId),
+      resolveUserGenrePreferenceBindings(prisma, userId),
       virtualAssetService.getAppearance(userId),
       prisma.checkin.findMany({
         where: { userId },
@@ -12127,6 +12134,7 @@ router.get('/profile/bootstrap', optionalAuth, async (req: Request, res: Respons
         createdAt: user.createdAt,
         birthYear: user.birthYear ?? null,
         tags,
+        tagBindings,
         isFollowersListPublic: user.isFollowersListPublic,
         isFollowingListPublic: user.isFollowingListPublic,
         canViewFollowersList: true,
@@ -12351,6 +12359,8 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       return;
     }
 
+    const tagBindings = await resolveUserGenrePreferenceBindings(prisma, user.id);
+
     res.json({
       id: user.id,
       username: user.username,
@@ -12362,6 +12372,7 @@ router.patch('/profile/me', optionalAuth, async (req: Request, res: Response): P
       createdAt: user.createdAt,
       birthYear: user.birthYear ?? null,
       tags: await resolveUserGenrePreferences(prisma, user.id),
+      tagBindings,
       isFollowersListPublic: user.isFollowersListPublic,
       isFollowingListPublic: user.isFollowingListPublic,
       canViewFollowersList: true,

@@ -678,6 +678,7 @@ struct UserProfile: Codable, Identifiable {
     var createdAt: Date? = nil
     var birthYear: Int? = nil
     var tags: [String]
+    var tagBindings: [WebGenreTagBinding]? = nil
     var isFollowersListPublic: Bool
     var isFollowingListPublic: Bool
     var canViewFollowersList: Bool

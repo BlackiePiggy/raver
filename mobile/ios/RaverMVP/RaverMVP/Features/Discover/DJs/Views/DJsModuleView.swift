@@ -1971,7 +1971,6 @@ struct DJDetailView: View {
     @State private var djCardSharePresentation: DJCardSharePresentation?
     @State private var isShareMorePanelVisible = false
     @State private var fullChatSharePresentation: DJCardSharePresentation?
-
     private var shareLinkCoordinator: ShareLinkCoordinator {
         ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
     }
@@ -3507,7 +3506,7 @@ struct DJDetailView: View {
     }
 
     private func shareTarget(for dj: WebDJ) -> ShareTarget {
-        let subtitle = [normalizedDJGenres(dj).first, dj.country?.nilIfBlank]
+        let subtitle = [normalizedDJGenres(dj).first?.label, dj.country?.nilIfBlank]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
@@ -3598,7 +3597,7 @@ struct DJDetailView: View {
             id: dj.id,
             type: .dj,
             title: dj.name,
-            preview: dj.bio?.nilIfBlank ?? normalizedDJGenres(dj).joined(separator: " · "),
+            preview: dj.bio?.nilIfBlank ?? normalizedDJGenres(dj).map(\.label).joined(separator: " · "),
             targetUserID: dj.contributors?.first?.id,
             targetUserDisplayName: dj.contributors?.first?.displayName
         )
@@ -3716,7 +3715,7 @@ struct DJDetailView: View {
     }
 
     private func makeDJShareCardPayload(from dj: WebDJ) -> DJShareCardPayload {
-        let cleanedGenres = normalizedDJGenres(dj)
+        let cleanedGenres = normalizedDJGenres(dj).map(\.label)
         let genreText = cleanedGenres.first.flatMap { $0.nilIfBlank }
         let countryText: String? = {
             let localized = dj.countryI18n?.text(for: AppLanguagePreference.current.effectiveLanguage)
@@ -3752,7 +3751,21 @@ struct DJDetailView: View {
         )
     }
 
-    private func genreTag(_ title: String) -> some View {
+    @ViewBuilder
+    private func genreTag(_ binding: WebGenreTagBinding) -> some View {
+        if let genreID = binding.normalizedGenreID {
+            Button {
+                discoverPush(.genreDetail(genreID: genreID))
+            } label: {
+                genreTagLabel(binding.label)
+            }
+            .buttonStyle(.plain)
+        } else {
+            genreTagLabel(binding.label)
+        }
+    }
+
+    private func genreTagLabel(_ title: String) -> some View {
         Text(title)
             .font(.caption.weight(.semibold))
             .foregroundStyle(RaverTheme.primaryText)
@@ -3764,20 +3777,33 @@ struct DJDetailView: View {
             )
     }
 
-    private func normalizedDJGenres(_ dj: WebDJ) -> [String] {
-        var result: [String] = []
-        var seen = Set<String>()
-        for raw in dj.genres ?? [] {
-            let segments = raw
-                .components(separatedBy: CharacterSet(charactersIn: ",\n"))
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            for item in segments {
-                let key = item.lowercased()
-                guard seen.insert(key).inserted else { continue }
-                result.append(item)
+    private func normalizedDJGenres(_ dj: WebDJ) -> [WebGenreTagBinding] {
+        var result: [WebGenreTagBinding] = []
+        var seenGenreIDs = Set<String>()
+        var seenLabels = Set<String>()
+
+        for binding in dj.genreBindings ?? [] {
+            let label = binding.label.trimmingCharacters(in: .whitespacesAndNewlines)
+            let genreID = binding.normalizedGenreID
+            let labelKey = label.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
+            guard !label.isEmpty else { continue }
+            if let genreID {
+                guard seenGenreIDs.insert(genreID).inserted else { continue }
+            } else if seenLabels.contains(labelKey) {
+                continue
             }
+            seenLabels.insert(labelKey)
+            result.append(WebGenreTagBinding(genreId: genreID, label: label, path: binding.path))
         }
+
+        for label in LearnGenreTagLookup.splitTags(from: dj.genres ?? []) {
+            let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
+            guard !trimmed.isEmpty, !seenLabels.contains(key) else { continue }
+            seenLabels.insert(key)
+            result.append(WebGenreTagBinding(genreId: nil, label: trimmed, path: nil))
+        }
+
         return result
     }
 
@@ -4188,7 +4214,7 @@ struct DJDetailView: View {
         if !genreTags.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(genreTags, id: \.self) { genre in
+                    ForEach(genreTags) { genre in
                         genreTag(genre)
                     }
                 }

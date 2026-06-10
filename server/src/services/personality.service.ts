@@ -36,12 +36,19 @@ type AxisCode = (typeof AXIS_CODES)[number];
 
 export type PersonalitySessionMode = 'standard' | 'debug_set';
 
+export type PersonalityGenreBinding = {
+  label: string;
+  genreId: string | null;
+  path: string | null;
+};
+
 export type PersonalityResultPayload = {
   code: string;
   title: string;
   subtitle: string | null;
   slangTagline: string | null;
   genreMapping: string | null;
+  genreBindings: PersonalityGenreBinding[];
   description: string;
   imageUrl: string | null;
   isHidden: boolean;
@@ -235,6 +242,7 @@ const mapResultPayload = (result: {
   subtitle: string | null;
   slangTagline: string | null;
   genreMapping: string | null;
+  genreBindings?: Prisma.JsonValue | PersonalityGenreBinding[] | null;
   description: string;
   imageUrl: string | null;
   isHidden: boolean;
@@ -245,11 +253,38 @@ const mapResultPayload = (result: {
   subtitle: result.subtitle,
   slangTagline: result.slangTagline,
   genreMapping: result.genreMapping,
+  genreBindings: normalizeGenreBindings(result.genreBindings),
   description: result.description,
   imageUrl: result.imageUrl,
   isHidden: result.isHidden,
   mbtiCode: result.mbtiCode,
 });
+
+const normalizeGenreBindings = (value: unknown): PersonalityGenreBinding[] => {
+  if (!Array.isArray(value)) return [];
+
+  const result: PersonalityGenreBinding[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const row = raw as Record<string, unknown>;
+    const label = String(row.label || '').trim();
+    const genreIdRaw = typeof row.genreId === 'string' ? row.genreId.trim() : '';
+    const pathRaw = typeof row.path === 'string' ? row.path.trim() : '';
+    const normalizedLabel = label || (pathRaw ? pathRaw.split('/').map((item) => item.trim()).filter(Boolean).at(-1) || '' : '');
+    const key = genreIdRaw ? `genre:${genreIdRaw}` : `label:${normalizedLabel.toLowerCase()}`;
+    if (!normalizedLabel || seen.has(key)) continue;
+    seen.add(key);
+    result.push({
+      label: normalizedLabel,
+      genreId: genreIdRaw || null,
+      path: pathRaw || null,
+    });
+  }
+
+  return result;
+};
 
 const toClientQuestionPayload = (
   question: PersonalityQuestionServerSnapshot
@@ -543,6 +578,7 @@ const getResultByCode = async (
       subtitle: true,
       slangTagline: true,
       genreMapping: true,
+      genreBindings: true,
       description: true,
       imageUrl: true,
       isHidden: true,

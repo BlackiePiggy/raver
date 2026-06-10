@@ -5,6 +5,7 @@ import { Check, ChevronDown, ChevronRight, Languages, Plus, Trash2, Pencil, Sear
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
+import AdminImageUploadPanel from '@/components/admin/AdminImageUploadPanel';
 import EditableEntityBindingCard from '@/components/admin/EditableEntityBindingCard';
 import {
   MultilingualEditorOverlay,
@@ -153,6 +154,9 @@ const normalizeThemeColorValue = (value: string | null | undefined): string => {
     : trimmed;
   return /^[0-9a-fA-F]{6}$/.test(expanded) ? `#${expanded.toUpperCase()}` : '';
 };
+
+const createGenreImageDraftId = (): string =>
+  `genre-image-draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 // ─── Right-side tree node ─────────────────────────────────────────────────────
 
@@ -450,6 +454,7 @@ export default function AdminGenresPage() {
   const [pendingCreateName, setPendingCreateName] = useState('');
   const [creatingNode, setCreatingNode] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadingBackgroundImage, setUploadingBackgroundImage] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -463,6 +468,7 @@ export default function AdminGenresPage() {
   const [bpmValue, setBpmValue] = useState('');
   const [branchThemeColor, setBranchThemeColor] = useState('');
   const [backgroundImageURL, setBackgroundImageURL] = useState('');
+  const imageDraftId = useMemo(() => createGenreImageDraftId(), []);
 
   // Localized text
   const [descriptionValue, setDescriptionValue] = useState<LocalizedTextValue>(() => normalizeLocalizedValue(null));
@@ -520,6 +526,41 @@ export default function AdminGenresPage() {
       })
       .slice(0, 10);
   }, [treeSearch, flatNodes]);
+
+  const handleBackgroundImageUpload = useCallback(async (file: File | null) => {
+    if (!file) return;
+
+    try {
+      setUploadingBackgroundImage(true);
+      setError('');
+      const previousUrl = backgroundImageURL.trim();
+      const uploaded = await genreAdminApi.uploadImage(file, {
+        usage: 'background',
+        draftId: imageDraftId,
+      });
+      setBackgroundImageURL(uploaded.url);
+      if (previousUrl && previousUrl !== uploaded.url) {
+        await genreAdminApi.deleteImages({
+          draftId: imageDraftId,
+          urls: [previousUrl],
+        }).catch(() => undefined);
+      }
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : '背景图上传失败。');
+    } finally {
+      setUploadingBackgroundImage(false);
+    }
+  }, [backgroundImageURL, imageDraftId]);
+
+  const handleBackgroundImageClear = useCallback(async () => {
+    const currentUrl = backgroundImageURL.trim();
+    setBackgroundImageURL('');
+    if (!currentUrl) return;
+    await genreAdminApi.deleteImages({
+      draftId: imageDraftId,
+      urls: [currentUrl],
+    }).catch(() => undefined);
+  }, [backgroundImageURL, imageDraftId]);
 
   // Breadcrumb from selected node path
   const breadcrumbParts = useMemo(() => {
@@ -874,7 +915,7 @@ export default function AdminGenresPage() {
                     dirty={originDirty}
                   />
                 </div>
-                <div className="grid gap-4 xl:grid-cols-3">
+                <div className="grid gap-4 xl:grid-cols-2">
                   <BasicInfoField
                     label="年代"
                     value={eraValue}
@@ -891,13 +932,27 @@ export default function AdminGenresPage() {
                     onChange={setBpmValue}
                     dirty={bpmDirty}
                   />
-                  <UrlField
-                    label="背景图"
-                    value={backgroundImageURL}
-                    placeholder="https://..."
-                    maxLength={INPUT_LIMITS.common.url}
-                    onChange={setBackgroundImageURL}
-                    dirty={backgroundImageDirty}
+                </div>
+                <div className="mt-1">
+                  <AdminImageUploadPanel
+                    title="背景图"
+                    description="用于流派详情页 hero 区背景，建议使用横版主视觉。"
+                    hint="上传后会自动写入背景图字段，并走 OSS 存储。"
+                    items={backgroundImageURL.trim() ? [{
+                      id: 'genre-background',
+                      previewUrl: backgroundImageURL,
+                      remoteUrl: backgroundImageURL,
+                      fileName: '背景图',
+                      statusText: '当前已选择的背景图',
+                      linkUrl: backgroundImageURL,
+                      linkLabel: '查看原图链接',
+                      onRemove: () => void handleBackgroundImageClear(),
+                      removeLabel: '清空',
+                    }] : []}
+                    uploading={uploadingBackgroundImage}
+                    previewMode="landscape"
+                    tone="secondary"
+                    onUpload={(files) => void handleBackgroundImageUpload(files[0] || null)}
                   />
                 </div>
                 <div className="grid grid-cols-1 gap-4">
@@ -1327,7 +1382,7 @@ export default function AdminGenresPage() {
             <div className="flex items-center justify-between gap-3">
               <button
                 type="button"
-                disabled={!selectedNode || saving}
+                disabled={!selectedNode || saving || uploadingBackgroundImage}
                 onClick={handleDeleteNode}
                 className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
               >
@@ -1337,7 +1392,7 @@ export default function AdminGenresPage() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  disabled={saving}
+                  disabled={saving || uploadingBackgroundImage}
                   onClick={handleAutoMatch}
                   className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
@@ -1345,11 +1400,11 @@ export default function AdminGenresPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={saving || !selectedNode}
+                  disabled={saving || uploadingBackgroundImage || !selectedNode}
                   onClick={handleSaveContent}
                   className="rounded-lg bg-gray-900 px-5 py-2 text-sm font-semibold text-white hover:bg-gray-800 transition-colors disabled:opacity-50"
                 >
-                  {saving ? '保存中…' : '保存节点内容'}
+                  {saving ? '保存中…' : uploadingBackgroundImage ? '图片上传中…' : '保存节点内容'}
                 </button>
               </div>
             </div>

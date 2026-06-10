@@ -55,6 +55,88 @@ const stringArray = (value: unknown): string[] => {
   return [];
 };
 
+type NormalizedDJGenreBindingInput = {
+  genreId: string;
+  sortOrder: number;
+};
+
+const normalizeDJGenreBindingsPayload = (value: unknown): NormalizedDJGenreBindingInput[] => {
+  if (!Array.isArray(value)) return [];
+
+  const items: NormalizedDJGenreBindingInput[] = [];
+  const seen = new Set<string>();
+
+  for (const [index, raw] of value.entries()) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const row = raw as Record<string, unknown>;
+    const genreId = cleanText(row.genreId);
+    if (!genreId || seen.has(genreId)) continue;
+    seen.add(genreId);
+    items.push({
+      genreId,
+      sortOrder: index + 1,
+    });
+  }
+
+  return items;
+};
+
+const assertValidDJGenreBindingIds = async (
+  db: Prisma.TransactionClient | PrismaClient,
+  bindings: NormalizedDJGenreBindingInput[]
+): Promise<void> => {
+  if (bindings.length === 0) return;
+  const ids = bindings.map((binding) => binding.genreId);
+  const count = await db.genre.count({
+    where: {
+      id: { in: ids },
+    },
+  });
+  if (count !== ids.length) {
+    throw new Error('genreBindings contains unknown genreId');
+  }
+};
+
+const fetchCurrentDJGenreBindings = async (
+  db: Prisma.TransactionClient | PrismaClient,
+  djId: string
+): Promise<NormalizedDJGenreBindingInput[]> => {
+  const rows = await db.dJGenreBinding.findMany({
+    where: { djId },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      genreId: true,
+      sortOrder: true,
+    },
+  });
+
+  return rows.map((row, index) => ({
+    genreId: row.genreId,
+    sortOrder: row.sortOrder || index + 1,
+  }));
+};
+
+const syncDJGenreBindings = async (
+  db: Prisma.TransactionClient | PrismaClient,
+  djId: string,
+  bindings: NormalizedDJGenreBindingInput[]
+): Promise<void> => {
+  await db.dJGenreBinding.deleteMany({
+    where: { djId },
+  });
+
+  if (bindings.length === 0) return;
+
+  await db.dJGenreBinding.createMany({
+    data: bindings.map((binding) => ({
+      djId,
+      genreId: binding.genreId,
+      sortOrder: binding.sortOrder,
+    })),
+    skipDuplicates: true,
+  });
+};
+
 const normalizeDJNameKey = (value: string): string => value.trim().toLowerCase();
 
 const mergeAliases = (baseName: string, values: Array<string | null | undefined>): string[] => {
@@ -282,6 +364,9 @@ export const createOrUpdateDJFromSubmission = async (
   } = {}
 ) => {
   const targetDJId = cleanText(payload.targetDJId) || cleanText(payload.editTargetDJId) || null;
+  const submittedGenreBindings = Object.prototype.hasOwnProperty.call(payload, 'genreBindings')
+    ? normalizeDJGenreBindingsPayload(payload.genreBindings)
+    : null;
 
   if (targetDJId) {
     const beforeChangeSnapshot = await entityChangeService.captureSnapshot({
@@ -294,6 +379,9 @@ export const createOrUpdateDJFromSubmission = async (
     });
     if (!existing) {
       throw new Error('目标 DJ 不存在');
+    }
+    if (submittedGenreBindings) {
+      await assertValidDJGenreBindingIds(db, submittedGenreBindings);
     }
 
     const name = resolvePrimaryName(payload, existing.name);
@@ -343,8 +431,11 @@ export const createOrUpdateDJFromSubmission = async (
       genres,
       slug: nextSlug,
     });
+    const currentGenreBindings = await fetchCurrentDJGenreBindings(db, existing.id);
+    const nextGenreBindings = submittedGenreBindings ?? currentGenreBindings;
+    const hasGenreBindingChanges = !isEqualValue(currentGenreBindings, nextGenreBindings);
 
-    if (!hasDJMaterialChanges(existing, nextData)) {
+    if (!hasDJMaterialChanges(existing, nextData) && !hasGenreBindingChanges) {
       return existing;
     }
 
@@ -352,6 +443,9 @@ export const createOrUpdateDJFromSubmission = async (
       where: { id: existing.id },
       data: nextData as any,
     });
+    if (hasGenreBindingChanges) {
+      await syncDJGenreBindings(db, updated.id, nextGenreBindings);
+    }
 
     await recordDJContribution(db, {
       entityId: updated.id,
@@ -401,6 +495,9 @@ export const createOrUpdateDJFromSubmission = async (
   const avatarUrl = cleanText(payload.avatarUrl);
   if (!avatarUrl) {
     throw new Error('DJ 头像不能为空');
+  }
+  if (submittedGenreBindings) {
+    await assertValidDJGenreBindingIds(db, submittedGenreBindings);
   }
   if (!hasAnyProof(payload)) {
     throw new Error('至少需要一个平台链接或一张证明图片');
@@ -460,6 +557,7 @@ export const createOrUpdateDJFromSubmission = async (
       isVerified: typeof payload.isVerified === 'boolean' ? payload.isVerified : true,
     } as any,
   });
+  await syncDJGenreBindings(db, created.id, submittedGenreBindings ?? []);
   await recordDJContribution(db, {
     entityId: created.id,
     userId: submitterId,

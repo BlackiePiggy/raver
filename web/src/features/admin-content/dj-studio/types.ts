@@ -83,11 +83,18 @@ export type DJStudioSourceFieldKey =
   | 'soundCloudFollowers'
   | 'soundCloudFavorites';
 
+export type DJStudioGenreBinding = {
+  genreId: string;
+  label: string;
+  path?: string | null;
+};
+
 export type DJStudioDraft = {
   id: string;
   name: DJStudioLocalizedText;
   aliases: string[];
   genres: string[];
+  genreBindings: DJStudioGenreBinding[];
   bio: DJStudioLocalizedText;
   country: DJStudioLocalizedText;
   avatarImage: DJStudioImageState | null;
@@ -153,6 +160,7 @@ export type DJStudioLoadedDJ = {
   nameI18n?: DJStudioLocalizedText | null;
   aliases?: string[] | null;
   genres?: string[] | null;
+  genreBindings?: DJStudioGenreBinding[] | null;
   slug?: string | null;
   bio?: string | null;
   bioI18n?: DJStudioLocalizedText | null;
@@ -302,6 +310,7 @@ export type DJStudioCreateInput = {
   spotifyId?: string | null;
   aliases?: string[] | null;
   genres?: string[] | null;
+  genreBindings?: DJStudioGenreBinding[] | null;
   bio?: string | null;
   bioI18n?: DJStudioLocalizedText | null;
   country?: string | null;
@@ -337,6 +346,7 @@ export type DJStudioUpdateInput = {
   nameI18n?: DJStudioLocalizedText | null;
   aliases?: string[] | null;
   genres?: string[] | null;
+  genreBindings?: DJStudioGenreBinding[] | null;
   bio?: string | null;
   bioI18n?: DJStudioLocalizedText | null;
   avatarUrl?: string | null;

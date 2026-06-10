@@ -5,6 +5,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
+import AdminImageUploadPanel from '@/components/admin/AdminImageUploadPanel';
 import EntityBindingField from '@/components/admin/EntityBindingField';
 import {
   LocalizedTextField,
@@ -137,6 +138,9 @@ const makeSoundCueTrackDraft = (item?: GenreSoundCueTrack, index = 0): SoundCueT
   beatportUrl: item?.beatportUrl || '',
 });
 
+const createGenreImageDraftId = (): string =>
+  `genre-image-draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
 export default function AdminGenreCreatePage() {
   const [draft, setDraft] = useState<CreateGenreDraft>(initialDraft);
   const [newParentDraft, setNewParentDraft] = useState<NewParentDraft>(initialNewParentDraft);
@@ -145,14 +149,16 @@ export default function AdminGenreCreatePage() {
   const [tree, setTree] = useState<GenreAdminNode[]>([]);
   const [loadingTree, setLoadingTree] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadingBackgroundImage, setUploadingBackgroundImage] = useState(false);
   const [error, setError] = useState('');
   const [created, setCreated] = useState<CreatedResult | null>(null);
   const [activeLocalizedField, setActiveLocalizedField] = useState<LocalizedFieldKey | null>(null);
+  const imageDraftId = useMemo(() => createGenreImageDraftId(), []);
 
   const flatNodes = useMemo(() => flattenTree(tree), [tree]);
   const selectedParent = flatNodes.find((item) => item.id === draft.parentId) ?? null;
   const selectedAncestorParent = flatNodes.find((item) => item.id === newParentDraft.ancestorParentId) ?? null;
-  const canSubmit = draft.name.trim().length > 0 && !saving;
+  const canSubmit = draft.name.trim().length > 0 && !saving && !uploadingBackgroundImage;
 
   const loadTree = async () => {
     setLoadingTree(true);
@@ -212,6 +218,47 @@ export default function AdminGenreCreatePage() {
     setError('');
     setCreated(null);
     setActiveLocalizedField(null);
+  };
+
+  const handleBackgroundImageUpload = async (file: File | null) => {
+    if (!file) return;
+
+    try {
+      setUploadingBackgroundImage(true);
+      setError('');
+      const previousUrl = draft.backgroundImageURL.trim();
+      const uploaded = await genreAdminApi.uploadImage(file, {
+        usage: 'background',
+        draftId: imageDraftId,
+      });
+      setDraft((current) => ({
+        ...current,
+        backgroundImageURL: uploaded.url,
+      }));
+      if (previousUrl && previousUrl !== uploaded.url) {
+        await genreAdminApi.deleteImages({
+          draftId: imageDraftId,
+          urls: [previousUrl],
+        }).catch(() => undefined);
+      }
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : '背景图上传失败。');
+    } finally {
+      setUploadingBackgroundImage(false);
+    }
+  };
+
+  const handleBackgroundImageClear = async () => {
+    const currentUrl = draft.backgroundImageURL.trim();
+    setDraft((current) => ({
+      ...current,
+      backgroundImageURL: '',
+    }));
+    if (!currentUrl) return;
+    await genreAdminApi.deleteImages({
+      draftId: imageDraftId,
+      urls: [currentUrl],
+    }).catch(() => undefined);
   };
 
   const validateBeforeSubmit = (): string | null => {
@@ -642,7 +689,7 @@ export default function AdminGenreCreatePage() {
               </AdminCountedControl>
             </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-3">
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <AdminCountedControl count={countText(draft.era)} maxLength={INPUT_LIMITS.genre.shortText}>
                 <input
                   className="admin-studio-input"
@@ -661,15 +708,29 @@ export default function AdminGenreCreatePage() {
                   onChange={(event) => setDraft((current) => ({ ...current, bpm: event.target.value }))}
                 />
               </AdminCountedControl>
-              <AdminCountedControl count={countText(draft.backgroundImageURL)} maxLength={INPUT_LIMITS.common.url}>
-                <input
-                  className="admin-studio-input"
-                  placeholder="背景图链接（可选）"
-                  value={draft.backgroundImageURL}
-                  maxLength={INPUT_LIMITS.common.url}
-                  onChange={(event) => setDraft((current) => ({ ...current, backgroundImageURL: event.target.value }))}
-                />
-              </AdminCountedControl>
+            </div>
+
+            <div className="mt-4">
+              <AdminImageUploadPanel
+                title="背景图"
+                description="用于流派详情页 hero 区背景，建议上传横版主视觉。"
+                hint="上传后会自动写入流派背景图字段，并走 OSS 存储。"
+                items={draft.backgroundImageURL.trim() ? [{
+                  id: 'genre-background',
+                  previewUrl: draft.backgroundImageURL,
+                  remoteUrl: draft.backgroundImageURL,
+                  fileName: '背景图',
+                  statusText: '当前已选择的背景图',
+                  linkUrl: draft.backgroundImageURL,
+                  linkLabel: '查看原图链接',
+                  onRemove: () => void handleBackgroundImageClear(),
+                  removeLabel: '清空',
+                }] : []}
+                uploading={uploadingBackgroundImage}
+                previewMode="landscape"
+                tone="secondary"
+                onUpload={(files) => void handleBackgroundImageUpload(files[0] || null)}
+              />
             </div>
 
             <div className="mt-4 grid gap-4 lg:grid-cols-2">

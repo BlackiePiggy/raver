@@ -98,6 +98,7 @@ actor MockWebFeatureService: WebFeatureService {
                 subtitle: "全中国最稀有的电音人格",
                 slangTagline: "永远的气氛组、新鲜感追逐者",
                 genreMapping: "Sunny EDM、Light Bounce、清新 Progressive House",
+                genreBindings: nil,
                 description: "电音一响，我就是全场最亮的崽。永远充满活力，永远对新鲜事物充满好奇。",
                 imageUrl: nil,
                 isHidden: false,

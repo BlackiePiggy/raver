@@ -720,7 +720,44 @@ Swift 文件拆分后如果 Xcode project 没自动纳入 target，会出现“�
 - [x] 将 `Genres` 详情页 hero 右侧主题色与旭日图顶层分类打通，子分类详情继承所属顶层分类配色
 - [x] 打通 `Genre.color` 字段到 BFF / iOS：公开树摘要与详情接口返回继承后的有效主题色，客户端优先使用服务端配置
 - [x] 在 web `Genres` 管理页增加独立的“分支主题色”配置区：支持预设色卡、自定义选色器与继承预览，仅允许旭日图第一层分类编辑
+- [x] 将 `Genres` 背景图从手填 URL 改为 OSS 上传流：补充 `learn/genres` 图片上传/删除接口，并将 web 新建页与编辑页切换为横版图片上传面板
 - [x] 完成颜色配置链路构建验证：`server` TypeScript 构建通过、`web` Next.js 生产构建通过、iOS `RaverMVP` 模拟器构建通过
+- [x] 为 iOS DJ 详情页流派标签补充精确名称匹配跳转：命中流派库时进入对应 `Genre` 详情，未命中时保持静态标签
+- [x] 为 iOS 个人主页流派标签补充同一套精确名称匹配跳转，并保持未命中标签仅展示不跳转
+- [x] 为 iOS EDMTI 结果页流派标签补充同一套精确名称匹配跳转，统一复用流派树 summary 缓存
+- [x] 为 web `DJStudioForm` 的流派编辑区改造成“绑定库内流派 + 自定义标签”模式，交互与 EDMTI 后台绑定流派逻辑对齐
+- [x] 完成本轮流派标签联动改造验证：`web` Next.js 生产构建通过，iOS `RaverMVP` 模拟器构建通过
+- [x] 放弃运行时名称匹配方案，改为“显式 `genreId` 绑定 + 一次性回填”主线，避免客户端实时猜测流派归属
+- [x] 新增 [backfill-genre-id-bindings.ts](/Users/blackie/Projects/raver/server/prisma/backfill-genre-id-bindings.ts)：
+  - 支持 `djs / personality / users / all`
+  - 支持 `dry-run / apply / overwrite-existing / report`
+  - 用于把历史字符串标签批量回填成显式 `genreId` 绑定
+- [x] 打通 DJ 显式绑定写入链路：
+  - `POST /v1/djs/manual/import`
+  - `PATCH /v1/djs/:id` 提审 payload
+  - `content-submission-dj.service.ts` 审核通过后的真正入库
+- [x] 打通 DJ 显式绑定读取链路：BFF `mapDJ(...)` 返回 `genreBindings`，客户端点击只认绑定 ID
+- [x] 为用户主页接口补充 `tagBindings`：
+  - `/v1/users/:id/profile`
+  - `/v1/profile/me`
+  - `/v1/profile/bootstrap`
+  - 未能映射到库内流派的标签保留占位展示，但不跳转
+- [x] 为 EDMTI 结果补充 `genreBindings`，iOS 结果页直接消费服务端绑定，不再依赖本地流派匹配缓存
+- [x] 将 iOS DJ 详情页、个人主页、EDMTI 结果页的流派跳转切到显式绑定消费
+- [x] 将 web `DJStudioForm` 改为显式 `genreBindings` + `genres` 展示快照并存模式
+- [x] 完成显式绑定链路构建验证：
+  - `pnpm --dir /Users/blackie/Projects/raver/server build`
+  - `pnpm --dir /Users/blackie/Projects/raver/web build`
+  - `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO`
+- [ ] 让你在线上先执行一次回填 `dry-run`，根据 report 里的 unmatched 样本决定是否补一轮人工映射规则
+- [ ] 如回填结果符合预期，再执行 `apply` 并复查 `users / djs / personality` 三类数据的命中率
+
+### 显式绑定回填命令
+
+- [x] `pnpm --dir /Users/blackie/Projects/raver/server genres:backfill:bindings`
+- [x] `pnpm --dir /Users/blackie/Projects/raver/server genres:backfill:bindings --target=djs`
+- [x] `pnpm --dir /Users/blackie/Projects/raver/server genres:backfill:bindings:apply --target=djs`
+- [x] `pnpm --dir /Users/blackie/Projects/raver/server genres:backfill:bindings:apply --target=all --overwrite-existing`
 
 ---
 
