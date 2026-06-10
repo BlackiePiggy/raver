@@ -744,12 +744,19 @@ Swift 文件拆分后如果 Xcode project 没自动纳入 target，会出现“�
   - 未能映射到库内流派的标签保留占位展示，但不跳转
 - [x] 为 EDMTI 结果补充 `genreBindings`，iOS 结果页直接消费服务端绑定，不再依赖本地流派匹配缓存
 - [x] 将 iOS DJ 详情页、个人主页、EDMTI 结果页的流派跳转切到显式绑定消费
+- [x] 调整 iOS DJ / Profile / EDMTI 的标签展示策略：
+  - 跳转能力只认显式 `genreId` 绑定
+  - 历史字符串标签仍可展示，但没有绑定时只做占位展示、不允许跳转
+  - 客户端不再做运行时名称匹配或兜底猜测
 - [x] 将 web `DJStudioForm` 改为显式 `genreBindings` + `genres` 展示快照并存模式
 - [x] 完成显式绑定链路构建验证：
   - `pnpm --dir /Users/blackie/Projects/raver/server build`
   - `pnpm --dir /Users/blackie/Projects/raver/web build`
   - `xcodebuild -workspace /Users/blackie/Projects/raver/mobile/ios/RaverMVP/RaverMVP.xcworkspace -scheme RaverMVP -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO`
-- [ ] 让你在线上先执行一次回填 `dry-run`，根据 report 里的 unmatched 样本决定是否补一轮人工映射规则
+- [x] 根据首轮 DJ `dry-run` 补一轮保守映射规则：
+  - 为 `Big Room / Trap / House Music / Peak Time / Driving` 等明确别名补显式候选
+  - 修复 `Techno (Peak Time / Driving)` 这类带括号和斜杠标签的拆分问题
+  - 继续保持“只做保守绑定，模糊标签不瞎绑”的策略，未绑定项仍留给客户端做纯展示
 - [ ] 如回填结果符合预期，再执行 `apply` 并复查 `users / djs / personality` 三类数据的命中率
 
 ### 显式绑定回填命令

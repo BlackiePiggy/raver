@@ -985,8 +985,8 @@ struct ProfileHeaderCard<Actions: View>: View {
             result.append(WebGenreTagBinding(genreId: genreID, label: label, path: binding.path))
         }
 
-        for tag in profile.tags {
-            let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        for label in LearnGenreTagLookup.splitTags(from: profile.tags) {
+            let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
             let key = trimmed.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
             guard !trimmed.isEmpty, !seenLabels.contains(key) else { continue }
             seenLabels.insert(key)
@@ -6697,8 +6697,19 @@ struct PersonalityFlowView: View {
             return bindings.filter { !$0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         }
 
-        return LearnGenreTagLookup.splitTags(from: result.genreMapping ?? "")
-            .map { WebGenreTagBinding(genreId: nil, label: $0, path: nil) }
+        return LearnGenreTagLookup
+            .splitTags(from: result.genreMapping ?? "")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .reduce(into: [WebGenreTagBinding]()) { partialResult, label in
+                let key = label.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
+                guard !partialResult.contains(where: {
+                    $0.label.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased() == key
+                }) else {
+                    return
+                }
+                partialResult.append(WebGenreTagBinding(genreId: nil, label: label, path: nil))
+            }
     }
 
     private func openGenreDetailIfAvailable(_ binding: WebGenreTagBinding) {

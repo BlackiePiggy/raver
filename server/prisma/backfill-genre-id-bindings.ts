@@ -104,7 +104,19 @@ function readArgValue(name: string): string | null {
   return matched ? matched.slice(prefix.length).trim() : null;
 }
 
-const splitSeparators = /[,\n，、/]+/g;
+const PRIMARY_SPLIT_SEPARATORS = new Set([',', '\n', '\r', '，', '、', ';', '；']);
+const PARENS_OPEN = new Set(['(', '[', '{', '（', '【']);
+const PARENS_CLOSE = new Set([')', ']', '}', '）', '】']);
+
+const CONSERVATIVE_GENRE_ALIASES = new Map<string, string[]>([
+  ['big room', ['Big Room House']],
+  ['trap', ['Trap (EDM)']],
+  ['house music', ['House']],
+  ['peak time techno', ['Peak Time / Driving Techno']],
+  ['driving techno', ['Peak Time / Driving Techno']],
+  ['peak time driving', ['Peak Time / Driving Techno']],
+  ['techno peak time driving', ['Peak Time / Driving Techno']],
+]);
 
 const normalizeText = (value: unknown): string =>
   String(value || '')
@@ -129,6 +141,39 @@ const normalizeLooseKey = (value: string): string =>
 const normalizeCompactKey = (value: string): string =>
   normalizeLooseKey(value).replace(/\s+/g, '');
 
+const splitTopLevel = (value: string, separators: Set<string>): string[] => {
+  const result: string[] = [];
+  let depth = 0;
+  let current = '';
+
+  for (const char of value) {
+    if (PARENS_OPEN.has(char)) {
+      depth += 1;
+      current += char;
+      continue;
+    }
+
+    if (PARENS_CLOSE.has(char)) {
+      depth = Math.max(0, depth - 1);
+      current += char;
+      continue;
+    }
+
+    if (depth === 0 && separators.has(char)) {
+      const normalized = normalizeText(current);
+      if (normalized) result.push(normalized);
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  const tail = normalizeText(current);
+  if (tail) result.push(tail);
+  return result;
+};
+
 const splitGenreLabels = (values: unknown): string[] => {
   const source = Array.isArray(values) ? values : [values];
   const result: string[] = [];
@@ -136,10 +181,7 @@ const splitGenreLabels = (values: unknown): string[] => {
 
   for (const rawValue of source) {
     const text = String(rawValue || '');
-    const parts = text
-      .split(splitSeparators)
-      .map((item) => normalizeText(item))
-      .filter(Boolean);
+    const parts = splitTopLevel(text, PRIMARY_SPLIT_SEPARATORS);
 
     for (const part of parts) {
       const key = normalizeLooseKey(part);
@@ -150,6 +192,103 @@ const splitGenreLabels = (values: unknown): string[] => {
   }
 
   return result;
+};
+
+type MatchCandidate = {
+  label: string;
+  source: 'original' | 'alias' | 'derived';
+};
+
+const buildMatchCandidates = (label: string): MatchCandidate[] => {
+  const normalizedInput = normalizeText(label);
+  const normalizedKey = normalizeLooseKey(normalizedInput);
+  const candidates: MatchCandidate[] = [];
+  const seen = new Set<string>();
+
+  const remember = (candidateLabel: string, source: MatchCandidate['source']) => {
+    const normalizedCandidate = normalizeText(candidateLabel);
+    const candidateKey = normalizeLooseKey(normalizedCandidate);
+    if (!candidateKey || seen.has(candidateKey)) return;
+    seen.add(candidateKey);
+    candidates.push({ label: normalizedCandidate, source });
+  };
+
+  remember(normalizedInput, 'original');
+
+  for (const alias of CONSERVATIVE_GENRE_ALIASES.get(normalizedKey) ?? []) {
+    remember(alias, 'alias');
+  }
+
+  const parentheticalMatch = normalizedInput.match(/^(.+?)\s*[\(（]\s*(.+?)\s*[\)）]\s*$/);
+  if (parentheticalMatch) {
+    const prefix = normalizeText(parentheticalMatch[1]);
+    const inside = normalizeText(parentheticalMatch[2]);
+
+    if (inside) {
+      remember(inside, 'derived');
+      if (prefix) {
+        remember(`${inside} ${prefix}`, 'derived');
+        remember(`${prefix} ${inside}`, 'derived');
+      }
+    }
+  }
+
+  return candidates;
+};
+
+const matchGenreLabelWithCandidates = (label: string, index: GenreIndex): LabelMatch | null => {
+  const normalizedInput = normalizeText(label);
+  const normalizedLoose = normalizeLooseKey(normalizedInput);
+
+  for (const candidate of buildMatchCandidates(label)) {
+    const matched = matchGenreLabel(candidate.label, index);
+    if (!matched) continue;
+    return {
+      ...matched,
+      input: normalizedInput,
+      normalized: normalizedLoose,
+      strategy: candidate.source === 'original'
+        ? matched.strategy
+        : `${candidate.source}_${matched.strategy}`,
+    };
+  }
+
+  return null;
+};
+
+type LabelResolution = {
+  matches: LabelMatch[];
+  unmatched: string[];
+};
+
+const resolveDJLabel = (label: string, index: GenreIndex): LabelResolution => {
+  const directMatch = matchGenreLabelWithCandidates(label, index);
+  if (directMatch) {
+    return { matches: [directMatch], unmatched: [] };
+  }
+
+  const slashParts = splitTopLevel(label, new Set(['/']));
+  if (slashParts.length <= 1) {
+    return { matches: [], unmatched: [label] };
+  }
+
+  const matches: LabelMatch[] = [];
+  const unmatched: string[] = [];
+
+  for (const part of slashParts) {
+    const matched = matchGenreLabelWithCandidates(part, index);
+    if (matched) {
+      matches.push(matched);
+    } else {
+      unmatched.push(part);
+    }
+  }
+
+  if (matches.length == 0) {
+    return { matches: [], unmatched: [label] };
+  }
+
+  return { matches, unmatched };
 };
 
 const buildGenreIndex = (genres: GenreLite[]): GenreIndex => {
@@ -298,13 +437,17 @@ async function buildDJPlans(index: GenreIndex): Promise<DJPlan[]> {
     const matchedGenreIds = new Set<string>();
 
     for (const label of labels) {
-      const matched = matchGenreLabel(label, index);
-      if (!matched || matchedGenreIds.has(matched.genreId)) {
-        if (!matched) unmatched.push(label);
-        continue;
+      const resolution = resolveDJLabel(label, index);
+
+      for (const matched of resolution.matches) {
+        if (matchedGenreIds.has(matched.genreId)) continue;
+        matchedGenreIds.add(matched.genreId);
+        matches.push(matched);
       }
-      matchedGenreIds.add(matched.genreId);
-      matches.push(matched);
+
+      for (const unresolved of resolution.unmatched) {
+        unmatched.push(unresolved);
+      }
     }
 
     return {
