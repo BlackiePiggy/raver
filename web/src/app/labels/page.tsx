@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import Navigation from '@/components/Navigation';
 import { LabelRecord, labelAPI } from '@/lib/api/label';
+import { genreAPI, normalizeGenreLookupKey, GenreTagLookupMap } from '@/lib/api/genre';
 
 const sortOptions: Array<{
   value: 'soundcloudFollowers' | 'likes' | 'name' | 'nation' | 'latestRelease' | 'createdAt';
@@ -22,7 +24,7 @@ const formatCount = (value: number | null): string => {
   return new Intl.NumberFormat('en-US').format(value);
 };
 
-function LabelCard({ label }: { label: LabelRecord }) {
+function LabelCard({ label, genreLookup }: { label: LabelRecord; genreLookup: GenreTagLookupMap }) {
   const displayGenres = label.genres.length > 0 ? label.genres.slice(0, 5) : (label.genresPreview?.split(',').map((item) => item.trim()).filter(Boolean) || []);
 
   return (
@@ -69,11 +71,22 @@ function LabelCard({ label }: { label: LabelRecord }) {
 
         {displayGenres.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {displayGenres.map((genre) => (
-              <span key={`${label.id}-${genre}`} className="rounded-full border border-bg-primary bg-bg-primary px-2.5 py-1 text-xs text-text-secondary">
-                {genre}
-              </span>
-            ))}
+            {displayGenres.map((genre) => {
+              const genreId = genreLookup.get(normalizeGenreLookupKey(genre));
+              return genreId ? (
+                <Link
+                  key={`${label.id}-${genre}`}
+                  href={`/genres/${genreId}`}
+                  className="rounded-full border border-bg-primary bg-bg-primary px-2.5 py-1 text-xs text-text-secondary hover:border-primary-blue hover:text-primary-blue transition-colors"
+                >
+                  {genre}
+                </Link>
+              ) : (
+                <span key={`${label.id}-${genre}`} className="rounded-full border border-bg-primary bg-bg-primary px-2.5 py-1 text-xs text-text-secondary">
+                  {genre}
+                </span>
+              );
+            })}
           </div>
         )}
 
@@ -117,8 +130,13 @@ export default function LabelsPage() {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'soundcloudFollowers' | 'likes' | 'name' | 'nation' | 'latestRelease' | 'createdAt'>('soundcloudFollowers');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const [genreLookup, setGenreLookup] = useState<GenreTagLookupMap>(new Map());
 
   const currentSort = useMemo(() => sortOptions.find((item) => item.value === sortBy), [sortBy]);
+
+  useEffect(() => {
+    genreAPI.getTagLookup().then(setGenreLookup).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -213,7 +231,7 @@ export default function LabelsPage() {
         ) : (
           <div className="space-y-4">
             {labels.map((label) => (
-              <LabelCard key={label.id} label={label} />
+              <LabelCard key={label.id} label={label} genreLookup={genreLookup} />
             ))}
           </div>
         )}

@@ -16,6 +16,12 @@ export interface DJ {
   isVerified: boolean;
   followerCount: number;
   lastSyncedAt?: string | null;
+  genreBindings?: Array<{
+    genreId: string;
+    label: string;
+    displayName?: string | null;
+    path: string | null;
+  }>;
   spotify?: {
     id: string;
     name: string;
@@ -84,14 +90,15 @@ class DJAPI {
   }
 
   async getDJ(id: string): Promise<DJ> {
-    const response = await fetch(`${API_URL}/djs/${id}`);
+    const response = await fetch(`/v1/djs/${id}`);
 
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Failed to fetch DJ');
     }
 
-    return response.json();
+    const result = await response.json();
+    return result.data;
   }
 
   async createDJ(data: Partial<DJ>, token: string): Promise<DJ> {

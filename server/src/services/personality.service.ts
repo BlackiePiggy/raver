@@ -38,6 +38,7 @@ export type PersonalitySessionMode = 'standard' | 'debug_set';
 
 export type PersonalityGenreBinding = {
   label: string;
+  displayName: string | null;
   genreId: string | null;
   path: string | null;
 };
@@ -270,6 +271,7 @@ const normalizeGenreBindings = (value: unknown): PersonalityGenreBinding[] => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
     const row = raw as Record<string, unknown>;
     const label = String(row.label || '').trim();
+    const displayName = typeof row.displayName === 'string' ? row.displayName.trim() : '';
     const genreIdRaw = typeof row.genreId === 'string' ? row.genreId.trim() : '';
     const pathRaw = typeof row.path === 'string' ? row.path.trim() : '';
     const normalizedLabel = label || (pathRaw ? pathRaw.split('/').map((item) => item.trim()).filter(Boolean).at(-1) || '' : '');
@@ -278,6 +280,7 @@ const normalizeGenreBindings = (value: unknown): PersonalityGenreBinding[] => {
     seen.add(key);
     result.push({
       label: normalizedLabel,
+      displayName: displayName || null,
       genreId: genreIdRaw || null,
       path: pathRaw || null,
     });

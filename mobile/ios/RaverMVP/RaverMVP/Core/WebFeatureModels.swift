@@ -1992,6 +1992,7 @@ struct LearnGenreTreeSummaryNode: Codable, Identifiable, Hashable {
 struct WebGenreTagBinding: Codable, Hashable, Identifiable {
     var genreId: String?
     var label: String
+    var displayName: String? = nil
     var path: String? = nil
 
     var id: String {
@@ -2004,6 +2005,13 @@ struct WebGenreTagBinding: Codable, Hashable, Identifiable {
     var normalizedGenreID: String? {
         let trimmed = genreId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    var resolvedDisplayName: String {
+        if let displayName, !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return displayName
+        }
+        return label
     }
 }
 

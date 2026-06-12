@@ -807,6 +807,7 @@ struct MySavesView: View {
 }
 
 struct ProfileHeaderCard<Actions: View>: View {
+    @EnvironmentObject private var appContainer: AppContainer
     let profile: UserProfile
     let appearance: UserAssetAppearance?
     let realNameStatus: RealNameVerificationStatus?
@@ -820,6 +821,7 @@ struct ProfileHeaderCard<Actions: View>: View {
     let onGenreTap: ((WebGenreTagBinding) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
     @State private var isBioExpanded = false
+    @State private var genreTagLookup: LearnGenreTagLookup = .empty
     @ViewBuilder let actions: () -> Actions
 
     init(
@@ -868,6 +870,14 @@ struct ProfileHeaderCard<Actions: View>: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
+        }
+        .task {
+            guard genreTagLookup.isEmpty else { return }
+            do {
+                genreTagLookup = try await LearnGenreTagLookupCache.shared.lookup(using: appContainer.webService)
+            } catch {
+                genreTagLookup = .empty
+            }
         }
     }
 
@@ -973,7 +983,7 @@ struct ProfileHeaderCard<Actions: View>: View {
 
         for binding in profile.tagBindings ?? [] {
             let label = binding.label.trimmingCharacters(in: .whitespacesAndNewlines)
-            let genreID = binding.normalizedGenreID
+            let genreID = binding.normalizedGenreID ?? genreTagLookup.genreID(forExactName: label)
             let labelKey = label.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
             guard !label.isEmpty else { continue }
             if let genreID {
@@ -982,7 +992,7 @@ struct ProfileHeaderCard<Actions: View>: View {
                 continue
             }
             seenLabels.insert(labelKey)
-            result.append(WebGenreTagBinding(genreId: genreID, label: label, path: binding.path))
+            result.append(WebGenreTagBinding(genreId: genreID, label: label, displayName: binding.displayName, path: binding.path))
         }
 
         for label in LearnGenreTagLookup.splitTags(from: profile.tags) {
@@ -990,7 +1000,13 @@ struct ProfileHeaderCard<Actions: View>: View {
             let key = trimmed.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
             guard !trimmed.isEmpty, !seenLabels.contains(key) else { continue }
             seenLabels.insert(key)
-            result.append(WebGenreTagBinding(genreId: nil, label: trimmed, path: nil))
+            result.append(
+                WebGenreTagBinding(
+                    genreId: genreTagLookup.genreID(forExactName: trimmed),
+                    label: trimmed,
+                    path: nil
+                )
+            )
         }
 
         return result
@@ -1214,13 +1230,13 @@ struct ProfileHeaderCard<Actions: View>: View {
                         Button {
                             onGenreTap(binding)
                         } label: {
-                            tagChipLabel(formattedTagText(binding.label))
+                            tagChipLabel(formattedTagText(binding.resolvedDisplayName))
                         }
                         .buttonStyle(.plain)
                         .accessibilityHint(LT("查看该流派详情", "View genre details", "ジャンル詳細を見る"))
                         .accessibilityIdentifier("profile.genre.\(binding.normalizedGenreID ?? binding.id)")
                     } else {
-                        tagChipLabel(formattedTagText(binding.label))
+                        tagChipLabel(formattedTagText(binding.resolvedDisplayName))
                     }
                 }
 
@@ -6632,7 +6648,6 @@ struct PersonalityFlowView: View {
 
     @ViewBuilder
     private func genreChipsFlow(_ bindings: [WebGenreTagBinding]) -> some View {
-        // 简单的自动换行 flow layout（使用 LazyVStack + HStack 模拟）
         let rows = buildRows(bindings: bindings, containerWidth: UIScreen.main.bounds.width - 80, font: UIFont.systemFont(ofSize: 13, weight: .semibold), spacing: 8)
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
@@ -6642,11 +6657,11 @@ struct PersonalityFlowView: View {
                             Button {
                                 openGenreDetailIfAvailable(binding)
                             } label: {
-                                genreChipLabel(binding.label)
+                                genreChipLabel(binding.resolvedDisplayName)
                             }
                             .buttonStyle(.plain)
                         } else {
-                            genreChipLabel(binding.label)
+                            genreChipLabel(binding.resolvedDisplayName)
                         }
                     }
                 }
@@ -6662,7 +6677,7 @@ struct PersonalityFlowView: View {
         let paddingH: CGFloat = 24 + 8 // horizontal padding inside chip + spacing
 
         for binding in bindings {
-            let tagWidth = (binding.label as NSString).size(withAttributes: [.font: font]).width + paddingH
+            let tagWidth = (binding.resolvedDisplayName as NSString).size(withAttributes: [.font: font]).width + paddingH
             if currentWidth + tagWidth + spacing > containerWidth, !currentRow.isEmpty {
                 rows.append(currentRow)
                 currentRow = [binding]

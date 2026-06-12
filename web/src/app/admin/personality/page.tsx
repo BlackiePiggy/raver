@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { Pencil, X } from 'lucide-react';
 import AdminAppShell from '@/components/admin/AdminAppShell';
 import OverlayImageViewer, { type OverlayImageViewerAsset } from '@/components/admin/OverlayImageViewer';
 import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
@@ -468,6 +469,19 @@ export default function AdminPersonalityPage() {
     }));
   };
 
+  const handleEditGenreBindingDisplayName = (index: number) => {
+    const binding = resultDraft.genreBindings[index];
+    if (!binding) return;
+    const newDisplayName = window.prompt('编辑显示名称（用户看到的标签文字）', binding.displayName || binding.label);
+    if (newDisplayName === null || !newDisplayName.trim()) return;
+    setResultDraft((current) => ({
+      ...current,
+      genreBindings: current.genreBindings.map((b, i) =>
+        i === index ? { ...b, displayName: newDisplayName.trim() } : b
+      ),
+    }));
+  };
+
   if (loading) {
     return (
       <AdminAppShell title="EDMTI 人格" description="正在加载 EDMTI 后台配置…">
@@ -695,21 +709,29 @@ export default function AdminPersonalityPage() {
                   <div className="rounded-2xl border border-gray-200 p-4">
                     <div className="flex flex-wrap gap-2">
                       {resultDraft.genreBindings.map((binding, index) => (
-                        <button
+                        <div
                           key={`${binding.genreId ?? 'custom'}-${binding.label}-${index}`}
-                          type="button"
-                          onClick={() => handleRemoveGenreBinding(index)}
-                          disabled={!canWrite || saving}
-                          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                             binding.genreId
                               ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                               : 'border-dashed border-gray-300 bg-gray-50 text-gray-700'
-                          }`}
-                          title={binding.path || binding.label}
+                          } ${(!canWrite || saving) ? 'opacity-50' : ''}`}
+                          title={binding.genreId ? `绑定: ${binding.label}${(binding.displayName || binding.label) !== binding.label ? ` → 显示: ${binding.displayName}` : ''}` : binding.label}
                         >
-                          <span>{binding.label}</span>
+                          <span>{binding.displayName || binding.label}</span>
+                          {binding.genreId && (binding.displayName || binding.label) !== binding.label ? (
+                            <span className="text-[10px] opacity-50">→{binding.label}</span>
+                          ) : null}
                           <span className="text-[10px] opacity-70">{binding.genreId ? '库内' : '自定义'}</span>
-                        </button>
+                          {binding.genreId ? (
+                            <button type="button" onClick={() => handleEditGenreBindingDisplayName(index)} disabled={!canWrite || saving} className="opacity-60 hover:opacity-100">
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                          ) : null}
+                          <button type="button" onClick={() => handleRemoveGenreBinding(index)} disabled={!canWrite || saving} className="opacity-60 hover:opacity-100">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       ))}
                       {resultDraft.genreBindings.length === 0 ? (
                         <div className="rounded-full border border-dashed border-gray-200 px-3 py-1.5 text-xs text-gray-400">

@@ -86,6 +86,7 @@ export type DJStudioSourceFieldKey =
 export type DJStudioGenreBinding = {
   genreId: string;
   label: string;
+  displayName?: string | null;
   path?: string | null;
 };
 

@@ -297,9 +297,7 @@ struct LearnGenreDetailView: View {
     }
 
     private var pathText: String {
-        genre.path?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "/", with: " › ") ?? ""
+        formattedPathText(genre.path, fallbackName: genre.name)
     }
 
     private var soundCueTracks: [LearnGenreSoundCueTrack] {
@@ -321,6 +319,74 @@ struct LearnGenreDetailView: View {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !localized.isEmpty { return localized }
         return fallback?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private func formattedPathText(_ rawPath: String?, fallbackName: String) -> String {
+        let segments = rawPath?
+            .split(separator: "/")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+        guard !segments.isEmpty else { return "" }
+
+        var displaySegments: [String] = []
+        var previousFullTokens: [String] = []
+        var previousSegmentTokens: [String] = []
+
+        for (index, rawSegment) in segments.enumerated() {
+            let humanized = humanizeGenrePathSegment(rawSegment)
+            var tokens = tokenizeGenrePathSegment(humanized)
+            if let stripped = stripGenrePathPrefix(from: tokens, candidates: [previousFullTokens, previousSegmentTokens]) {
+                tokens = stripped
+            }
+
+            var display = tokens.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+            if index == segments.count - 1 {
+                let trimmedFallback = fallbackName.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedFallback.isEmpty {
+                    display = trimmedFallback
+                }
+            }
+            guard !display.isEmpty else { continue }
+
+            displaySegments.append(display)
+            previousSegmentTokens = tokenizeGenrePathSegment(display)
+            previousFullTokens = tokenizeGenrePathSegment(displaySegments.joined(separator: " "))
+        }
+
+        return displaySegments.joined(separator: " › ")
+    }
+
+    private func humanizeGenrePathSegment(_ rawSegment: String) -> String {
+        let collapsed = rawSegment
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+
+        return collapsed.map { token in
+            guard token != token.uppercased() else { return token }
+            return token.prefix(1).uppercased() + token.dropFirst().lowercased()
+        }
+        .joined(separator: " ")
+    }
+
+    private func tokenizeGenrePathSegment(_ text: String) -> [String] {
+        text
+            .split(whereSeparator: \.isWhitespace)
+            .map { String($0).folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased() }
+    }
+
+    private func stripGenrePathPrefix(from tokens: [String], candidates: [[String]]) -> [String]? {
+        let matchedCandidate = candidates
+            .filter { candidate in
+                !candidate.isEmpty
+                && tokens.count > candidate.count
+                && Array(tokens.prefix(candidate.count)) == candidate
+            }
+            .max(by: { $0.count < $1.count })
+
+        guard let matchedCandidate else { return nil }
+        return Array(tokens.dropFirst(matchedCandidate.count))
     }
 
     private func resolvedExternalURL(_ raw: String?) -> URL? {

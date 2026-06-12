@@ -3766,6 +3766,7 @@ type DJStatsInfo = {
 type DJGenreBindingInfo = {
   genreId: string;
   label: string;
+  displayName?: string | null;
   path: string | null;
 };
 
@@ -3850,6 +3851,7 @@ const fetchDJGenreBindingInfoMap = async (djIds: string[]): Promise<Map<string, 
     select: {
       djId: true,
       genreId: true,
+      displayName: true,
       genre: {
         select: {
           name: true,
@@ -3869,6 +3871,7 @@ const fetchDJGenreBindingInfoMap = async (djIds: string[]): Promise<Map<string, 
     bucket.push({
       genreId: row.genreId,
       label: row.genre.name,
+      displayName: row.displayName || undefined,
       path: row.genre.path ?? null,
     });
     map.set(row.djId, bucket);
@@ -4000,6 +4003,7 @@ const fetchDJWithContributorsById = async (djId: string) =>
 
 type NormalizedDJGenreBindingInput = {
   genreId: string;
+  displayName: string | null;
   sortOrder: number;
 };
 
@@ -4017,6 +4021,7 @@ const normalizeDJGenreBindingsInput = (value: unknown): NormalizedDJGenreBinding
     seen.add(genreId);
     items.push({
       genreId,
+      displayName: normalizeSubmittedSingleLine(row.displayName, 200) || null,
       sortOrder: index + 1,
     });
   }
@@ -4052,6 +4057,7 @@ const syncDJGenreBindings = async (
     data: bindings.map((binding) => ({
       djId,
       genreId: binding.genreId,
+      displayName: binding.displayName,
       sortOrder: binding.sortOrder,
     })),
     skipDuplicates: true,

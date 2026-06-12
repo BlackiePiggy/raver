@@ -59,6 +59,7 @@ export const mapDJStudioDraftToCreateInput = (draft: DJStudioDraft): DJStudioCre
     .map((binding) => ({
       genreId: trimSingleLineOrNull(binding.genreId, 128) || '',
       label: trimSingleLineOrNull(binding.label, INPUT_LIMITS.dj.genre) || '',
+      displayName: trimSingleLineOrNull(binding.displayName, INPUT_LIMITS.dj.genre) || undefined,
       path: trimSingleLineOrNull(binding.path, 255),
     }))
     .filter((binding) => Boolean(binding.genreId)),
@@ -101,6 +102,7 @@ export const mapDJStudioDraftToUpdateInput = (draft: DJStudioDraft): DJStudioUpd
     .map((binding) => ({
       genreId: trimSingleLineOrNull(binding.genreId, 128) || '',
       label: trimSingleLineOrNull(binding.label, INPUT_LIMITS.dj.genre) || '',
+      displayName: trimSingleLineOrNull(binding.displayName, INPUT_LIMITS.dj.genre) || undefined,
       path: trimSingleLineOrNull(binding.path, 255),
     }))
     .filter((binding) => Boolean(binding.genreId)),

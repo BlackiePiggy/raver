@@ -1051,6 +1051,21 @@
                     "Megabeat"
                   ],
                   "children": []
+                },
+                {
+                  "id": "techno/hard-techno/hard-dance",
+                  "name": "Hard Dance",
+                  "path": "Techno > Hard Techno > Hard Dance",
+                  "description": "Hard Dance is a broad umbrella term for high-energy electronic dance music styles that blend elements of hard techno, hardstyle, and trance with fast tempos (typically 150+ BPM) and aggressive, pounding kicks. It encompasses various energetic subgenres designed for peak-time festival and rave environments.",
+                  "example": "Brennan Heart & Jonathan Mendelsohn - Imaginary",
+                  "spotifyTrackURL": "https://open.spotify.com/track/2bPGTMB5sFfFYQ2YvSmup0",
+                  "wikipediaURL": "https://en.wikipedia.org/wiki/Hard_dance",
+                  "keyArtists": [
+                    "Showtek",
+                    "Brennan Heart",
+                    "W&W"
+                  ],
+                  "children": []
                 }
               ]
             }
@@ -1099,6 +1114,21 @@
             "B12",
             "The Black Dog",
             "The Future Sound Of London"
+          ],
+          "children": []
+        },
+        {
+          "id": "techno/progressive-techno",
+          "name": "Progressive Techno",
+          "path": "Techno > Progressive Techno",
+          "description": "Progressive Techno blends the structural approach of progressive house — long builds, layered arrangements, and gradual evolution — with the darker, more industrial textures of techno. It features hypnotic loops, subtle melodic elements, and a driving yet contemplative energy, typically operating between 125–132 BPM.",
+          "example": "Stephan Bodzin - Singularity",
+          "spotifyTrackURL": "https://open.spotify.com/track/3F5ytV1Tj387VZu2dKjsKs",
+          "wikipediaURL": "",
+          "keyArtists": [
+            "Stephan Bodzin",
+            "Maceo Plex",
+            "Dosem"
           ],
           "children": []
         }
@@ -1374,6 +1404,21 @@
                 "Matoma"
               ],
               "children": []
+            },
+            {
+              "id": "house/deep-house/organic-house",
+              "name": "Organic House",
+              "path": "House > Deep House > Organic House",
+              "description": "Organic House is a subgenre of deep house that incorporates natural, acoustic, and world-music elements into electronic production. It features warm pads, tribal percussion, ethnic instruments, and nature-inspired textures layered over gentle, groovy rhythms. The genre creates an earthy, meditative atmosphere suited for sunset sessions and outdoor gatherings.",
+              "example": "Bedouin - Set The Controls For The Heart Of The Sun",
+              "spotifyTrackURL": "https://open.spotify.com/track/1dNnMJIT69PAB8fVMPQiSu",
+              "wikipediaURL": "",
+              "keyArtists": [
+                "Viken Arman",
+                "Audiofly",
+                "Bedouin"
+              ],
+              "children": []
             }
           ]
         },
@@ -1463,6 +1508,21 @@
                 "Meat Katie",
                 "Elite Force",
                 "Uberzone"
+              ],
+              "children": []
+            },
+            {
+              "id": "house/tech-house/g-house",
+              "name": "G-House",
+              "path": "House > Tech House > G-House",
+              "description": "G-House (Gangsta House or Ghetto House) is a subgenre of house music that blends deep, bass-heavy house beats with hip-hop vocals, gangsta rap aesthetics, and dark, minimalistic production. Originating from the underground scenes of Lyon and Chicago, it features pitched-down vocal samples, heavy sub-bass, and gritty, street-influenced textures.",
+              "example": "Malaa - Notorious",
+              "spotifyTrackURL": "https://open.spotify.com/track/4VNDOgXkBzLIyDOhPasGkP",
+              "wikipediaURL": "",
+              "keyArtists": [
+                "Malaa",
+                "DJ Snake",
+                "Tchami"
               ],
               "children": []
             }
@@ -1816,6 +1876,21 @@
                 "Dimitri Vegas & Like Mike"
               ],
               "children": []
+            },
+            {
+              "id": "house/electro-house/future-house",
+              "name": "Future House",
+              "path": "House > Electro House > Future House",
+              "description": "Future House is a subgenre of house music that emerged in the mid-2010s, characterized by its metallic, pitched-down vocal chops, wobbly bass synths, and bright, polished production. Pioneered by artists like Oliver Heldens and Tchami, it blends elements of deep house and UK garage with EDM energy, creating a sound that is both club-ready and radio-friendly.",
+              "example": "Oliver Heldens - Gecko (Overdrive) [feat. Becky Hill]",
+              "spotifyTrackURL": "https://open.spotify.com/track/3eplkMSRMGKHritPmigHvo",
+              "wikipediaURL": "https://en.wikipedia.org/wiki/Future_house",
+              "keyArtists": [
+                "Oliver Heldens",
+                "Tchami",
+                "Don Diablo"
+              ],
+              "children": []
             }
           ]
         },
@@ -1831,6 +1906,51 @@
             "Sasha",
             "John Digweed",
             "Deadmau5"
+          ],
+          "children": []
+        },
+        {
+          "id": "house/melodic-house",
+          "name": "Melodic House",
+          "path": "House > Melodic House",
+          "description": "Melodic House is a subgenre of house music that emphasizes lush melodies, atmospheric pads, and emotive chord progressions over a steady four-on-the-floor rhythm. It bridges the gap between deep house and progressive house, often featuring long builds, subtle drops, and a warm, hypnotic feel suited for both clubs and open-air events.",
+          "example": "Lane 8 - Brightest Lights (feat. POLICA)",
+          "spotifyTrackURL": "https://open.spotify.com/track/0V2M3SKHgrPkJMYMnVxrrv",
+          "wikipediaURL": "",
+          "keyArtists": [
+            "Lane 8",
+            "Ben Böhmer",
+            "Yotto"
+          ],
+          "children": []
+        },
+        {
+          "id": "house/bass-house",
+          "name": "Bass House",
+          "path": "House > Bass House",
+          "description": "Bass House is an energetic subgenre of house music that combines the four-on-the-floor groove of house with heavy, distorted basslines influenced by dubstep and UK bass music. Characterized by its wobbly, growling bass synths, punchy drums, and festival-ready energy, it emerged in the mid-2010s as a crossover between bass music and house.",
+          "example": "Jauz - Feel The Volume",
+          "spotifyTrackURL": "https://open.spotify.com/track/7iELEcNf1VuAVVpuyvIeWk",
+          "wikipediaURL": "",
+          "keyArtists": [
+            "Jauz",
+            "Habstrakt",
+            "AC Slater"
+          ],
+          "children": []
+        },
+        {
+          "id": "house/uk-house",
+          "name": "UK House",
+          "path": "House > UK House",
+          "description": "UK House encompasses a range of house music styles originating from the United Kingdom, blending elements of UK garage, funky house, and deep house with distinctly British sensibilities. It often features shuffling rhythms, chopped vocal samples, and a polished yet gritty production aesthetic that reflects the UK's diverse club culture.",
+          "example": "Disclosure - Latch (feat. Sam Smith)",
+          "spotifyTrackURL": "https://open.spotify.com/track/4VrWlk8IQxevMvERoX08iC",
+          "wikipediaURL": "",
+          "keyArtists": [
+            "Disclosure",
+            "Chris Lorenzo",
+            "James Hype"
           ],
           "children": []
         },
@@ -2243,6 +2363,21 @@
             "Hardfloor",
             "Art of Trance",
             "Union Jack"
+          ],
+          "children": []
+        },
+        {
+          "id": "trance/future-rave",
+          "name": "Future Rave",
+          "path": "Trance > Future Rave",
+          "description": "Future Rave is a subgenre of electronic dance music that blends elements of big room house, trance, and techno with rave-inspired synths and driving basslines. Popularized by David Guetta and MORTEN, it features euphoric melodies, distorted lead synths, and high-energy drops designed for festival main stages. The genre draws on nostalgic rave aesthetics while incorporating modern production techniques.",
+          "example": "David Guetta & MORTEN - Kill Me Slow",
+          "spotifyTrackURL": "",
+          "wikipediaURL": "",
+          "keyArtists": [
+            "David Guetta",
+            "MORTEN",
+            "Maddix"
           ],
           "children": []
         }
@@ -3071,6 +3206,21 @@
                 "Wave Racer"
               ],
               "children": []
+            },
+            {
+              "id": "bass-music/future-bass/melodic-bass",
+              "name": "Melodic Bass",
+              "path": "Bass Music > Future Bass > Melodic Bass",
+              "description": "Melodic Bass is a subgenre of bass music that combines heavy, cinematic bass drops with emotional melodies, soaring synths, and often ethereal vocals. It draws from future bass, dubstep, and trance, creating an uplifting yet powerful sound that has become a staple of festival culture, particularly in the North American EDM scene.",
+              "example": "ILLENIUM - Crawl Outta Love (feat. Annika Wells)",
+              "spotifyTrackURL": "",
+              "wikipediaURL": "",
+              "keyArtists": [
+                "Illenium",
+                "Said The Sky",
+                "Seven Lions"
+              ],
+              "children": []
             }
           ]
         },
@@ -3483,6 +3633,21 @@
             "Eat Static",
             "Digitalis",
             "Hedflux"
+          ],
+          "children": []
+        },
+        {
+          "id": "breakbeat/neo-rave",
+          "name": "Neo Rave",
+          "path": "Breakbeat > Neo Rave",
+          "description": "Neo Rave is a contemporary electronic music movement that revives and reinterprets the sounds, aesthetics, and energy of 1990s rave culture. It combines elements of acid techno, breakbeat, gabber, and trance with modern production techniques, often featuring distorted synths, pounding kicks, and an unapologetically high-energy, punk-influenced attitude. The genre has seen a resurgence in underground European club culture since the late 2010s.",
+          "example": "Brutalismus 3000 - Ultraviolett",
+          "spotifyTrackURL": "https://open.spotify.com/track/2r5YGoJSTU1Int8IsIZcCO",
+          "wikipediaURL": "",
+          "keyArtists": [
+            "Brutalismus 3000",
+            "Schrotthagen",
+            "T78"
           ],
           "children": []
         }
@@ -4643,6 +4808,21 @@
                 "Passion Pit",
                 "MGMT",
                 "Tycho"
+              ],
+              "children": []
+            },
+            {
+              "id": "pop-and-rock-fusion/electronic-rock/indie-dance",
+              "name": "Indie Dance",
+              "path": "Pop and Rock Fusion > Electronic Rock > Indie Dance",
+              "description": "Indie Dance is a genre that blends the aesthetic sensibilities and instrumentation of indie rock with electronic dance music production. It features organic guitar textures, live-sounding drums, and warm analog synths over danceable grooves, creating a sound that bridges alternative clubs and electronic dancefloors. The genre emerged from the post-punk and new wave revival of the 2000s.",
+              "example": "Hercules and Love Affair - Blind (feat. Antony Hegarty)",
+              "spotifyTrackURL": "",
+              "wikipediaURL": "",
+              "keyArtists": [
+                "Hercules and Love Affair",
+                "Hot Chip",
+                "LCD Soundsystem"
               ],
               "children": []
             }

@@ -3757,11 +3757,11 @@ struct DJDetailView: View {
             Button {
                 discoverPush(.genreDetail(genreID: genreID))
             } label: {
-                genreTagLabel(binding.label)
+                genreTagLabel(binding.resolvedDisplayName)
             }
             .buttonStyle(.plain)
         } else {
-            genreTagLabel(binding.label)
+            genreTagLabel(binding.resolvedDisplayName)
         }
     }
 
@@ -3793,7 +3793,7 @@ struct DJDetailView: View {
                 continue
             }
             seenLabels.insert(labelKey)
-            result.append(WebGenreTagBinding(genreId: genreID, label: label, path: binding.path))
+            result.append(WebGenreTagBinding(genreId: genreID, label: label, displayName: binding.displayName, path: binding.path))
         }
 
         for label in LearnGenreTagLookup.splitTags(from: dj.genres ?? []) {

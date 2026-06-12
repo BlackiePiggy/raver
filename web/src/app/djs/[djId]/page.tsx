@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import { djAPI, DJ } from '@/lib/api/dj';
 import { followAPI } from '@/lib/api/follow';
 import { checkinAPI } from '@/lib/api/checkin';
@@ -191,6 +192,19 @@ export default function DJDetailPage() {
             <p className="mt-3 text-sm md:text-base text-text-secondary">
               {dj.followerCount.toLocaleString()} 关注
             </p>
+            {dj.genreBindings && dj.genreBindings.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {dj.genreBindings.map((b) => (
+                  <Link
+                    key={b.genreId}
+                    href={`/genres/${b.genreId}`}
+                    className="rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs text-white/90 hover:bg-white/20 hover:border-white/40 transition-colors"
+                  >
+                    {b.displayName || b.label}
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         </section>
 

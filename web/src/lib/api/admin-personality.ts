@@ -105,6 +105,7 @@ export type AdminPersonalityResultTypeInput = {
 
 export type PersonalityGenreBinding = {
   label: string;
+  displayName?: string | null;
   genreId: string | null;
   path: string | null;
 };

@@ -1103,6 +1103,7 @@ model DJGenreBinding {
   id          String   @id @default(uuid())
   djId        String   @map("dj_id")
   genreId     String   @map("genre_id")
+  displayName String?  @map("display_name")
   bindingType String   @default("style") @map("binding_type")
   sortOrder   Int      @default(0) @map("sort_order")
   createdAt   DateTime @default(now()) @map("created_at")

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import AdminCountedControl from '@/components/admin/AdminCountedControl';
 import AdminImageUploadPanel from '@/components/admin/AdminImageUploadPanel';
 import DynamicStringListField from '@/components/admin/DynamicStringListField';
-import { Loader2, RefreshCw, X } from 'lucide-react';
+import { Loader2, Pencil, RefreshCw, X } from 'lucide-react';
 import { LocalizedTextField, MultilingualEditorOverlay, type LocalizedFieldKind, type LocalizedLocaleKey } from '@/components/admin/LocalizedTextEditor';
 import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import { notificationCenterAdminApi } from '@/lib/api/notification-center-admin';
@@ -116,6 +116,7 @@ type GenreSearchCandidate = {
 type DJGenreChip = {
   key: string;
   label: string;
+  displayName: string;
   binding: DJStudioGenreBinding | null;
 };
 
@@ -411,6 +412,7 @@ export default function DJStudioForm({
       chips.push({
         key: `genre:${genreId}`,
         label,
+        displayName: binding.displayName || label,
         binding,
       });
     });
@@ -422,6 +424,7 @@ export default function DJStudioForm({
       chips.push({
         key,
         label,
+        displayName: label,
         binding: null,
       });
     });
@@ -565,6 +568,20 @@ export default function DJStudioForm({
         : current.genreBindings,
       genres: dedupeGenreLabels(current.genres).filter(
         (item) => normalizeGenreLabel(item) !== normalizeGenreLabel(chip.label)
+      ),
+    }));
+  };
+
+  const handleEditGenreDisplayName = (chip: DJGenreChip) => {
+    if (!chip.binding) return;
+    const newDisplayName = window.prompt('编辑显示名称（用户看到的标签文字）', chip.displayName);
+    if (newDisplayName === null || !newDisplayName.trim()) return;
+    setDraft((current) => ({
+      ...current,
+      genreBindings: current.genreBindings.map((binding) =>
+        binding.genreId === chip.binding?.genreId
+          ? { ...binding, displayName: newDisplayName.trim() }
+          : binding
       ),
     }));
   };
@@ -1441,21 +1458,29 @@ export default function DJStudioForm({
               <div className="rounded-[28px] border border-black/10 bg-white/80 p-4">
                 <div className="flex flex-wrap gap-2">
                   {genreChips.map((chip) => (
-                    <button
+                    <div
                       key={chip.key}
-                      type="button"
-                      onClick={() => handleRemoveGenreTag(chip)}
-                      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                         chip.binding
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                          : 'border-dashed border-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                          : 'border-dashed border-gray-300 bg-gray-50 text-gray-700'
                       }`}
-                      title={chip.binding?.path || chip.label}
+                      title={chip.binding ? `绑定: ${chip.label}${chip.displayName !== chip.label ? ` → 显示: ${chip.displayName}` : ''}` : chip.label}
                     >
-                      <span>{chip.label}</span>
+                      <span>{chip.displayName}</span>
+                      {chip.binding && chip.displayName !== chip.label ? (
+                        <span className="text-[10px] opacity-50">→{chip.label}</span>
+                      ) : null}
                       <span className="text-[10px] opacity-70">{chip.binding ? '已绑定' : '自定义'}</span>
-                      <X className="h-3.5 w-3.5 opacity-60" />
-                    </button>
+                      {chip.binding ? (
+                        <button type="button" onClick={() => handleEditGenreDisplayName(chip)} className="opacity-60 hover:opacity-100">
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      ) : null}
+                      <button type="button" onClick={() => handleRemoveGenreTag(chip)} className="opacity-60 hover:opacity-100">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   ))}
                   {genreChips.length === 0 ? (
                     <div className="rounded-full border border-dashed border-gray-200 px-3 py-1.5 text-xs text-gray-400">

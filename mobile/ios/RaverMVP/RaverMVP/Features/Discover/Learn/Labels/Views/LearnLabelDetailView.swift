@@ -16,6 +16,7 @@ struct LearnLabelDetailView: View {
     @State private var fullChatSharePresentation: LabelCardSharePresentation?
     @State private var reportTarget: ReportSheetTarget?
     @State private var errorMessage: String?
+    @State private var genreTagLookup: LearnGenreTagLookup = .empty
 
     private var shareLinkCoordinator: ShareLinkCoordinator {
         ShareLinkCoordinator(repository: AppEnvironment.makeShareLinkRepository())
@@ -78,13 +79,7 @@ struct LearnLabelDetailView: View {
                                 .font(.footnote.weight(.semibold))
                                 .foregroundStyle(RaverTheme.secondaryText)
                             LearnWrapFlowLayout(items: displayGenres) { genre in
-                                Text(genre)
-                                    .font(.caption2.weight(.medium))
-                                    .foregroundStyle(RaverTheme.secondaryText)
-                                    .padding(.horizontal, 9)
-                                    .padding(.vertical, 6)
-                                    .background(RaverTheme.background)
-                                    .clipShape(Capsule())
+                                labelGenreTag(genre)
                             }
                         }
                     }
@@ -161,6 +156,11 @@ struct LearnLabelDetailView: View {
         }
         .task(id: label.avatarUrl ?? "") {
             await resolveAvatarLuminance()
+        }
+        .task {
+            do {
+                genreTagLookup = try await LearnGenreTagLookupCache.shared.lookup(using: appContainer.webService)
+            } catch {}
         }
         .alert(LT("提示", "Notice", "お知らせ"), isPresented: Binding(
             get: { errorMessage != nil },
@@ -271,6 +271,30 @@ struct LearnLabelDetailView: View {
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty } ?? []
+    }
+
+    @ViewBuilder
+    private func labelGenreTag(_ genre: String) -> some View {
+        if let genreID = genreTagLookup.genreID(forExactName: genre) {
+            Button {
+                discoverPush(.genreDetail(genreID: genreID))
+            } label: {
+                labelGenreTagLabel(genre)
+            }
+            .buttonStyle(.plain)
+        } else {
+            labelGenreTagLabel(genre)
+        }
+    }
+
+    private func labelGenreTagLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(RaverTheme.secondaryText)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(RaverTheme.background)
+            .clipShape(Capsule())
     }
 
     private func destinationURL(_ raw: String?) -> URL? {

@@ -57,6 +57,7 @@ const stringArray = (value: unknown): string[] => {
 
 type NormalizedDJGenreBindingInput = {
   genreId: string;
+  displayName: string | null;
   sortOrder: number;
 };
 
@@ -74,6 +75,7 @@ const normalizeDJGenreBindingsPayload = (value: unknown): NormalizedDJGenreBindi
     seen.add(genreId);
     items.push({
       genreId,
+      displayName: cleanText(row.displayName) || null,
       sortOrder: index + 1,
     });
   }
@@ -106,12 +108,14 @@ const fetchCurrentDJGenreBindings = async (
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
     select: {
       genreId: true,
+      displayName: true,
       sortOrder: true,
     },
   });
 
   return rows.map((row, index) => ({
     genreId: row.genreId,
+    displayName: row.displayName ?? null,
     sortOrder: row.sortOrder || index + 1,
   }));
 };
@@ -131,6 +135,7 @@ const syncDJGenreBindings = async (
     data: bindings.map((binding) => ({
       djId,
       genreId: binding.genreId,
+      displayName: binding.displayName,
       sortOrder: binding.sortOrder,
     })),
     skipDuplicates: true,

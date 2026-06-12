@@ -14,6 +14,7 @@ export const buildDJChangeSnapshot = async (input: {
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
       select: {
         genreId: true,
+        displayName: true,
         genre: {
           select: {
             name: true,
@@ -42,6 +43,7 @@ export const buildDJChangeSnapshot = async (input: {
         genreBindings: genreBindings.map((binding) => ({
           genreId: binding.genreId,
           label: binding.genre.name,
+          displayName: binding.displayName ?? null,
           path: binding.genre.path,
         })),
         bio: dj.bio,

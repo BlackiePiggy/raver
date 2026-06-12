@@ -47,6 +47,7 @@ export type AdminPersonalityResultTypeInput = {
   genreMapping?: string | null;
   genreBindings?: Array<{
     label?: string | null;
+    displayName?: string | null;
     genreId?: string | null;
     path?: string | null;
   }> | null;
@@ -60,6 +61,7 @@ export type AdminPersonalityResultTypeInput = {
 
 type PersonalityGenreBinding = {
   label: string;
+  displayName?: string | null;
   genreId: string | null;
   path: string | null;
 };
@@ -82,6 +84,7 @@ const normalizeGenreBindings = (value: unknown): PersonalityGenreBinding[] => {
     if (!rawItem || typeof rawItem !== 'object' || Array.isArray(rawItem)) continue;
     const item = rawItem as Record<string, unknown>;
     const label = normalizeText(item.label, 120);
+    const displayName = normalizeText(item.displayName, 200);
     const genreId = normalizeText(item.genreId, 128);
     const path = normalizeText(item.path, 500);
     const normalizedLabel = label ?? path?.split(' / ').filter(Boolean).at(-1) ?? null;
@@ -93,6 +96,7 @@ const normalizeGenreBindings = (value: unknown): PersonalityGenreBinding[] => {
 
     items.push({
       label: normalizedLabel,
+      displayName: displayName || undefined,
       genreId: genreId ?? null,
       path: genreId ? path ?? null : null,
     });

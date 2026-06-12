@@ -21,6 +21,7 @@ export const djPosterHandler: SharePosterHandler = {
         genreBindings: {
           orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
           select: {
+            displayName: true,
             genre: {
               select: {
                 name: true,
@@ -47,7 +48,7 @@ export const djPosterHandler: SharePosterHandler = {
     const title = posterText(pickLocalizedText(dj.nameI18n, context.locale, dj.name), context.shareLink.title);
     const country = posterText(pickLocalizedText(dj.countryI18n, context.locale, dj.country), context.locale === 'zh' ? '未知' : 'Unknown');
     const genreNames = dj.genreBindings
-      .map((binding) => binding.genre.name.trim())
+      .map((binding) => (binding.displayName || binding.genre.name).trim())
       .filter(Boolean);
     const genres = [...genreNames, ...dj.genres]
       .filter(Boolean)
