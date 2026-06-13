@@ -333,7 +333,7 @@ const CONSERVATIVE_GENRE_ALIASES = new Map<string, string[]>([
   ['post dubstep', ['UK Dubstep']],
   ['experimental dubstep', ['UK Dubstep']],
   ['wobble bass', ['Dubstep']],
-  ['bass', ['UK bass']],
+  ['bass', ['Bass Music']],
   ['deep bass', ['Deep Dubstep']],
   ['vocal bass', ['Future bass']],
   ['global bass', ['UK bass']],
@@ -344,10 +344,7 @@ const CONSERVATIVE_GENRE_ALIASES = new Map<string, string[]>([
   ['140 bass music', ['UK bass']],
   ['140', ['UK bass']],
   ['melodic bass', ['Melodic Bass']],
-  ['edm', ['Trap (EDM)']],
-  ['electronic dance music', ['House']],
   ['breaks', ['Breakbeat']],
-  ['rave', ['Breakbeat hardcore']],
   ['90s rave', ['Breakbeat hardcore']],
   ['old school rave', ['Breakbeat hardcore']],
   ['oldschool rave', ['Breakbeat hardcore']],
@@ -366,7 +363,7 @@ const CONSERVATIVE_GENRE_ALIASES = new Map<string, string[]>([
   ['italodance', ['Italo disco']],
   ['italo house', ['Italo disco']],
   ['french touch', ['French House']],
-  ['funk house', ['Hip House']],
+  ['funk house', ['Funky Tech House']],
   ['funk infused house', ['Hip House']],
   ['funk influenced electronic', ['Electrofunk']],
   ['electronic funk', ['Electrofunk']],
@@ -533,9 +530,6 @@ const CONSERVATIVE_GENRE_ALIASES = new Map<string, string[]>([
   ['weird house', ['Lo-fi House']],
   ['weirdo house', ['Lo-fi House']],
   ['retro tech', ['Detroit Techno']],
-  ['club music', ['House']],
-  ['club', ['House']],
-  ['dance', ['Dance-pop']],
   ['dance remix', ['Dance-pop']],
   ['tech', ['Tech House']],
   ['tek tribal', ['Tribal Tech House']],
@@ -556,7 +550,6 @@ const CONSERVATIVE_GENRE_ALIASES = new Map<string, string[]>([
   ['hard edm', ['Big Room House']],
   ['pop edm', ['Dance-pop']],
   ['bounce and bass', ['Big Room House']],
-  ['electro acoustic', ['Electronica']],
   ['electro soul', ['Electrofunk']],
   ['festival edm', ['Big Room House']],
   ['funk electronic', ['Electrofunk']],
@@ -578,6 +571,8 @@ const NON_ELECTRONIC_EXCLUSIONS = new Set([
   'emo rock', 'french indie pop', 'dark pop', 'emotional pop',
   'worldbeat', 'reggaeton mexicano', 'latin urbano', 'perreo',
   'latin urban', 'urban', 'urban dance', '70 s funk',
+  'edm', 'electronic dance music', 'rave',
+  'club music', 'club', 'dance', 'electro acoustic',
 ]);
 
 const normalizeText = (value: unknown): string =>
@@ -596,7 +591,7 @@ const normalizeLooseKey = (value: string): string =>
     .replace(/&/g, ' and ')
     .replace(/[_/]+/g, ' ')
     .replace(/[-\u2010-\u2015\u2212]+/g, ' ')
-    .replace(/[()[\]{}''""'".:;!?+*#@`~|\\]/g, ' ')
+    .replace(/[()[\]{}\u2018\u2019\u201c\u201d'".:;!?+*#@`~|\\]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 

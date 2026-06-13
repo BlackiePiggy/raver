@@ -21,6 +21,8 @@
     "genres:apply:i18n": "ts-node prisma/apply-genre-i18n-translations.ts",
     "genres:backfill:bindings": "ts-node prisma/backfill-genre-id-bindings.ts",
     "genres:backfill:bindings:apply": "ts-node prisma/backfill-genre-id-bindings.ts --apply",
+    "genres:cleanup:dj-genres": "ts-node prisma/cleanup-dj-genres-for-clickable-tags.ts",
+    "genres:cleanup:dj-genres:apply": "ts-node prisma/cleanup-dj-genres-for-clickable-tags.ts --apply",
     "djs:import:edmdd": "ts-node prisma/import-edmdancedirectory-djs.ts",
     "djs:avatars:oss": "ts-node prisma/upload-dj-avatars-to-oss.ts",
     "avatars:defaults:oss": "ts-node prisma/upload-default-avatars-to-oss.ts",
