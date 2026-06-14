@@ -72,6 +72,10 @@ export type PersonalityStatusSummary = {
   canStartDebugQuestionSet: boolean;
 };
 
+export type PersonalityResultPreviewListResult = {
+  items: PersonalityResultPayload[];
+};
+
 export type PersonalityQuestionOptionPayload = {
   optionId: string;
   text: string | null;
@@ -660,6 +664,39 @@ export const getPersonalityResult = async (userId: string): Promise<PersonalityR
     return null;
   }
   return mapResultPayload(record.resultSnapshot as PersonalityResultPayload);
+};
+
+export const listPersonalityResultPreviews = async (
+  options?: {
+    userRole?: string | null;
+  }
+): Promise<PersonalityResultPreviewListResult> => {
+  if (!isDebugAdmin(options?.userRole)) {
+    throw new PersonalityServiceError(403, 'PERSONALITY_DEBUG_ADMIN_REQUIRED', 'Admin role is required');
+  }
+
+  const rows = await prisma.personalityResultType.findMany({
+    where: {
+      isActive: true,
+    },
+    orderBy: [{ sortOrder: 'asc' }, { code: 'asc' }],
+    select: {
+      code: true,
+      title: true,
+      subtitle: true,
+      slangTagline: true,
+      genreMapping: true,
+      genreBindings: true,
+      description: true,
+      imageUrl: true,
+      isHidden: true,
+      mbtiCode: true,
+    },
+  });
+
+  return {
+    items: rows.map((row) => mapResultPayload(row)),
+  };
 };
 
 export const createPersonalitySession = async (

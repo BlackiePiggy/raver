@@ -6,6 +6,7 @@ import {
   createPersonalitySession,
   getPersonalityResult,
   getPersonalityStatus,
+  listPersonalityResultPreviews,
   savePersonalitySessionAnswer,
   submitPersonalitySession,
   type PersonalitySessionAnswer,
@@ -61,6 +62,22 @@ router.get('/result', authenticate, async (req: AuthRequest, res: Response): Pro
   try {
     const result = await getPersonalityResult(userId);
     res.json({ result });
+  } catch (error) {
+    handlePersonalityError(res, error);
+  }
+});
+
+router.get('/result-types-preview', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user?.userId;
+  if (!userId) {
+    res.status(401).json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' });
+    return;
+  }
+  try {
+    const result = await listPersonalityResultPreviews({
+      userRole: req.user?.role ?? null,
+    });
+    res.json(result);
   } catch (error) {
     handlePersonalityError(res, error);
   }
