@@ -676,9 +676,6 @@ export const listPersonalityResultPreviews = async (
   }
 
   const rows = await prisma.personalityResultType.findMany({
-    where: {
-      isActive: true,
-    },
     orderBy: [{ sortOrder: 'asc' }, { code: 'asc' }],
     select: {
       code: true,
