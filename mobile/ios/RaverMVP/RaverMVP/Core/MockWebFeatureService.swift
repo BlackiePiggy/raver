@@ -86,6 +86,7 @@ actor MockWebFeatureService: WebFeatureService {
     struct PersonalityScenario {
         var status: PersonalityStatusSummary
         var result: PersonalityResultPayload?
+        var resultPreviews: [PersonalityResultPayload]
         var sessionFactory: @Sendable (_ mode: PersonalitySessionMode) -> PersonalitySessionCreateResponse
         var saveAnswerHandler: @Sendable (_ sessionId: String, _ answers: [PersonalityAnswerPayload], _ currentQuestionIndex: Int?) -> PersonalitySessionAnswerSaveResponse
         var submitHandler: @Sendable (_ sessionId: String, _ answers: [PersonalityAnswerPayload]) -> PersonalitySessionSubmitResponse
@@ -121,6 +122,33 @@ actor MockWebFeatureService: WebFeatureService {
                     canStartDebugQuestionSet: true
                 ),
                 result: sampleResult,
+                resultPreviews: [
+                    sampleResult,
+                    PersonalityResultPayload(
+                        code: "NIGHT",
+                        title: "夜游信号塔",
+                        subtitle: "凌晨两点越跳越清醒",
+                        slangTagline: "低调入场，后半夜统治舞池",
+                        genreMapping: "Melodic Techno、Deep House、Progressive",
+                        genreBindings: nil,
+                        description: "你不是一上来最炸的那个人，但总会在气氛最对的时候接管全场。",
+                        imageUrl: nil,
+                        isHidden: false,
+                        mbtiCode: "INFJ"
+                    ),
+                    PersonalityResultPayload(
+                        code: "CPDD",
+                        title: "恋爱脑电波接收器",
+                        subtitle: "来都来了，总要有点故事",
+                        slangTagline: "看演出只是借口，心动才是主线",
+                        genreMapping: "Future Bass、Vocal House、Feel-good EDM",
+                        genreBindings: nil,
+                        description: "你对音乐和氛围都很敏感，最容易在副歌响起时把暧昧值拉满。",
+                        imageUrl: nil,
+                        isHidden: true,
+                        mbtiCode: nil
+                    )
+                ],
                 sessionFactory: { mode in
                     let normalQuestions: [PersonalityQuestionPayload] = (1...16).map { index in
                         PersonalityQuestionPayload(
@@ -918,6 +946,10 @@ actor MockWebFeatureService: WebFeatureService {
 
     func fetchPersonalityResult() async throws -> PersonalityResultEnvelope {
         PersonalityResultEnvelope(result: personalityScenario.result)
+    }
+
+    func fetchPersonalityResultPreviews() async throws -> PersonalityResultPreviewListResponse {
+        PersonalityResultPreviewListResponse(items: personalityScenario.resultPreviews)
     }
 
     func createPersonalitySession(mode: PersonalitySessionMode) async throws -> PersonalitySessionCreateResponse {

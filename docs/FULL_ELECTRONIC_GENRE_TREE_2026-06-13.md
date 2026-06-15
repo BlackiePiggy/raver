@@ -1,0 +1,339 @@
+# 完整电子音乐流派树
+
+- 导出时间：2026-06-13T15:30:59.768Z
+- 总节点数：323
+- 根节点数：1
+- 叶子节点数：238
+- 最大层级深度：5
+
+## 阅读说明
+
+- 每一行是一个流派节点，缩进表示父子层级。
+- `ID` 是数据库中的流派主键，也是详情页/绑定逻辑使用的稳定标识。
+- `代表曲`、`代表艺人`、`年代`、`BPM` 来自当前数据库字段，可用于后续校对推荐曲目。
+
+## 流派树
+
+- **Electronic Music** — ID: `electronic-music` | 年代: 1960s | BPM: —
+  - **Experimental** — ID: `experimental` | 代表曲: 参考曲目：John Cage - 4'33" | 代表艺人: John Cage, Karlheinz Stockhausen, Pierre Schaeffer | 年代: 1950s | BPM: —
+    - **IDM (Intelligent Dance Music)** — ID: `experimental/idm-intelligent-dance-music` | 代表曲: Aphex Twin - Windowlicker | 代表艺人: Aphex Twin, Autechre, Boards of Canada | 年代: 1990s | BPM: 100–160
+      - **Braindance** — ID: `experimental/idm-intelligent-dance-music/braindance` | 代表曲: µ-Ziq - Brace Yourself Jason | 代表艺人: Aphex Twin, µ-Ziq, Squarepusher | 年代: 1990s | BPM: 100–160
+      - **Drill 'n' Bass** — ID: `experimental/idm-intelligent-dance-music/drill-n-bass` | 代表曲: Squarepusher - Come On My Selector | 代表艺人: Squarepusher, Luke Vibert, µ-Ziq | 年代: 1990s | BPM: 140–200
+      - **Glitch Hop** — ID: `experimental/idm-intelligent-dance-music/glitch-hop` | 代表曲: Prefuse 73 - One Word Extinguisher | 代表艺人: Tipper, Flying Lotus, Prefuse 73 | 年代: 2000s | BPM: 100–130
+      - **Breakcore** — ID: `experimental/idm-intelligent-dance-music/breakcore` | 代表曲: Venetian Snares - Hajnal | 代表艺人: Venetian Snares, Enduser, Jason Forrest | 年代: 1990s | BPM: 160–250
+      - **Ambient IDM** — ID: `experimental/idm-intelligent-dance-music/ambient-idm` | 代表曲: Boards of Canada - Roygbiv | 代表艺人: Boards of Canada, Global Communication, Biosphere | 年代: 1990s | BPM: 80–120
+      - **Acid IDM** — ID: `experimental/idm-intelligent-dance-music/acid-idm` | 代表曲: Autechre - 444 | 代表艺人: AFX, Ceephax Acid Crew, Brainwaltzera | 年代: 1990s | BPM: 110–150
+      - **Leftfield** — ID: `experimental/idm-intelligent-dance-music/leftfield` | 代表曲: The Future Sound of London - Papua New Guinea | 代表艺人: The Future Sound of London, Amon Tobin, Four Tet | 年代: 1990s | BPM: 100–130
+      - **Skweee** — ID: `experimental/idm-intelligent-dance-music/skweee` | 代表曲: Randy Barracuda - Skweee Like a Pig | 代表艺人: Randy Barracuda, Daniel Savio, Mesak | 年代: 2000s | BPM: 100–130
+    - **Sound Manipulation** — ID: `experimental/sound-manipulation` | 代表曲: Oval - Track 5 | 代表艺人: Oval, Ryoji Ikeda, Christian Fennesz | 年代: 1950s | BPM: —
+      - **Glitch** — ID: `experimental/sound-manipulation/glitch` | 代表曲: Untitled - Oval | 代表艺人: Oval, Alva Noto, Tim Hecker | 年代: 1990s | BPM: —
+      - **Post-Digital** — ID: `experimental/sound-manipulation/post-digital` | 代表曲: Rioji Ikeda - data.matrix | 代表艺人: Ryoji Ikeda, Taylor Deupree, Kim Cascone | 年代: 1990s | BPM: —
+      - **Sound Art** — ID: `experimental/sound-manipulation/sound-art` | 代表曲: Francisco Lopez - La Selva, Pt. 1 | 代表艺人: Francisco López, William Basinski, Richard Chartier | 年代: 1960s | BPM: —
+      - **Microsound** — ID: `experimental/sound-manipulation/microsound` | 代表曲: SND - 00020 a | 代表艺人: SND, Ryoji Ikeda, Taylor Deupree | 年代: 1990s | BPM: —
+      - **Generative & Process Music** — ID: `experimental/sound-manipulation/generative-process-music` | 代表曲: Autechre - Gantz Graf | 代表艺人: Autechre, Robert Henke, Brian Eno | 年代: 1960s | BPM: —
+        - **Generative Music** — ID: `experimental/sound-manipulation/generative-process-music/generative-music` | 代表曲: Holly Herndon - Godmother | 代表艺人: Brian Eno, Holly Herndon, William Basinski | 年代: 1970s | BPM: —
+        - **Algorithmic Composition** — ID: `experimental/sound-manipulation/generative-process-music/algorithmic-composition` | 代表曲: Iannis Xenakis - Pithoprakta | 代表艺人: Iannis Xenakis, Max Mathews, Ryoji Ikeda | 年代: 1950s | BPM: —
+    - **Noise & Distortion** — ID: `experimental/noise-distortion` | 代表曲: Merzbow - Ultra Marine Blues | 代表艺人: Merzbow, Whitehouse, Throbbing Gristle | 年代: 1970s | BPM: —
+      - **Lowercase** — ID: `experimental/noise-distortion/lowercase` | 代表曲: Steve Roden - Forms of Paper | 代表艺人: Steve Roden, Bernhard Günter, Richard Chartier | 年代: 1990s | BPM: —
+      - **Circuit Bending** — ID: `experimental/noise-distortion/circuit-bending` | 代表曲: C. Spencer Yeh - Mission: Lazy | 代表艺人: Modified Toy Orchestra, Voice Crack, Not Breathing | 年代: 1960s | BPM: —
+      - **Power Electronics** — ID: `experimental/noise-distortion/power-electronics` | 代表曲: Throbbing Gristle - Discipline | 代表艺人: Whitehouse, Genocide Organ, Prurient | 年代: 1980s | BPM: —
+      - **Harsh Noise Wall** — ID: `experimental/noise-distortion/harsh-noise-wall` | 代表曲: Vomir - _33T.Part1 | 代表艺人: Vomir, The Rita, Richard Ramirez | 年代: 1990s | BPM: —
+      - **Japanoise** — ID: `experimental/noise-distortion/japanoise` | 代表曲: Masonna - Pt. 1 | 代表艺人: Merzbow, Masonna, Hijokaidan | 年代: 1980s | BPM: —
+    - **8-bit (Chiptune)** — ID: `experimental/8-bit-chiptune` | 代表曲: Nullsleep - Her Lazer Light Eyes | 代表艺人: Anamanaguchi, Chipzel, Sabrepulse | 年代: 1980s | BPM: 120–200
+      - **Bitpop** — ID: `experimental/8-bit-chiptune/bitpop` | 代表曲: Slagsmålsklubben - Sponsored By Destiny | 代表艺人: Slagsmålsklubben, Goto80, Dubmood | 年代: 2000s | BPM: 120–160
+      - **Nintendocore** — ID: `experimental/8-bit-chiptune/nintendocore` | 代表曲: Horse the Band - Birdo | 代表艺人: Horse the Band, Sky Eats Airplane, The Advantage | 年代: 2000s | BPM: 150–200
+    - **Experimental Club / Avant-Club** — ID: `experimental/experimental-club-avant-club` | 代表曲: SOPHIE - Faceshopping | 代表艺人: SOPHIE, Arca, Amnesia Scanner | 年代: 2010s | BPM: 120–145
+      - **Deconstructed Club** — ID: `experimental/experimental-club-avant-club/deconstructed-club` | 代表曲: Arca - Nonbinary | 代表艺人: Arca, Lotic, Rabit | 年代: 2010s | BPM: 120–145
+      - **Textural Club** — ID: `experimental/experimental-club-avant-club/textural-club` | 代表曲: Amnesia Scanner - AS Acá | 代表艺人: Sinjin Hawke, Lee Gamble, Actress | 年代: 2010s | BPM: 120–140
+    - **Neoclassical** — ID: `experimental/neoclassical` | 代表曲: Ólafur Arnalds - Near Light | 代表艺人: Max Richter, Ólafur Arnalds, Nils Frahm | 年代: 1990s | BPM: —
+      - **Contemporary Classical** — ID: `experimental/neoclassical/contemporary-classical` | 代表曲: Max Richter - On the Nature of Daylight | 代表艺人: Max Richter, Jóhann Jóhannsson, Nils Frahm | 年代: 1990s | BPM: —
+      - **Cinematic** — ID: `experimental/neoclassical/cinematic` | 代表曲: Ludovico Einaudi - Nuvole Bianche | 代表艺人: Hans Zimmer, Clint Mansell, Cliff Martinez | 年代: 1990s | BPM: 60–140
+      - **Ambient Classical** — ID: `experimental/neoclassical/ambient-classical` | 代表曲: Hammock - Turn Away and Return | 代表艺人: Max Richter, Stars of the Lid, A Winged Victory for the Sullen | 年代: 1990s | BPM: —
+    - **Musique Concrète** — ID: `experimental/musique-concrte` | 代表曲: Pierre Schaeffer - Étude aux chemins de fer | 代表艺人: Pierre Schaeffer, Pierre Henry, Luc Ferrari | 年代: 1940s | BPM: —
+    - **Tape Music** — ID: `experimental/tape-music` | 代表曲: Karlheinz Stockhausen - Gesang der Jünglinge | 代表艺人: Karlheinz Stockhausen, Steve Reich, William Basinski | 年代: 1940s | BPM: —
+    - **Plunderphonics** — ID: `experimental/plunderphonics` | 代表曲: John Oswald - Plexure | 代表艺人: John Oswald, Negativland, People Like Us | 年代: 1980s | BPM: —
+    - **Hauntology** — ID: `experimental/hauntology` | 代表曲: The Caretaker - It's Just a Burning Memory | 代表艺人: The Caretaker, Burial, Broadcast | 年代: 2000s | BPM: 70–100
+      - **Hypnagogic Pop** — ID: `experimental/hauntology/hypnagogic-pop` | 代表曲: Ariel Pink - Round and Round | 代表艺人: Ariel Pink, James Ferraro, Dean Blunt | 年代: 2000s | BPM: 90–120
+  - **Techno** — ID: `techno` | 代表曲: 参考曲目：Joey Beltram - Energy Flash | 代表艺人: Juan Atkins, Derrick May, Kevin Saunderson | 年代: 1980s | BPM: 130–150
+    - **Detroit Techno** — ID: `techno/detroit-techno` | 代表曲: Derrick May -  Strings of Life | 代表艺人: Derrick May, Juan Atkins, Kevin Saunderson | 年代: 1980s | BPM: 130–150
+      - **Classic Detroit Techno** — ID: `techno/detroit-techno/classic-detroit-techno` | 代表曲: Juan Atkins - No UFO's | 代表艺人: Juan Atkins, Derrick May, Kevin Saunderson | 年代: 1980s | BPM: 130–145
+      - **Detroit Techno 2.0** — ID: `techno/detroit-techno/detroit-techno-20` | 代表曲: Octave One Feat. Ann Saunderson - Blackwater | 代表艺人: Octave One, Carl Craig, Kenny Larkin | 年代: 2000s | BPM: 130–150
+      - **Techno Soul** — ID: `techno/detroit-techno/techno-soul` | 代表曲: Kerri Chandler - Bar A Thym | 代表艺人: Octave One, Eddie Fowlkes, Ian O'Brien | 年代: 1980s | BPM: 125–140
+      - **Ghettotech** — ID: `techno/detroit-techno/ghettotech` | 代表曲: DJ Assault - Sex on the Beach | 代表艺人: DJ Assault, DJ Godfather, Disco D' | 年代: 1990s | BPM: 150–160
+      - **Hard Detroit Techno** — ID: `techno/detroit-techno/hard-detroit-techno` | 代表曲: Jeff Mills - The Bells | 代表艺人: Jeff Mills, Robert Hood, DJ Bone | 年代: 1990s | BPM: 140–150
+    - **Schaffel Techno** — ID: `techno/schaffel-techno` | 代表曲: Superpitcher - To Turn You On | 代表艺人: Superpitcher, Michael Mayer, Justus Köhncke | 年代: 2000s | BPM: 128–140
+    - **Acid Techno** — ID: `techno/acid-techno` | 代表曲: Phuture - Acid Trax | 代表艺人: Hardfloor, Josh Wink, Emmanuel Top | 年代: 1990s | BPM: 135–150
+      - **Acid House** — ID: `techno/acid-techno/acid-house` | 代表曲: Mr. Fingers - Can You Feel It | 代表艺人: Phuture, DJ Pierre, Adonis | 年代: 1980s | BPM: 120–130
+      - **Acid Breaks** — ID: `techno/acid-techno/acid-breaks` | 代表曲: Josh Wink - Higher State of Consciousness | 代表艺人: Josh Wink, Überzone, Meat Katie | 年代: 1990s | BPM: 130–150
+    - **Minimal Techno** — ID: `techno/minimal-techno` | 代表曲: Plastikman - Spastik | 代表艺人: Robert Hood, Daniel Bell, Plastikman | 年代: 1990s | BPM: 128–138
+      - **Microhouse** — ID: `techno/minimal-techno/microhouse` | 代表曲: Akufen - T'es Con, T'es Content (Original Mix) | 代表艺人: Ricardo Villalobos, Akufen, Luomo | 年代: 2000s | BPM: 120–128
+      - **Deep Techno** — ID: `techno/minimal-techno/deep-techno` | 代表曲: Deepbass - Les Planes | 代表艺人: Deepbass, Ness, Claudio PRC | 年代: 1990s | BPM: 128–138
+      - **Click Techno** — ID: `techno/minimal-techno/click-techno` | 代表曲: Thomas Brinkmann - Walk With Me | 代表艺人: Alva Noto, Byetone, Frank Bretschneider | 年代: 1990s | BPM: 128–138
+      - **Dub Techno** — ID: `techno/minimal-techno/dub-techno` | 代表曲: Basic Channel - Quadrant Dub | 代表艺人: Basic Channel, Deepchord, Rhythm & Sound | 年代: 1990s | BPM: 125–135
+    - **Melodic Techno** — ID: `techno/melodic-techno` | 代表曲: 参考曲目：ARTBAT - Horizon | 代表艺人: Tale Of Us, ARTBAT, Mind Against, Anyma | 年代: 2010s | BPM: 130–145
+    - **Hard Techno** — ID: `techno/hard-techno` | 代表曲: D.A.V.E. The Drummer - Hydraulix | 代表艺人: Chris Liebing, DJ Rush, Paula Temple | 年代: 2000s | BPM: 145–160
+      - **Industrial Techno** — ID: `techno/hard-techno/industrial-techno` | 代表曲: Karl O Connor & Peter Sutton - Join Us In Paradise | 代表艺人: Surgeon, Regis, British Murder Boys | 年代: 2000s | BPM: 135–150
+      - **Schranz** — ID: `techno/hard-techno/schranz` | 代表曲: Chris Liebing & Andre Walter - Random Process | 代表艺人: Chris Liebing, DJ Amok, Arkus P. | 年代: 1990s | BPM: 140–155
+      - **Hardcore** — ID: `techno/hard-techno/hardcore` | 代表曲: Angerfist - Creed of Chaos | 代表艺人: Angerfist, Miss K8, Tha Playah | 年代: 1990s | BPM: 150–200
+        - **Gabber** — ID: `techno/hard-techno/hardcore/gabber` | 代表曲: Neophyte - Army Of Hardcore | 代表艺人: Neophyte, Rotterdam Terror Corps, The Stunned Guys | 年代: 1990s | BPM: 150–220
+        - **Happy Hardcore** — ID: `techno/hard-techno/hardcore/happy-hardcore` | 代表曲: DJ Paul Elstak - Luv U More | 代表艺人: Scott Brown, Hixxy, Darren Styles | 年代: 1990s | BPM: 160–200
+        - **Speedcore** — ID: `techno/hard-techno/hardcore/speedcore` | 代表曲: Delta 9 - No More Regrets | 代表艺人: M1dy, Kobaryo, t+pHzolacom | 年代: 1990s | BPM: 200–300
+        - **Terrorcore** — ID: `techno/hard-techno/hardcore/terrorcore` | 代表曲: Noisekick - Big Bad Wolf | 代表艺人: Noisekick, SRB, Drokz | 年代: 1990s | BPM: 220–400
+        - **Industrial Hardcore** — ID: `techno/hard-techno/hardcore/industrial-hardcore` | 代表曲: Miss K8 & Noize Suppressor - Slam | 代表艺人: The Outside Agency, Ophidian, Promo | 年代: 1990s | BPM: 150–200
+        - **Frenchcore** — ID: `techno/hard-techno/hardcore/frenchcore` | 代表曲: Dr. Peacock - Trip to Ireland | 代表艺人: Dr. Peacock, Sefa, Radium | 年代: 2000s | BPM: 180–220
+        - **Hardstyle** — ID: `techno/hard-techno/hardcore/hardstyle` | 代表曲: Showtek - FTS | 代表艺人: Showtek, Headhunterz, Brennan Heart | 年代: 2000s | BPM: 150–160
+        - **Makina** — ID: `techno/hard-techno/hardcore/makina` | 代表曲: Pont Aeri - Flying Free | 代表艺人: Pastis & Buenri, Skudero, Xavi Metralla | 年代: 1990s | BPM: 150–175
+        - **Bakalao** — ID: `techno/hard-techno/hardcore/bakalao` | 代表曲: Megabeat - Es Imposible, No Puede Ser | 代表艺人: Chimo Bayo, Paco Pil, Megabeat | 年代: 1980s | BPM: 140–160
+      - **Hard Dance** — ID: `techno/hard-techno/hard-dance` | 代表曲: Brennan Heart & Jonathan Mendelsohn - Imaginary | 代表艺人: Showtek, Brennan Heart, W&W | 年代: 2000s | BPM: 150-160
+    - **Peak Time / Driving Techno** — ID: `techno/peak-time-driving-techno` | 代表曲: Age Of Love - The Age Of Love (Charlotte de Witte & Enrico Sangiuliano Remix) | 代表艺人: Adam Beyer, Amelie Lens, Charlotte de Witte | 年代: 2000s | BPM: 135–150
+      - **Hardgroove** — ID: `techno/peak-time-driving-techno/hardgroove` | 代表曲: Ben Sims - Carnival Part 1 | 代表艺人: Ben Sims, Mark Broom, Sims | 年代: 2000s | BPM: 135–150
+    - **Ambient Techno** — ID: `techno/ambient-techno` | 代表曲: B12 - Hall of Mirrors | 代表艺人: B12, The Black Dog, The Future Sound Of London | 年代: 1990s | BPM: 120–135
+    - **Progressive Techno** — ID: `techno/progressive-techno` | 代表曲: Stephan Bodzin - Singularity | 代表艺人: Stephan Bodzin, Maceo Plex, Dosem | 年代: 2010s | BPM: 120-130
+  - **Electro** — ID: `electro` | 代表曲: 参考曲目：Kraftwerk - The Model | 代表艺人: Afrika Bambaataa, Kraftwerk, Cybotron | 年代: 1980s | BPM: 100–130
+    - **Electroclash** — ID: `electro/electroclash` | 代表曲: Fischerspooner - Emerge | 代表艺人: Fischerspooner, Miss Kittin, Peaches | 年代: 2000s | BPM: 120–135
+    - **Space Electro** — ID: `electro/space-electro` | 代表曲: Drexciya - Wavejumper | 代表艺人: Drexciya, Dopplereffekt, I-f | 年代: 1980s | BPM: 110–130
+    - **Electrofunk** — ID: `electro/electrofunk` | 代表曲: Zapp - More Bounce to the Ounce | 代表艺人: Zapp, Chromeo, Midnight Star | 年代: 1980s | BPM: 100–120
+      - **Boogie** — ID: `electro/electrofunk/boogie` | 代表曲: D-Train - You're the One for Me | 代表艺人: D-Train, The Whispers, Kashif | 年代: 1970s | BPM: 105–120
+    - **Miami Bass** — ID: `electro/miami-bass` | 代表曲: 2 Live Crew - Me So Horny | 代表艺人: 2 Live Crew, Sir Mix-A-Lot, DJ Magic Mike | 年代: 1980s | BPM: 120–135
+      - **Electro Bass** — ID: `electro/miami-bass/electro-bass` | 代表曲: Aux 88 - Aux Mind 2005 | 代表艺人: Aux 88, Dynamix II, Egyptian Lover | 年代: 1980s | BPM: 110–130
+    - **French Electro** — ID: `electro/french-electro` | 代表曲: Arnaud Rebotini - 1314 | 代表艺人: Arnaud Rebotini, The Hacker, Gesaffelstein | 年代: 1990s | BPM: 110–130
+    - **Detroit Electro** — ID: `electro/detroit-electro` | 代表曲: Juan Atkins - No UFO's | 代表艺人: Juan Atkins, Model 500, Drexciya | 年代: 1980s | BPM: 110–130
+    - **Industrial Electro** — ID: `electro/industrial-electro` | 代表曲: Front 242 - Headhunter | 代表艺人: Front 242, Nitzer Ebb, Skinny Puppy | 年代: 1980s | BPM: 120–145
+    - **Dark Electro** — ID: `electro/dark-electro` | 代表曲: Hocico - Poltergeist | 代表艺人: Hocico, Suicide Commando, Agonoize | 年代: 1980s | BPM: 120–145
+  - **House** — ID: `house` | 代表曲: 参考曲目：Lil' Louis - French Kiss | 代表艺人: Frankie Knuckles, Marshall Jefferson, Jesse Saunders | 年代: 1980s | BPM: 120–130
+    - **Deep House** — ID: `house/deep-house` | 代表曲: Larry Heard - Can You Feel It | 代表艺人: Larry Heard, Kerri Chandler, Theo Parrish | 年代: 1980s | BPM: 120–125
+      - **Soulful House** — ID: `house/deep-house/soulful-house` | 代表曲: Frankie Knuckles - Your Love | 代表艺人: Masters At Work, Louie Vega, Blaze | 年代: 1990s | BPM: 120–128
+      - **Dub House** — ID: `house/deep-house/dub-house` | 代表曲: Luomo - Tessio | 代表艺人: Luomo, Jan Jelinek, Andy Stott | 年代: 1990s | BPM: 120–125
+      - **Atmospheric House** — ID: `house/deep-house/atmospheric-house` | 代表曲: Lane 8 - Fingerprint | 代表艺人: Lane 8, Yotto, Tinlicker | 年代: 1990s | BPM: 120–125
+      - **Chill House** — ID: `house/deep-house/chill-house` | 代表曲: Kygo - Firestone (feat. Conrad Sewell) | 代表艺人: Miguel Migs, Kaskade, Lisa Shaw | 年代: 1990s | BPM: 115–125
+      - **Tropical House** — ID: `house/deep-house/tropical-house` | 代表曲: Thomas Jack - Rivers (ft. Nico & Vinz) | 代表艺人: Kygo, Thomas Jack, Matoma | 年代: 2010s | BPM: 100–120
+      - **Deep Progressive House** — ID: `9915b628-95cb-4cf7-8d1d-678791bada56` | 代表艺人: Nick Warren, Hernán Cattáneo, Lane 8, Ben Böhmer | 年代: 2000s | BPM: 120–126
+      - **Organic House** — ID: `house/deep-house/organic-house` | 代表曲: Bedouin - Set The Controls For The Heart Of The Sun | 代表艺人: Viken Arman, Audiofly, Bedouin | 年代: 2010s | BPM: 115-122
+    - **Tech House** — ID: `house/tech-house` | 代表曲: Armand Van Helden - Give Me Your Loving | 代表艺人: Green Velvet, Fisher, CamelPhat | 年代: 1990s | BPM: 125–132
+      - **Minimal Tech House** — ID: `house/tech-house/minimal-tech-house` | 代表曲: Maceo Plex - Conjure Balearia | 代表艺人: Richie Hawtin, Ricardo Villalobos, Luciano | 年代: 2000s | BPM: 122–130
+      - **Funky Tech House** — ID: `house/tech-house/funky-tech-house` | 代表曲: DJ Sneak - Untouchable Funk | 代表艺人: DJ Sneak, Derrick Carter, Mark Farina | 年代: 2000s | BPM: 125–132
+      - **Progressive Tech House** — ID: `house/tech-house/progressive-tech-house` | 代表曲: Roger Sanchez- Another Chance | 代表艺人: Eric Prydz, Cristoph, Jeremy Olander | 年代: 2000s | BPM: 125–132
+      - **Tribal Tech House** — ID: `house/tech-house/tribal-tech-house` | 代表曲: Chus & Ceballos - The Strong Rhythm | 代表艺人: Chus & Ceballos, Danny Tenaglia, Steve Lawler | 年代: 2000s | BPM: 122–130
+      - **Tech Funk** — ID: `house/tech-house/tech-funk` | 代表曲: Adam Freeland - We Want Your Soul | 代表艺人: Meat Katie, Elite Force, Uberzone | 年代: 2000s | BPM: 125–135
+      - **G-House** — ID: `house/tech-house/g-house` | 代表曲: Malaa - Notorious | 代表艺人: Malaa, DJ Snake, Tchami | 年代: 2010s | BPM: 123-130
+    - **Garage House** — ID: `house/garage-house` | 代表曲: Masters At Work - I Can't Get No Sleep | 代表艺人: Todd Edwards, MJ Cole, Grant Nelson | 年代: 1980s | BPM: 120–130
+      - **UK Garage** — ID: `house/garage-house/uk-garage` | 代表曲: Artful Dodger - Re-Rewind (feat. Craig David) | 代表艺人: Artful Dodger, Craig David, Zed Bias | 年代: 1990s | BPM: 130–135
+      - **Speed Garage** — ID: `house/garage-house/speed-garage` | 代表曲: Double 99 - RipGroove | 代表艺人: Double 99, 187 Lockdown, Tuff Jam | 年代: 1990s | BPM: 130–135
+      - **2-step Garage** — ID: `house/garage-house/2-step-garage` | 代表曲: Wookie - Scrappy | 代表艺人: Wookie, El-B, Groove Chronicles | 年代: 1990s | BPM: 130–135
+      - **Bassline** — ID: `house/garage-house/bassline` | 代表曲: T2 - Heartbroken | 代表艺人: T2, DJ Q, Jamie Duggan | 年代: 2000s | BPM: 130–140
+      - **Future Garage** — ID: `house/garage-house/future-garage` | 代表曲: Burial - Archangel | 代表艺人: Burial, Mount Kimbie, Jacques Greene | 年代: 2000s | BPM: 130–140
+      - **Grime** — ID: `house/garage-house/grime` | 代表曲: Dizzee Rascal - I Luv U | 代表艺人: Dizzee Rascal, Wiley, Skepta | 年代: 2000s | BPM: 130–140
+      - **Dubstep Garage** — ID: `house/garage-house/dubstep-garage` | 代表曲: Skream - Midnight Request Line | 代表艺人: Skream, Benga, Horsepower Productions | 年代: 2000s | BPM: 130–140
+    - **Chicago House** — ID: `house/chicago-house` | 代表曲: Marshall Jefferson - Move Your Body | 代表艺人: Frankie Knuckles, Ron Hardy, Marshall Jefferson | 年代: 1980s | BPM: 120–130
+      - **Classic Chicago House** — ID: `house/chicago-house/classic-chicago-house` | 代表曲: Frankie Knuckles - Your Love | 代表艺人: Fingers Inc., Adonis, Phuture | 年代: 1980s | BPM: 120–130
+      - **Acid House** — ID: `house/chicago-house/acid-house` | 代表曲: Phuture - Acid Trax | 代表艺人: Phuture, DJ Pierre, Armando | 年代: 1980s | BPM: 120–130
+      - **Ghetto House** — ID: `house/chicago-house/ghetto-house` | 代表曲: DJ Deeon - Freak Like Me | 代表艺人: DJ Deeon, DJ Funk, Dance Mania | 年代: 1990s | BPM: 130–145
+      - **Jackin' House** — ID: `house/chicago-house/jackin-house` | 代表曲: Cajmere - Percolator | 代表艺人: Cajmere, Green Velvet, Derrick Carter | 年代: 1980s | BPM: 120–130
+      - **Piano House** — ID: `house/chicago-house/piano-house` | 代表曲: Fingers Inc. - Can You Feel It | 代表艺人: Black Box, K-Klass, Rozalla | 年代: 1980s | BPM: 120–130
+    - **French House** — ID: `house/french-house` | 代表曲: Stardust - Music Sounds Better With You | 代表艺人: Daft Punk, Cassius, Etienne de Crécy | 年代: 1990s | BPM: 120–130
+      - **Filter House** — ID: `house/french-house/filter-house` | 代表曲: Alan Braxe & Fred Falke - Intro | 代表艺人: Alan Braxe, Fred Falke, Braxe + Falcon | 年代: 1990s | BPM: 120–130
+    - **Lo-fi House** — ID: `house/lo-fi-house` | 代表曲: DJ Boring - Winona | 代表艺人: DJ Boring, Mall Grab, Ross From Friends | 年代: 2010s | BPM: 115–125
+      - **Outsider House** — ID: `house/lo-fi-house/outsider-house` | 代表曲: Anthony Naples - Mad Disrespect | 代表艺人: Anthony Naples, Huerco S., Patricia | 年代: 2010s | BPM: 115–128
+    - **Brazilian Bass** — ID: `house/brazilian-bass` | 代表曲: Alok, Bruno Martini feat. Zeeba - Hear Me Now | 代表艺人: Alok, Vintage Culture, Sevenn | 年代: 2010s | BPM: 128–135
+      - **Slap House** — ID: `house/brazilian-bass/slap-house` | 代表曲: Dynoro & Gigi D'Agostino - In My Mind | 代表艺人: Dynoro, Imanbek, VIZE | 年代: 2010s | BPM: 125–130
+    - **Electro House** — ID: `house/electro-house` | 代表曲: Benny Benassi - Satisfaction | 代表艺人: Benny Benassi, Fedde Le Grand, Wolfgang Gartner | 年代: 2000s | BPM: 125–135
+      - **Complextro** — ID: `house/electro-house/complextro` | 代表曲: Porter Robinson - Spitfire | 代表艺人: Porter Robinson, Mord Fustang, Feed Me | 年代: 2000s | BPM: 125–135
+      - **Big Room House** — ID: `house/electro-house/big-room-house` | 代表曲: Martin Garrix - Animals | 代表艺人: Martin Garrix, Hardwell, Dimitri Vegas & Like Mike | 年代: 2000s | BPM: 126–132
+      - **Melbourne Bounce** — ID: `house/electro-house/melbourne-bounce` | 代表曲: Will Sparks - Ah Yeah! | 代表艺人: Will Sparks, Deorro, TJR | 年代: 2010s | BPM: 126–130
+      - **Future House** — ID: `house/electro-house/future-house` | 代表曲: Oliver Heldens - Gecko (Overdrive) [feat. Becky Hill] | 代表艺人: Oliver Heldens, Tchami, Don Diablo | 年代: 2010s | BPM: 124-130
+    - **Progressive House** — ID: `house/progressive-house` | 代表曲: Sasha - Xpander | 代表艺人: Sasha, John Digweed, Deadmau5 | 年代: 1990s | BPM: 125–135
+    - **Hard House** — ID: `house/hard-house` | 代表曲: Tony De Vit - The Dawn | 代表艺人: Tony De Vit, Tidy Boys, Lisa Lashes | 年代: 1990s | BPM: 140–150
+    - **Hip House** — ID: `house/hip-house` | 代表曲: Technotronic - Pump Up The Jam | 代表艺人: Technotronic, Tyree Cooper, Fast Eddie | 年代: 1980s | BPM: 120–130
+    - **Kwaito** — ID: `house/kwaito` | 代表曲: Mandoza - Nkalakatha | 代表艺人: Mandoza, TKZee, Arthur Mafokate | 年代: 1990s | BPM: 110–120
+      - **Afro House** — ID: `house/kwaito/afro-house` | 代表曲: Black Coffee - Drive | 代表艺人: Black Coffee, Shimza, Sun-El Musician | 年代: 2000s | BPM: 120–128
+      - **Amapiano** — ID: `house/kwaito/amapiano` | 代表曲: MFR Souls – Love You Tonight | 代表艺人: Kabza De Small, DJ Maphorisa, Major League Djz | 年代: 2010s | BPM: 100–112
+    - **Melodic House** — ID: `house/melodic-house` | 代表曲: Lane 8 - Brightest Lights (feat. POLICA) | 代表艺人: Lane 8, Ben Böhmer, Yotto | 年代: 2010s | BPM: 118-125
+    - **Bass House** — ID: `house/bass-house` | 代表曲: Jauz - Feel The Volume | 代表艺人: Jauz, Habstrakt, AC Slater | 年代: 2010s | BPM: 125-132
+    - **UK House** — ID: `house/uk-house` | 代表曲: Disclosure - Latch (feat. Sam Smith) | 代表艺人: Disclosure, Chris Lorenzo, James Hype | 年代: 2010s | BPM: 120-130
+  - **Trance** — ID: `trance` | 代表曲: 参考曲目：Paul Van Dyk - For An Angel | 代表艺人: Paul van Dyk, Armin van Buuren, Tiësto | 年代: 1990s | BPM: 130–145
+    - **Goa Trance** — ID: `trance/goa-trance` | 代表曲: LSD - Hallucinogen | 代表艺人: Goa Gil, The Infinity Project, Man With No Name | 年代: 1990s | BPM: 140–150
+      - **Psytrance** — ID: `trance/goa-trance/psytrance` | 代表曲: Infected Mushroom - Becoming Insane | 代表艺人: Infected Mushroom, Astrix, Vini Vici | 年代: 1990s | BPM: 140–150
+        - **Psychedelic Goa** — ID: `trance/goa-trance/psytrance/psychedelic-goa` | 代表曲: Astral Projection - Mahadeva | 代表艺人: Hallucinogen, Astral Projection, Electric Universe | 年代: 1990s | BPM: 140–150
+        - **Full-on Psytrance** — ID: `trance/goa-trance/psytrance/full-on-psytrance` | 代表曲: 1200 Micrograms - Mescaline | 代表艺人: 1200 Micrograms, GMS, Talamasca | 年代: 1990s | BPM: 140–148
+        - **Dark Psytrance** — ID: `trance/goa-trance/psytrance/dark-psytrance` | 代表曲: Blisargon Demogorgon - Knights Of Light | 代表艺人: Kindzadza, Penta, Kashyyyk | 年代: 2000s | BPM: 145–160
+        - **Suomisaundi** — ID: `trance/goa-trance/psytrance/suomisaundi` | 代表曲: Shiva Chandra - Return To Atlantis | 代表艺人: Texas Faggott, Mandalavandalz, Luomuhappo | 年代: 1990s | BPM: 140–150
+        - **Forest Psytrance** — ID: `trance/goa-trance/psytrance/forest-psytrance` | 代表曲: Atriohm - Hybrid Synthesis | 代表艺人: Atriohm, Derango, EVP | 年代: 2000s | BPM: 140–150
+        - **Twilight Psytrance** — ID: `trance/goa-trance/psytrance/twilight-psytrance` | 代表曲: Scorb - Epoxymoron | 代表艺人: Scorb, Absolum, Shift | 年代: 2000s | BPM: 145–155
+    - **Progressive Trance** — ID: `trance/progressive-trance` | 代表曲: Sasha - Xpander | 代表艺人: Sasha, John Digweed, Hernan Cattaneo | 年代: 1990s | BPM: 130–140
+      - **Melodic Progressive Trance** — ID: `trance/progressive-trance/melodic-progressive-trance` | 代表曲: Above & Beyond - Sun & Moon | 代表艺人: Grum, Ilan Bluestone, Genix | 年代: 2000s | BPM: 128–138
+      - **Dark Progressive Trance** — ID: `trance/progressive-trance/dark-progressive-trance` | 代表曲: Airwave - When Things Go Wrong | 代表艺人: Gai Barone, Basil O'Glue, Airwave | 年代: 2000s | BPM: 130–140
+      - **Progressive Psytrance** — ID: `trance/progressive-trance/progressive-psytrance` | 代表曲: Ace Ventura - Stomping Ground | 代表艺人: Ace Ventura, Liquid Soul, Captain Hook | 年代: 2000s | BPM: 135–145
+    - **Uplifting Trance** — ID: `trance/uplifting-trance` | 代表曲: Rank 1 - Airwave | 代表艺人: Aly & Fila, Sean Tyas, Giuseppe Ottaviani | 年代: 1990s | BPM: 136–145
+      - **Anthem Trance** — ID: `trance/uplifting-trance/anthem-trance` | 代表曲: Armin van Buuren - Communication | 代表艺人: Darude, PPK, Robert Miles | 年代: 2000s | BPM: 136–145
+      - **Orchestral Trance** — ID: `trance/uplifting-trance/orchestral-trance` | 代表曲: Andy Blueman - Time to Rest | 代表艺人: Andy Blueman, SoundLift, Ahmed Romel | 年代: 2000s | BPM: 136–145
+      - **Vocal Trance** — ID: `trance/uplifting-trance/vocal-trance` | 代表曲: Oceanlab - Satellite | 代表艺人: Oceanlab, 4 Strings, Chicane | 年代: 2000s | BPM: 136–145
+    - **Hard Trance** — ID: `trance/hard-trance` | 代表曲: Scot Project - F (Future Is Now) | 代表艺人: Scot Project, Yoji Biomehanika, Cosmic Gate | 年代: 1990s | BPM: 145–155
+      - **Hard Uplifting Trance** — ID: `trance/hard-trance/hard-uplifting-trance` | 代表曲: Cosmic Gate - Fire Wire | 代表艺人: DuMonde, Alphazone, Flutlicht | 年代: 2000s | BPM: 140–155
+      - **Hard Dance Trance** — ID: `trance/hard-trance/hard-dance-trance` | 代表曲: DJ Isaac - Go Insane | 代表艺人: Technoboy, Tuneboy, Showtek | 年代: 1990s | BPM: 145–160
+      - **Hard Progressive Trance** — ID: `trance/hard-trance/hard-progressive-trance` | 代表曲: Mauro Picotto - Komodo | 代表艺人: Mauro Picotto, Mario Piu, Joy Kitikonti | 年代: 2000s | BPM: 140–155
+    - **Acid Trance** — ID: `trance/acid-trance` | 代表曲: Astrix - Poison | 代表艺人: Hardfloor, Art of Trance, Union Jack | 年代: 1990s | BPM: 130–145
+    - **Future Rave** — ID: `trance/future-rave` | 代表曲: David Guetta & MORTEN - Kill Me Slow | 代表艺人: David Guetta, MORTEN, Maddix | 年代: 2020s | BPM: 126-132
+  - **Ambient** — ID: `ambient` | 代表曲: 参考曲目：Brian Eno - Ambient 1: Music for Airports | 代表艺人: Brian Eno, Harold Budd, Steve Roach | 年代: 1970s | BPM: 60–90
+    - **Dark Ambient** — ID: `ambient/dark-ambient` | 代表曲: Lustmord - Heresy | 代表艺人: Lustmord, Atrium Carceri, Desiderii Marginis | 年代: 1980s | BPM: 50–80
+      - **Industrial Ambient** — ID: `ambient/dark-ambient/industrial-ambient` | 代表曲: Raison d'être - Mouldering The Forlorn I | 代表艺人: Raison d'être, Deutsch Nepal, In Slaughter Natives | 年代: 1980s | BPM: 60–90
+      - **Lovecraftian Ambient** — ID: `ambient/dark-ambient/lovecraftian-ambient` | 代表曲: Cryo Chamber Collaboration - Nyarlathotep | 代表艺人: Cryo Chamber Collaboration, Atrium Carceri, Kammarheit | 年代: 2000s | BPM: 50–80
+      - **Dungeon Synth** — ID: `ambient/dark-ambient/dungeon-synth` | 代表曲: Burzum - Tomhet | 代表艺人: Mortiis, Burzum, Fief | 年代: 1990s | BPM: 60–90
+      - **Isolationism** — ID: `ambient/dark-ambient/isolationism` | 代表曲: Thomas Köner - Teimo | 代表艺人: Thomas Köner, Lull, Final | 年代: 1990s | BPM: 50–80
+    - **Psybient** — ID: `ambient/psybient` | 代表曲: Shpongle - Divine Moments of Truth | 代表艺人: Shpongle, Entheogenic, Carbon Based Lifeforms | 年代: 1990s | BPM: 70–105
+      - **Psydub** — ID: `ambient/psybient/psydub` | 代表曲: Ott - The Queen of All Everything | 代表艺人: Ott, Globular, Kaminanda | 年代: 1990s | BPM: 75–100
+      - **Forest Psybient** — ID: `ambient/psybient/forest-psybient` | 代表曲: Astropilot - Forest of Memories | 代表艺人: Astropilot, Aes Dana, Solar Fields | 年代: 2000s | BPM: 70–100
+    - **New Age Ambient** — ID: `ambient/new-age-ambient` | 代表曲: Enya - Orinoco Flow | 代表艺人: Enya, Enigma, Vangelis | 年代: 1970s | BPM: 60–80
+      - **Celtic Ambient** — ID: `ambient/new-age-ambient/celtic-ambient` | 代表曲: Loreena McKennitt - The Mummers' Dance | 代表艺人: Loreena McKennitt, Clannad, Secret Garden | 年代: 1980s | BPM: 60–80
+      - **Meditation Ambient** — ID: `ambient/new-age-ambient/meditation-ambient` | 代表曲: Deuter - Koyasan | 代表艺人: Deuter, Liquid Mind, Steven Halpern | 年代: 1980s | BPM: 50–70
+    - **Drone Ambient** — ID: `ambient/drone-ambient` | 代表曲: Stars of the Lid - Requiem for Dyning Mothers Pt. 2 | 代表艺人: Stars of the Lid, Tim Hecker, William Basinski | 年代: 1990s | BPM: —
+      - **Drone Metal** — ID: `ambient/drone-ambient/drone-metal` | 代表曲: Sunn O))) - It Took the Night to Believe | 代表艺人: Sunn O))), Earth, Boris | 年代: 1990s | BPM: 40–70
+      - **Microtonal Drone** — ID: `ambient/drone-ambient/microtonal-drone` | 代表曲: Eliane Radigue - Trilogie de la Mort | 代表艺人: Eliane Radigue, Phil Niblock, La Monte Young | 年代: 1990s | BPM: —
+    - **Space Ambient** — ID: `ambient/space-ambient` | 代表曲: Steve Roach - Structures from Silence | 代表艺人: Steve Roach, Jonn Serrie, Michael Stearns | 年代: 1970s | BPM: 60–90
+    - **Berlin School Ambient** — ID: `ambient/berlin-school-ambient` | 代表曲: Tangerine Dream - Phaedra | 代表艺人: Tangerine Dream, Klaus Schulze, Ashra | 年代: 1970s | BPM: 60–80
+  - **Bass Music** — ID: `bass-music` | 代表曲: 参考曲目：Baauer - Harlem Shake | 代表艺人: Baauer, RL Grime, Flosstradamus | 年代: 2000s | BPM: 130–160
+    - **Drum and Bass** — ID: `bass-music/drum-and-bass` | 代表曲: Ed Rush & Optical - Wormhole | 代表艺人: Goldie, Andy C, Ed Rush | 年代: 1990s | BPM: 160–180
+      - **Neurofunk** — ID: `bass-music/drum-and-bass/neurofunk` | 代表曲: Noisia - Diplodocus | 代表艺人: Noisia, Black Sun Empire, Mefjus | 年代: 1990s | BPM: 172–180
+      - **Darkstep** — ID: `bass-music/drum-and-bass/darkstep` | 代表曲: Dillinja - The Angels Fell | 代表艺人: Current Value, Limewax, Donny | 年代: 1990s | BPM: 165–180
+      - **Techstep** — ID: `bass-music/drum-and-bass/techstep` | 代表曲: Ed Rush - Funktion | 代表艺人: Ed Rush, Optical, Dom & Roland | 年代: 1990s | BPM: 168–180
+      - **Liquid Drum and Bass** — ID: `bass-music/drum-and-bass/liquid-drum-and-bass` | 代表曲: Calibre - Even If | 代表艺人: Calibre, Logistics, Nu:Tone | 年代: 1990s | BPM: 165–175
+        - **Liquid Funk** — ID: `bass-music/drum-and-bass/liquid-drum-and-bass/liquid-funk` | 代表曲: Calibre - Even If | 代表艺人: High Contrast, Netsky, Danny Byrd | 年代: 1990s | BPM: 165–175
+        - **Jazzstep** — ID: `bass-music/drum-and-bass/liquid-drum-and-bass/jazzstep` | 代表曲: Roni Size & Reprazent - Brown Paper Bag | 代表艺人: Roni Size, EZ Rollers, Peshay | 年代: 1990s | BPM: 165–175
+        - **Atmospheric Drum and Bass** — ID: `bass-music/drum-and-bass/liquid-drum-and-bass/atmospheric-drum-and-bass` | 代表曲: LTJ Bukem - Atlantis | 代表艺人: LTJ Bukem, PFM, Omni Trio | 年代: 1990s | BPM: 165–175
+      - **Jump Up** — ID: `bass-music/drum-and-bass/jump-up` | 代表曲: Loadstar - Bomber | 代表艺人: DJ Hazard, Macky Gee, SASASAS | 年代: 1990s | BPM: 172–180
+        - **Party Drum and Bass** — ID: `bass-music/drum-and-bass/jump-up/party-drum-and-bass` | 代表曲: Mampi Swift - The One | 代表艺人: Mampi Swift, Brockie, DJ Hype | 年代: 1990s | BPM: 170–180
+        - **Happy Jump Up** — ID: `bass-music/drum-and-bass/jump-up/happy-jump-up` | 代表曲: DJ Hazard - Mr. Happy | 代表艺人: DJ Guv, Hedex, Tsuki | 年代: 1990s | BPM: 172–180
+    - **Jungle** — ID: `bass-music/jungle` | 代表曲: Shy FX - Original Nuttah 25 | 代表艺人: Shy FX, Congo Natty, General Levy | 年代: 1990s | BPM: 160–180
+      - **Ragga Jungle** — ID: `bass-music/jungle/ragga-jungle` | 代表曲: Congo Natty - Junglist | 代表艺人: Congo Natty, Top Cat, Tenor Fly | 年代: 1990s | BPM: 160–180
+      - **Jungle Terror** — ID: `bass-music/jungle/jungle-terror` | 代表曲: Wiwek - Angry Birdz | 代表艺人: Wiwek, Skrillex, Valentino Khan | 年代: 2010s | BPM: 150–170
+      - **Drumfunk** — ID: `bass-music/jungle/drumfunk` | 代表曲: Paradox - Drumfunk | 代表艺人: Paradox, Seba, Alaska | 年代: 1990s | BPM: 165–180
+    - **Juke** — ID: `bass-music/juke` | 代表曲: DJ Funk - Run | 代表艺人: DJ Funk, Gant-Man, DJ Deeon | 年代: 2000s | BPM: 160
+      - **Footwork** — ID: `bass-music/juke/footwork` | 代表曲: DJ Rashad - Double Cup | 代表艺人: DJ Rashad, RP Boo, Traxman | 年代: 1990s | BPM: 155–165
+      - **Chicago Footwork** — ID: `bass-music/juke/chicago-footwork` | 代表曲: RP Boo - Bangin' On King Dr. | 代表艺人: RP Boo, DJ Rashad, DJ Spinn | 年代: 1990s | BPM: 155–165
+    - **Dubstep** — ID: `bass-music/dubstep` | 代表曲: Benga & Coki - Night | 代表艺人: Skream, Benga, Digital Mystikz | 年代: 2000s | BPM: 138–142
+      - **Brostep** — ID: `bass-music/dubstep/brostep` | 代表曲: Skrillex - Scary Monsters and Nice Sprites | 代表艺人: Skrillex, Flux Pavilion, Doctor P | 年代: 2010s | BPM: 140–150
+        - **Aggressive Dubstep** — ID: `bass-music/dubstep/brostep/aggressive-dubstep` | 代表曲: Knife Party - Centipede | 代表艺人: Knife Party, Excision, Zomboy | 年代: 2010s | BPM: 140–150
+        - **Melodic Brostep** — ID: `bass-music/dubstep/brostep/melodic-brostep` | 代表曲: Peter Robinson & Madeon - Shelter | 代表艺人: Seven Lions, Adventure Club, Krewella | 年代: 2010s | BPM: 140–150
+      - **Melodic Dubstep** — ID: `bass-music/dubstep/melodic-dubstep` | 代表曲: Illenium - Fractures | 代表艺人: Illenium, Said The Sky, Mitis | 年代: 2010s | BPM: 140–150
+        - **Chillstep** — ID: `bass-music/dubstep/melodic-dubstep/chillstep` | 代表曲: Blackmill - Miracle | 代表艺人: Blackmill, Phaeleh, Direct | 年代: 2010s | BPM: 130–140
+      - **UK Dubstep** — ID: `bass-music/dubstep/uk-dubstep` | 代表曲: Skream - Midnight Request Line | 代表艺人: Skream, Mala, Coki | 年代: 2000s | BPM: 138–142
+        - **Dark Dubstep** — ID: `bass-music/dubstep/uk-dubstep/dark-dubstep` | 代表曲: Datsik Feat. Snoop Dogg- Smoke Bomb | 代表艺人: Kryptic Minds, Truth, Biome | 年代: 2000s | BPM: 138–145
+        - **Wonky Dubstep** — ID: `bass-music/dubstep/uk-dubstep/wonky-dubstep` | 代表曲: Rusko - Jahova | 代表艺人: Rusko, Joker, Rustie | 年代: 2010s | BPM: 135–145
+      - **Riddim** — ID: `bass-music/dubstep/riddim` | 代表曲: Subtronics - Wook Laser | 代表艺人: Subtronics, Boogie T, Ganja White Night | 年代: 2010s | BPM: 140–145
+        - **Heavy Riddim** — ID: `bass-music/dubstep/riddim/heavy-riddim` | 代表曲: Svdden - Behemoth | 代表艺人: Marauda, Svdden Death, Trampa | 年代: 2010s | BPM: 140–150
+        - **Melodic Riddim** — ID: `bass-music/dubstep/riddim/melodic-riddim` | 代表曲: Virtual Riot - Energy Drink | 代表艺人: Virtual Riot, Chime, Ace Aura | 年代: 2010s | BPM: 140–145
+      - **Deep Dubstep** — ID: `bass-music/dubstep/deep-dubstep` | 代表曲: Mala - Changes | 代表艺人: Mala, Kahn, Goth-Trad | 年代: 2000s | BPM: 138–142
+        - **Dub Techno Dubstep** — ID: `bass-music/dubstep/deep-dubstep/dub-techno-dubstep` | 代表曲: Joy Orbison - Hyph Mngo | 代表艺人: Basic Channel, Rhythm & Sound, Deepchord | 年代: 2000s | BPM: 138–142
+        - **Halftime Dubstep** — ID: `bass-music/dubstep/deep-dubstep/halftime-dubstep` | 代表曲: Ivy Lab - Magikess | 代表艺人: Ivy Lab, Alix Perez, Eprom | 年代: 2000s | BPM: 70–75
+      - **Color Bass** — ID: `bass-music/dubstep/color-bass` | 代表曲: Chime - Wait For Me | 代表艺人: Chime, Ace Aura, Virtual Riot | 年代: 2010s | BPM: 140–150
+    - **Future bass** — ID: `bass-music/future-bass` | 代表曲: Flume - Never Be Like You feat. Kai | 代表艺人: Flume, San Holo, Louis The Child | 年代: 2010s | BPM: 140–160
+      - **Kawaii future bass** — ID: `bass-music/future-bass/kawaii-future-bass` | 代表曲: Porter Robinson - Flicker | 代表艺人: Snail's House, Yunomi, Wave Racer | 年代: 2010s | BPM: 140–160
+      - **Melodic Bass** — ID: `bass-music/future-bass/melodic-bass` | 代表曲: ILLENIUM - Crawl Outta Love (feat. Annika Wells) | 代表艺人: Illenium, Said The Sky, Seven Lions | 年代: 2010s | BPM: 130-150
+    - **Wave** — ID: `bass-music/wave` | 代表曲: Klimeks - Eternally Yours | 代表艺人: Skeler, Klimeks, Barnacle Boi | 年代: 2010s | BPM: 130–155
+      - **Hardwave** — ID: `bass-music/wave/hardwave` | 代表曲: Skeler - Tel Aviv | 代表艺人: Skeler, Deadcrow, Heimanu | 年代: 2010s | BPM: 140–160
+    - **Midtempo bass** — ID: `bass-music/midtempo-bass` | 代表曲: REZZ - Edge | 代表艺人: Rezz, 1788-L, K?d | 年代: 2010s | BPM: 85–110
+    - **Trap (EDM)** — ID: `bass-music/trap-edm` | 代表曲: RL Grime - Core | 代表艺人: RL Grime, Baauer, Yellow Claw | 年代: 2010s | BPM: 130–160
+    - **Cloud Rap** — ID: `bass-music/cloud-rap` | 代表曲: Yung Lean - Ginseng Strip 2002 | 代表艺人: Clams Casino, Yung Lean, Lil B | 年代: 2010s | BPM: 70–100
+    - **Phonk** — ID: `bass-music/phonk` | 代表曲: Kordhell - Murder In My Mind | 代表艺人: Kordhell, DVRST, Pharmacist | 年代: 2010s | BPM: 130–145
+      - **Rare Phonk** — ID: `bass-music/phonk/rare-phonk` | 代表曲: DJ Smokey - Codeine Demonz | 代表艺人: DJ Smokey, Soudiere, NxxxxS | 年代: 2010s | BPM: 130–145
+      - **Drift Phonk** — ID: `bass-music/phonk/drift-phonk` | 代表曲: MoonDeity - Neon Blade | 代表艺人: MoonDeity, Kordhell, DVRST | 年代: 2020s | BPM: 130–150
+      - **Brazilian Phonk** — ID: `bass-music/phonk/brazilian-phonk` | 代表曲: S3BZS - Montagem - PR Funk | 代表艺人: Slowboy, S3BZS, Phonkha | 年代: 2020s | BPM: 130–150
+    - **UK bass** — ID: `bass-music/uk-bass` | 代表曲: Burial - Archangel | 代表艺人: Burial, Jamie xx, SBTRKT | 年代: 2000s | BPM: 130–145
+    - **Moombahton** — ID: `bass-music/moombahton` | 代表曲: Major Lazer - Lean On | 代表艺人: Dave Nada, Dillon Francis, Major Lazer | 年代: 2010s | BPM: 108–112
+  - **Breakbeat** — ID: `breakbeat` | 代表曲: 参考曲目：The Future Sound Of London - Papua New Guinea | 代表艺人: The Prodigy, Fatboy Slim, The Chemical Brothers | 年代: 1980s | BPM: 120–150
+    - **Acid breaks** — ID: `breakbeat/acid-breaks` | 代表曲: Plump DJs - The Push | 代表艺人: Plump DJs, Stanton Warriors, Uberzone | 年代: 1990s | BPM: 130–150
+    - **Baltimore club** — ID: `breakbeat/baltimore-club` | 代表曲: Rod Lee - Dance My Pain Away | 代表艺人: Rod Lee, DJ Technics, KW Griff | 年代: 1990s | BPM: 130–145
+      - **Jersey club** — ID: `breakbeat/baltimore-club/jersey-club` | 代表曲: DJ Sliink - Vibrate | 代表艺人: DJ Sliink, UNIIQU3, DJ Tameil | 年代: 2000s | BPM: 130–145
+      - **Philly club** — ID: `breakbeat/baltimore-club/philly-club` | 代表曲: DJ Sega - Colours | 代表艺人: DJ Sega, DJ Delish, Diamond Kuts | 年代: 2000s | BPM: 130–145
+    - **Big beat** — ID: `breakbeat/big-beat` | 代表曲: The Chemical Brothers - Hey Boy Hey Girl | 代表艺人: The Chemical Brothers, Fatboy Slim, The Crystal Method | 年代: 1990s | BPM: 120–140
+      - **Chemical Breaks** — ID: `breakbeat/big-beat/chemical-breaks` | 代表曲: The Chemical Brothers - Block Rockin' Beats | 代表艺人: The Chemical Brothers, Propellerheads, Bentley Rhythm Ace | 年代: 1990s | BPM: 125–140
+      - **Funky Breaks** — ID: `breakbeat/big-beat/funky-breaks` | 代表曲: Fatboy Slim - The Rockafeller Skank | 代表艺人: Fatboy Slim, Gramatik, A. Skillz | 年代: 1990s | BPM: 120–135
+    - **Breakbeat hardcore** — ID: `breakbeat/breakbeat-hardcore` | 代表曲: The Prodigy - Charly | 代表艺人: The Prodigy, SL2, Altern-8 | 年代: 1990s | BPM: 150–180
+      - **Darkcore** — ID: `breakbeat/breakbeat-hardcore/darkcore` | 代表曲: 2 Bad Mice - Bombscare | 代表艺人: Metalheadz, Goldie, Doc Scott | 年代: 1990s | BPM: 150–175
+      - **Hardcore breaks** — ID: `breakbeat/breakbeat-hardcore/hardcore-breaks` | 代表曲: Omni Trio - Renegade Snares | 代表艺人: DJ Seduction, Ramos, Slipmatt | 年代: 1990s | BPM: 150–180
+    - **Broken beat** — ID: `breakbeat/broken-beat` | 代表曲: 4hero - Hold It Down | 代表艺人: 4hero, Bugz in the Attic, IG Culture | 年代: 1990s | BPM: 110–130
+    - **Nu skool breaks** — ID: `breakbeat/nu-skool-breaks` | 代表曲: Stanton Warriors - Da Antidote | 代表艺人: Stanton Warriors, Plump DJs, Krafty Kuts | 年代: 1990s | BPM: 125–140
+      - **Florida breaks** — ID: `breakbeat/nu-skool-breaks/florida-breaks` | 代表曲: Dynamix II - Just Give the DJ a Break | 代表艺人: DJ Icey, Uberzone, Dynamix II | 年代: 2000s | BPM: 130–145
+      - **Progressive breaks** — ID: `breakbeat/nu-skool-breaks/progressive-breaks` | 代表曲: Hybrid - Finished Symphony | 代表艺人: Hybrid, Way Out West, BT | 年代: 2000s | BPM: 125–140
+    - **Psychedelic breakbeat** — ID: `breakbeat/psychedelic-breakbeat` | 代表曲: Eat Static - Bony Incus | 代表艺人: Eat Static, Digitalis, Hedflux | 年代: 1990s | BPM: 120–145
+    - **Neo Rave** — ID: `breakbeat/neo-rave` | 代表曲: Brutalismus 3000 - Ultraviolett | 代表艺人: Brutalismus 3000, Schrotthagen, T78 | 年代: 2020s | BPM: 145-160
+  - **Chill-out** — ID: `chill-out` | 代表曲: 参考曲目：Zero 7 - Destiny | 代表艺人: Zero 7, Air, Moby | 年代: 1990s | BPM: 80–110
+    - **Balearic Beat** — ID: `chill-out/balearic-beat` | 代表曲: José Padilla - Adios Ayer | 代表艺人: José Padilla, Chicane, Aeroplane | 年代: 1980s | BPM: 100–120
+    - **Ambient Dub** — ID: `chill-out/ambient-dub` | 代表曲: The Orb - Little Fluffy Clouds | 代表艺人: The Orb, Pole, Loscil | 年代: 1990s | BPM: 80–110
+    - **Downtempo** — ID: `chill-out/downtempo` | 代表曲: Bonobo - Black Sands | 代表艺人: Bonobo, Thievery Corporation, Morcheeba | 年代: 1990s | BPM: 70–110
+      - **Lounge** — ID: `chill-out/downtempo/lounge` | 代表曲: Thievery Corporation - Lebanese Blonde | 代表艺人: Lemongrass, De-Phazz, Boozoo Bajou | 年代: 1950s | BPM: 70–100
+      - **Bossa nova chill** — ID: `chill-out/downtempo/bossa-nova-chill` | 代表曲: Bebel Gilberto - So Nice | 代表艺人: Bebel Gilberto, Nouvelle Vague, Koop | 年代: 2000s | BPM: 90–110
+      - **Nu-jazz** — ID: `chill-out/downtempo/nu-jazz` | 代表曲: St Germain - Rose Rouge | 代表艺人: St Germain, The Cinematic Orchestra, Jazzanova | 年代: 1990s | BPM: 90–120
+      - **Lo-fi Hip Hop** — ID: `chill-out/downtempo/lo-fi-hip-hop` | 代表曲: Nujabes - Feather | 代表艺人: Nujabes, J Dilla, L.Dre | 年代: 2010s | BPM: 60–90
+    - **Trip hop** — ID: `chill-out/trip-hop` | 代表曲: Massive Attack - Teardrop | 代表艺人: Massive Attack, Portishead, Tricky | 年代: 1990s | BPM: 70–100
+      - **Illbient** — ID: `chill-out/trip-hop/illbient` | 代表曲: DJ Spooky - Galactic Funk | 代表艺人: DJ Spooky, We, Byzar | 年代: 1990s | BPM: 70–100
+      - **Trip rock** — ID: `chill-out/trip-hop/trip-rock` | 代表曲: Portishead - Glory Box | 代表艺人: UNKLE, Archive, Bowery Electric | 年代: 1990s | BPM: 80–110
+    - **Chillwave** — ID: `chill-out/chillwave` | 代表曲: Washed Out - Feel It All Around | 代表艺人: Washed Out, Toro y Moi, Neon Indian | 年代: 2000s | BPM: 80–110
+    - **Vaporwave** — ID: `chill-out/vaporwave` | 代表曲: Oneohtrix Point Never - Age Of | 代表艺人: Macintosh Plus, Saint Pepsi, Blank Banshee | 年代: 2010s | BPM: 70–90
+      - **Dreampunk** — ID: `chill-out/vaporwave/dreampunk` | 代表曲: 2814 - 新しい日の誕生 (Birth of a New Day) | 代表艺人: 2814, t e l e p a t h, HKE | 年代: 2010s | BPM: 70–100
+      - **Mallsoft** — ID: `chill-out/vaporwave/mallsoft` | 代表曲: 猫 シ Corp. (Cat System Corp.) - Palm Mall Mars: Sports Centre | 代表艺人: 猫 シ Corp. (Cat System Corp.), NetMD, Luxury Elite | 年代: 2010s | BPM: 70–90
+    - **Synthwave** — ID: `chill-out/synthwave` | 代表曲: Kavinsky - Nightcall | 代表艺人: Kavinsky, The Midnight, Gunship | 年代: 2000s | BPM: 95–120
+    - **Horror Synth** — ID: `chill-out/horror-synth` | 代表曲: Carpenter Brut - Roller Mobster | 代表艺人: Carpenter Brut, Perturbator, GosT | 年代: 2010s | BPM: 80–120
+  - **Global Club** — ID: `global-club` | 代表曲: 参考曲目：M.I.A. - Bucky Done Gun | 代表艺人: M.I.A., Buraka Som Sistema, Branko | 年代: 2000s | BPM: 110–130
+    - **Latin Club** — ID: `global-club/latin-club` | 代表曲: Bitter Babe - Tranki | 代表艺人: Bitter Babe, WOST, Coffintexts | 年代: 1990s | BPM: 120–135
+      - **Latincore** — ID: `global-club/latin-club/latincore` | 代表曲: CRRDR - Riddim | 代表艺人: 2AT, CRRDR, Aleroj | 年代: 2000s | BPM: 140–160
+      - **Latin Bass** — ID: `global-club/latin-club/latin-bass` | 代表曲: Pablitop - TU CUERPO LLAMA | 代表艺人: Pablitop, Entrañas | 年代: 2000s | BPM: 120–140
+    - **Funk Carioca** — ID: `global-club/funk-carioca` | 代表曲: Cidinho & Doca - Rap da Felicidade | 代表艺人: Anitta, Kevin o Chris, Ludmilla | 年代: 1990s | BPM: 130–145
+      - **Classic Funk / Funk de Raiz** — ID: `global-club/funk-carioca/classic-funk-funk-de-raiz` | 代表曲: MC Marcinho - Glamurosa | 代表艺人: MC Marcinho, Claudinho & Buchecha, Cidinho & Doca | 年代: 1990s | BPM: 130–145
+      - **Funk Proibidão** — ID: `global-club/funk-carioca/funk-proibido` | 代表曲: MC Orelha - Na Faixa de Gaza | 代表艺人: MC Orelha, MC Smith, Mr. Catra | 年代: 1990s | BPM: 130–145
+      - **Funk Ostentação** — ID: `global-club/funk-carioca/funk-ostentao` | 代表曲: MC Guimê - País do Futebol | 代表艺人: MC Guimê, MC Daleste, MC Lon | 年代: 2000s | BPM: 130–145
+      - **Funk 150 BPM** — ID: `global-club/funk-carioca/funk-150-bpm` | 代表曲: Kevin o Chris - Vamos pra Gaiola | 代表艺人: Kevin o Chris, FP do Trem Bala, Rennan da Penha | 年代: 2000s | BPM: 150
+      - **Funk Bruxaria / Automotivo** — ID: `global-club/funk-carioca/funk-bruxaria-automotivo` | 代表曲: DJ K - Beat Distorce Mente | 代表艺人: DJ K, DJ Arana, DJ Ramemes | 年代: 2010s | BPM: 145–160
+    - **Reggaeton** — ID: `global-club/reggaeton` | 代表曲: Daddy Yankee - Gasolina | 代表艺人: Daddy Yankee, Ivy Queen, Bad Bunny | 年代: 1990s | BPM: 90–100
+      - **Reggaeton Old School / Clásico** — ID: `global-club/reggaeton/reggaeton-old-school-clsico` | 代表曲: Tego Calderón - Pa' Que Retozen | 代表艺人: DJ Playero, Tego Calderón, Vico C | 年代: 1990s | BPM: 90–100
+      - **Reggaeton Romántico** — ID: `global-club/reggaeton/reggaeton-romntico` | 代表曲: Flex - Te Quiero | 代表艺人: R.K.M & Ken-Y, Zion & Lennox, Flex (Nigga) | 年代: 2000s | BPM: 90–100
+      - **Dembow** — ID: `global-club/reggaeton/dembow` | 代表曲: El Alfa - La Mamá de la Mamá | 代表艺人: El Alfa, Tokischa, Rochy RD | 年代: 1990s | BPM: 90–100
+      - **Neoperreo** — ID: `global-club/reggaeton/neoperreo` | 代表曲: Tomasa del Real - Barre con el Pelo | 代表艺人: Tomasa del Real, Ms Nina, Isabella Lovestory | 年代: 2010s | BPM: 90–100
+    - **Gqom** — ID: `global-club/gqom` | 代表曲: DJ Lag - Trip To New York | 代表艺人: DJ Lag, Babes Wodumo, Distruction Boyz | 年代: 2010s | BPM: 124–130
+    - **Kuduro** — ID: `global-club/kuduro` | 代表曲: Buraka Som Sistema - Sound of Kuduro | 代表艺人: Buraka Som Sistema, Pongo, DJ Marfox | 年代: 1990s | BPM: 130–145
+    - **Singeli** — ID: `global-club/singeli` | 代表曲: Bamba Pana - Agaba Kibati | 代表艺人: Slickback, Duke, Jay Mitta | 年代: 2010s | BPM: 180–300
+    - **Nortec** — ID: `global-club/nortec` | 代表曲: Nortec: Bostich + Fussible - Tijuana Makes Me Happy | 代表艺人: Nortec: Bostich + Fussible, Clorofila, Nortec Collective | 年代: 1990s | BPM: 120–135
+  - **Disco** — ID: `disco` | 代表曲: 参考曲目：Donna Summer - Last Dance | 代表艺人: Donna Summer, Chic, Bee Gees | 年代: 1970s | BPM: 110–130
+    - **Afro/cosmic music** — ID: `disco/afro-cosmic-music` | 代表曲: Tony Esposito - Kalimba de Luna | 代表艺人: Tony Esposito, Daniele Baldelli, Beppe Loda | 年代: 1970s | BPM: 110–130
+    - **Electro-disco** — ID: `disco/electro-disco` | 代表曲: Giorgio Moroder feat. Donna Summer - I Feel Love | 代表艺人: Giorgio Moroder, Cerrone, Space | 年代: 1970s | BPM: 110–130
+    - **Euro disco** — ID: `disco/euro-disco` | 代表曲: Boney M. - Rasputin | 代表艺人: Boney M., Modern Talking, Bad Boys Blue | 年代: 1970s | BPM: 110–130
+      - **Italo disco** — ID: `disco/euro-disco/italo-disco` | 代表曲: Ryan Paris - Dolce Vita | 代表艺人: Ryan Paris, Savage, Gazebo | 年代: 1970s | BPM: 115–130
+    - **Hi-NRG** — ID: `disco/hi-nrg` | 代表曲: Evelyn Thomas - High Energy | 代表艺人: Evelyn Thomas, Patrick Cowley, Sylvester | 年代: 1970s | BPM: 120–140
+      - **Eurobeat** — ID: `disco/hi-nrg/eurobeat` | 代表曲: Dave Rodgers - Space Boy | 代表艺人: Dave Rodgers, Manuel, Max Coveri | 年代: 1980s | BPM: 130–160
+    - **Nu-disco** — ID: `disco/nu-disco` | 代表曲: Daft Punk - Get Lucky | 代表艺人: Daft Punk, Todd Terje, Breakbot | 年代: 2000s | BPM: 115–128
+    - **Space disco** — ID: `disco/space-disco` | 代表曲: Meco - Star Wars Theme/Cantina Band | 代表艺人: Meco, Sheila and B. Devotion, Cerrone | 年代: 1970s | BPM: 110–130
+  - **Funk and Soul Fusion** — ID: `funk-and-soul-fusion` | 代表曲: 参考曲目：Jamiroquai - Cosmic Girl | 代表艺人: Jamiroquai, The Brand New Heavies, Incognito | 年代: 1970s | BPM: 90–120
+    - **Acid Jazz** — ID: `funk-and-soul-fusion/acid-jazz` | 代表曲: Jamiroquai - Virtual Insanity | 代表艺人: Jamiroquai, The Brand New Heavies, Galliano | 年代: 1980s | BPM: 90–120
+      - **Jazz House** — ID: `funk-and-soul-fusion/acid-jazz/jazz-house` | 代表曲: Bob Sinclair - I Feel For You | 代表艺人: St Germain, Jazzanova, Kyoto Jazz Massive | 年代: 1990s | BPM: 120–130
+      - **Lounge Jazz** — ID: `funk-and-soul-fusion/acid-jazz/lounge-jazz` | 代表曲: Thievery Corporation - The Richest Man in Babylon | 代表艺人: Thievery Corporation, Koop, De-Phazz | 年代: 1950s | BPM: 80–110
+    - **Funktronica** — ID: `funk-and-soul-fusion/funktronica` | 代表曲: MGMT - Electric Feel | 代表艺人: Chromeo, GRiZ, Big Gigantic | 年代: 1990s | BPM: 100–130
+      - **Future Funk** — ID: `funk-and-soul-fusion/funktronica/future-funk` | 代表曲: Yung Bae - Bae City Rollaz | 代表艺人: Yung Bae, Macross 82-99, Saint Pepsi | 年代: 2010s | BPM: 100–120
+      - **Nu-Funk** — ID: `funk-and-soul-fusion/funktronica/nu-funk` | 代表曲: The Allergies - Dance Now | 代表艺人: The Allergies, Kraak & Smaak, Featurecast | 年代: 2000s | BPM: 95–120
+    - **Synth-funk** — ID: `funk-and-soul-fusion/synth-funk` | 代表曲: Chromeo - Fancy Footwork | 代表艺人: Zapp & Roger, Chromeo, Tuxedo | 年代: 1970s | BPM: 95–120
+  - **Industrial and Post-Industrial** — ID: `industrial-and-post-industrial` | 代表曲: 参考曲目：Nine Inch Nails - Closer | 代表艺人: Nine Inch Nails, Ministry, Skinny Puppy | 年代: 1970s | BPM: —
+    - **EBM** — ID: `industrial-and-post-industrial/ebm` | 代表曲: Front 242 - Headhunter | 代表艺人: Front 242, Nitzer Ebb, DAF | 年代: 1980s | BPM: 120–150
+      - **Futurepop** — ID: `industrial-and-post-industrial/ebm/futurepop` | 代表曲: VNV Nation - Beloved | 代表艺人: VNV Nation, Apoptygma Berzerk, Covenant | 年代: 1990s | BPM: 125–145
+      - **Aggrotech** — ID: `industrial-and-post-industrial/ebm/aggrotech` | 代表曲: Suicide Commando - Hellraiser | 代表艺人: Suicide Commando, Combichrist, Psyclon Nine | 年代: 2000s | BPM: 130–155
+    - **New Beat** — ID: `industrial-and-post-industrial/new-beat` | 代表曲: Lords of Acid - I Sit on Acid | 代表艺人: Lords of Acid, Confetti's, The Neon Judgement | 年代: 1980s | BPM: 90–110
+      - **Hard Beat** — ID: `industrial-and-post-industrial/new-beat/hard-beat` | 代表曲: The Maxx - Cocaine | 代表艺人: The Maxx, Tragic Error, Erotic Dissidents | 年代: 1980s | BPM: 120–140
+    - **Post-Industrial** — ID: `industrial-and-post-industrial/post-industrial` | 代表曲: Coil - The First Five Minutes After Death | 代表艺人: Coil, Throbbing Gristle, Einstürzende Neubauten | 年代: 1980s | BPM: —
+      - **Witch House** — ID: `industrial-and-post-industrial/post-industrial/witch-house` | 代表曲: Salem - King Night | 代表艺人: Salem, Crystal Castles, oOoOO | 年代: 2000s | BPM: 80–120
+  - **Pop and Rock Fusion** — ID: `pop-and-rock-fusion` | 代表曲: 参考曲目：Depeche Mode - Enjoy the Silence | 代表艺人: Depeche Mode, New Order, The Cure | 年代: 1980s | BPM: 100–130
+    - **New Wave** — ID: `pop-and-rock-fusion/new-wave` | 代表曲: The Cars - Just What I Needed | 代表艺人: The Cars, Talking Heads, Blondie | 年代: 1980s | BPM: 120–145
+      - **Darkwave** — ID: `pop-and-rock-fusion/new-wave/darkwave` | 代表曲: Clan of Xymox - A Day | 代表艺人: Clan of Xymox, She Past Away, Drab Majesty | 年代: 1980s | BPM: 100–130
+      - **Coldwave** — ID: `pop-and-rock-fusion/new-wave/coldwave` | 代表曲: Lebanon Hanover - Gallowdance | 代表艺人: Lebanon Hanover, Trisomie 21, Martin Dupont | 年代: 1970s | BPM: 100–130
+      - **Minimal Wave** — ID: `pop-and-rock-fusion/new-wave/minimal-wave` | 代表曲: Oppenheimer Analysis - The Devil's Dancers | 代表艺人: Oppenheimer Analysis, Linear Movement, Crash Course In Science | 年代: 1980s | BPM: 100–130
+    - **Synth-pop** — ID: `pop-and-rock-fusion/synth-pop` | 代表曲: Pet Shop Boys - West End Girls | 代表艺人: Pet Shop Boys, Depeche Mode, Erasure | 年代: 1980s | BPM: 100–130
+      - **Electropop** — ID: `pop-and-rock-fusion/synth-pop/electropop` | 代表曲: Grimes - Oblivion | 代表艺人: Grimes, CHVRCHES, La Roux | 年代: 2000s | BPM: 110–130
+      - **Futurepop** — ID: `pop-and-rock-fusion/synth-pop/futurepop` | 代表曲: VNV Nation - Illusion | 代表艺人: VNV Nation, Covenant, Apoptygma Berzerk | 年代: 1990s | BPM: 125–145
+    - **Hyperpop** — ID: `pop-and-rock-fusion/hyperpop` | 代表曲: 100 gecs - Money Machine | 代表艺人: 100 gecs, SOPHIE, Charli XCX | 年代: 2010s | BPM: 130–170
+      - **Angelcore** — ID: `pop-and-rock-fusion/hyperpop/angelcore` | 代表曲: Himera - Scene Before the Kiss xoxo (Himera remix) | 代表艺人: Himera, Bladee, Galen Tipton | 年代: 2010s | BPM: 130–160
+    - **Electronic Rock** — ID: `pop-and-rock-fusion/electronic-rock` | 代表曲: Linkin Park - Somewhere I Belong | 代表艺人: Nine Inch Nails, The Prodigy, Pendulum | 年代: 1980s | BPM: 100–140
+      - **Krautrock** — ID: `pop-and-rock-fusion/electronic-rock/krautrock` | 代表曲: Kraftwerk - Autobahn | 代表艺人: Kraftwerk, Can, Neu! | 年代: 1970s | BPM: 80–130
+      - **Post-Rock** — ID: `pop-and-rock-fusion/electronic-rock/post-rock` | 代表曲: Explosions in the Sky - Your Hand in Mine | 代表艺人: Explosions in the Sky, Godspeed You! Black Emperor, Mogwai | 年代: 1990s | BPM: —
+      - **Dance-punk** — ID: `pop-and-rock-fusion/electronic-rock/dance-punk` | 代表曲: LCD Soundsystem - Dance Yrself Clean | 代表艺人: LCD Soundsystem, !!!, The Rapture | 年代: 2000s | BPM: 115–135
+      - **Indie Electronic** — ID: `pop-and-rock-fusion/electronic-rock/indie-electronic` | 代表曲: Passion Pit - Sleepyhead | 代表艺人: Passion Pit, MGMT, Tycho | 年代: 2000s | BPM: 100–130
+      - **Indie Dance** — ID: `pop-and-rock-fusion/electronic-rock/indie-dance` | 代表曲: Hercules and Love Affair - Blind (feat. Antony Hegarty) | 代表艺人: Hercules and Love Affair, Hot Chip, LCD Soundsystem | 年代: 2000s | BPM: 110-125
+    - **Dance-pop** — ID: `pop-and-rock-fusion/dance-pop` | 代表曲: Lady Gaga - Just Dance | 代表艺人: Lady Gaga, Madonna, Kylie Minogue | 年代: 1980s | BPM: 110–130
+      - **Bubblegum Pop** — ID: `pop-and-rock-fusion/dance-pop/bubblegum-pop` | 代表曲: Aqua - Barbie Girl | 代表艺人: Aqua, Vengaboys, S Club 7 | 年代: 1960s | BPM: 100–130
+      - **Eurodance** — ID: `pop-and-rock-fusion/dance-pop/eurodance` | 代表曲: Haddaway - What Is Love | 代表艺人: Haddaway, 2 Unlimited, Snap! | 年代: 1990s | BPM: 125–145
+  - **Electronica** — ID: `electronica` | 代表曲: Boards of Canada - Dayvan Cowboy | 代表艺人: Boards of Canada, Four Tet, Caribou | 年代: 1990s | BPM: 90–125

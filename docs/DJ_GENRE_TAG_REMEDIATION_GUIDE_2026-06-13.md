@@ -1,0 +1,566 @@
+# DJ Genre Tag Remediation Guide (2026-06-13)
+
+## Summary
+
+- 本文基于 `server/prisma/.cache/dj-detail-non-clickable-genre-tags.json` 的 500 个标签，以及最新版 `server/prisma/backfill-genre-id-bindings.ts` 的 alias / exclusion 规则整理。
+- 本文已合并最新人工决策：`EDM` / `Electronic Dance Music` / `Rave` / `Electro-Acoustic` 直接删除；`Bass` 归 `Bass Music`；`Progressive` 归 `Progressive House`；`Funk House` 归 `Funky Tech House`。
+- 处理原则：
+- 非电子音乐、明显跨域标签、或过于泛化而没有稳定流派含义的标签：删除。
+- 已经能稳定归到现有流派树的标签：直接绑定到现有流派，并保留原始 `displayName`。
+- 同时包含两个明确电子流派的组合标签：拆分成多个现有绑定。
+- 容易误绑的 umbrella tag / culture tag：本轮只剩极少数需要额外注意，但你已确认 `Trap` 也统一归到 `Trap (EDM)`。
+- 这批标签里，第一优先不是新建节点，而是先完成删除、回填、标准化和少量 alias 修正。
+
+## Count By Action
+
+- 直接绑定现有流派：`445` 个标签 / `1198` 个实例
+- 直接删除：`50` 个标签 / `187` 个实例
+- 拆分为多个现有流派：`4` 个标签 / `16` 个实例
+- 标准化后绑定：`1` 个标签 / `1` 个实例
+- 人工复核：`0` 个标签 / `0` 个实例
+
+## Special Notes
+
+- 你已确认 `Trap` 全部统一归到 `Trap (EDM)`，因此本轮不再保留人工复核项。
+- `Melodic House & Techno` 当前脚本会落到 `Melodic House`，但从语义上更适合双绑 `Melodic House` + `Melodic Techno`。
+- `Jackin’ House` 只是弯引号问题，应标准化到 `Jackin' House`。
+- `70’s Funk` 实际应归入删除类，只是当前 `NON_ELECTRONIC_EXCLUSIONS` 没覆盖弯引号变体。
+- 现有 alias 表里还有少量陈旧目标名：例如 `electro acoustic -> Electronica`，但库里并没有 `Electronica` 节点；这类不要直接照表执行。
+
+## Execution Order
+
+- 先执行 `cd /Users/blackie/Projects/raver/server && pnpm genres:backfill:bindings:apply --target=djs --overwrite-existing`
+- 再执行 `cd /Users/blackie/Projects/raver/server && pnpm genres:cleanup:dj-genres:apply`
+- 最后重新导出审计报告，确认 iOS 兜底 raw tag 是否已经显著收敛。
+
+## Dry-Run Verification (2026-06-13)
+
+- `pnpm genres:backfill:bindings --target=djs` 结果：`7835` DJs scanned，`5911` actionable，`1924` skippedBecauseExisting，`unmatchedCount = 0`
+- `pnpm genres:cleanup:dj-genres` 结果：`7835` DJs scanned，`749` changed with bindings，`188` changed without bindings
+- 这 `188` 个 `changed without bindings` 说明：如果不先用 `--overwrite-existing` 回填/重写绑定，第二步清洗不会自动动它们。
+
+## 1. 直接删除
+
+- `EDM`: `61` DJs -> 删除。说明：按已确认策略直接删除，不保留为 genre。它是过泛商业电子标签，不作为本次流派绑定目标。
+- `Funk`: `15` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Rave`: `14` DJs -> 删除。说明：按已确认策略直接删除，不作为稳定单一流派绑定。
+- `Hip Hop`: `10` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `R&B`: `8` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Dancehall`: `7` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Hip-Hop`: `7` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Afrobeats`: `5` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Latin Urban`: `4` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Reggae`: `4` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Soul`: `4` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Electronic Dance Music`: `3` DJs -> 删除。说明：按已确认策略直接删除，和 `EDM` 同类，不单独保留。
+- `Alternative Pop`: `2` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Club Music`: `2` DJs -> 删除。说明：过泛，不构成稳定电子流派标签。直接删除。
+- `Contemporary R&B`: `2` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Dance`: `2` DJs -> 删除。说明：过泛，不构成稳定电子流派标签。直接删除。
+- `indie pop`: `2` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Pop`: `2` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Urban`: `2` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `70’s Funk`: `1` DJs -> 删除。说明：非电子音乐风格，且只是弯引号变体。直接删除。
+- `Afrobeat`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Alternative`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Club`: `1` DJs -> 删除。说明：过泛，不构成稳定电子流派标签。直接删除。
+- `Cumbia`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Dark Pop`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Dream Pop`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Drill`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Electro-Acoustic`: `1` DJs -> 删除。说明：按已确认策略直接删除。
+- `Emo Rock`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Emotional Pop`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `French Indie Pop`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Hip-Hop Dance`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Hip-Hop/Rap`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Indie`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Jazz`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `K-Pop Electronic Remix`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `K-Pop Remix`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Korean Hip-Hop`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Latin Alternative Rock`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Latin Urbano`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Nu Soul`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Perreo`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Pop Rap`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Punk`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Reggaeton Mexicano`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Salsa`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Samba`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Soulful Pop`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Urban Dance`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+- `Worldbeat`: `1` DJs -> 删除。说明：非电子音乐或明显不适合作为电子流派标签，直接删除。
+
+## 2. 标准化后绑定
+
+- `Jackin’ House`: `1` DJs -> 先标准化文案，再绑定。说明：只需要把弯引号标准化，再绑定到现有 `Jackin' House`。不需要新建节点。
+
+## 3. 拆分为多个现有流派
+
+- `Melodic House & Techno`: `13` DJs -> 拆分绑定到 `Melodic House` + `Melodic Techno`。说明：不要只绑 `Melodic House`。更合适的是双绑：`Melodic House` + `Melodic Techno`；如果实现层不支持定制双绑，再退一步人工逐个判断。
+- `Afro/Organic House`: `1` DJs -> 拆分绑定到 `Afro House` + `Organic House`。说明：拆分为两个现有流派：`Afro House` + `Organic House`。
+- `IDM/Experimental`: `1` DJs -> 拆分绑定到 `IDM (Intelligent Dance Music)` + `Experimental`。说明：拆分为两个现有流派：`IDM (Intelligent Dance Music)` + `Experimental`。
+- `Melodic House/Techno`: `1` DJs -> 拆分绑定到 `Melodic House` + `Techno`。说明：拆分为两个现有流派：`Melodic House` + `Techno`。如果后续你们更想表达 anjunadeep / afterlife 语义，可改成 `Melodic House` + `Melodic Techno`。
+
+## 4. 人工复核
+
+- 当前无。
+
+## 5. 可直接绑定到现有流派
+
+- `Trap`: `55` DJs -> 绑定到 `Trap (EDM)`。说明：按已确认策略统一归到 `Trap (EDM)`，不再保留人工复核。
+- `Big Room`: `41` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic House`: `35` DJs -> 绑定到 `Melodic House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Future House`: `34` DJs -> 绑定到 `Future House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hard Dance`: `32` DJs -> 绑定到 `Hard Dance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Bass House`: `29` DJs -> 绑定到 `Bass House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Bass`: `7` DJs -> 绑定到 `Bass Music`。说明：按已确认策略直接归到 `Bass Music` 根节点。
+- `Indie Dance`: `24` DJs -> 绑定到 `Indie Dance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Breaks`: `20` DJs -> 绑定到 `Breakbeat`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Techno (Peak Time / Driving)`: `19` DJs -> 绑定到 `Peak Time / Driving Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic Bass`: `18` DJs -> 绑定到 `Melodic Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Drum & Bass`: `16` DJs -> 绑定到 `Drum and Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Experimental Electronic`: `16` DJs -> 绑定到 `Experimental`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Classic House`: `14` DJs -> 绑定到 `Classic Chicago House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Progressive`: `4` DJs -> 绑定到 `Progressive House`。说明：按已确认策略直接归到 `Progressive House`。
+- `Dance Pop`: `14` DJs -> 绑定到 `Dance-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Funky House`: `14` DJs -> 绑定到 `Funky Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Funk House`: `2` DJs -> 绑定到 `Funky Tech House`。说明：按已确认策略直接归到 `Funky Tech House`。
+- `Minimal`: `14` DJs -> 绑定到 `Minimal Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `House Music`: `12` DJs -> 绑定到 `House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Disco House`: `11` DJs -> 绑定到 `Disco`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Garage`: `11` DJs -> 绑定到 `UK Garage`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Neo Rave`: `11` DJs -> 绑定到 `Neo Rave`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Uptempo`: `11` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Rawstyle`: `10` DJs -> 绑定到 `Hardstyle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Uptempo Hardcore`: `10` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Acid`: `9` DJs -> 绑定到 `Acid House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Future Rave`: `9` DJs -> 绑定到 `Future Rave`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Organic House`: `9` DJs -> 绑定到 `Organic House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Underground House`: `9` DJs -> 绑定到 `House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hybrid Trap`: `8` DJs -> 绑定到 `Trap (EDM)`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Latin House`: `8` DJs -> 绑定到 `Tribal Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic Electronic`: `8` DJs -> 绑定到 `Experimental`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Minimal House`: `8` DJs -> 绑定到 `Microhouse`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Tribal House`: `8` DJs -> 绑定到 `Tribal Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Baile Funk`: `7` DJs -> 绑定到 `Funk Carioca`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Bass`: `7` DJs -> 绑定到 `Bass Music`。说明：按已确认策略直接归到 `Bass Music` 根节点，而不是 `UK bass`。
+- `Nu Disco`: `7` DJs -> 绑定到 `Nu-disco`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Raw Hardstyle`: `7` DJs -> 绑定到 `Hardstyle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Tech Trance`: `7` DJs -> 绑定到 `Hard Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Techno (Raw / Deep / Hypnotic)`: `7` DJs -> 绑定到 `Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Bounce`: `6` DJs -> 绑定到 `Big beat`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Experimental Bass`: `6` DJs -> 绑定到 `UK bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hard Groove`: `6` DJs -> 绑定到 `Hardgroove`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `IDM`: `6` DJs -> 绑定到 `IDM (Intelligent Dance Music)`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Minimal / Deep Tech`: `6` DJs -> 绑定到 `Minimal Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Psychedelic Trance`: `6` DJs -> 绑定到 `Psytrance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Riddim Dubstep`: `6` DJs -> 绑定到 `Riddim`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Afro Electronic`: `5` DJs -> 绑定到 `Afro House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Atmospheric Techno`: `5` DJs -> 绑定到 `Ambient Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Dutch House`: `5` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Latin Electronic`: `5` DJs -> 绑定到 `Latin Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Mainstage`: `5` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic Trance`: `5` DJs -> 绑定到 `Melodic Progressive Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Psychedelic Electronic`: `5` DJs -> 绑定到 `Experimental`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Afro-house`: `4` DJs -> 绑定到 `Afro House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Brazilian Funk`: `4` DJs -> 绑定到 `Funk Carioca`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Commercial House`: `4` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Electronica`: `4` DJs -> 绑定到 `IDM (Intelligent Dance Music)`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Emotional Bass`: `4` DJs -> 绑定到 `Melodic Dubstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `G-house`: `4` DJs -> 绑定到 `G-House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hard Trap`: `4` DJs -> 绑定到 `Trap (EDM)`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Heavy Bass`: `4` DJs -> 绑定到 `Dubstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Progressive`: `4` DJs -> 绑定到 `Progressive House`。说明：按已确认策略直接归到 `Progressive House`。
+- `Progressive Techno`: `4` DJs -> 绑定到 `Progressive Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Trance (Main Floor)`: `4` DJs -> 绑定到 `Uplifting Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `UK House`: `4` DJs -> 绑定到 `UK House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Underground Techno`: `4` DJs -> 绑定到 `Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Afro Tech`: `3` DJs -> 绑定到 `Afro House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Alternative Dance`: `3` DJs -> 绑定到 `Indie Electronic`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Ambient Electronic`: `3` DJs -> 绑定到 `Ambient`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Bigroom`: `3` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Chill Electronic`: `3` DJs -> 绑定到 `Chill-out`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Dark Techno`: `3` DJs -> 绑定到 `Minimal Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Deep Tech`: `3` DJs -> 绑定到 `Deep Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Dub`: `3` DJs -> 绑定到 `Ambient Dub`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Early Hardcore`: `3` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Euphoric Hardstyle`: `3` DJs -> 绑定到 `Hardstyle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Extra Raw`: `3` DJs -> 绑定到 `Hardstyle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Future Bounce`: `3` DJs -> 绑定到 `Future House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hard Bounce`: `3` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hypnotic Techno`: `3` DJs -> 绑定到 `Minimal Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Industrial`: `3` DJs -> 绑定到 `Industrial and Post-Industrial`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Jump-up Drum and Bass`: `3` DJs -> 绑定到 `Jump Up`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Mainstage EDM`: `3` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Minimal Deep Tech`: `3` DJs -> 绑定到 `Minimal Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Psy Trance`: `3` DJs -> 绑定到 `Psytrance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Retro House`: `3` DJs -> 绑定到 `Classic Chicago House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `UK Hardcore`: `3` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Vocal House`: `3` DJs -> 绑定到 `Soulful House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Afro`: `2` DJs -> 绑定到 `Afro House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `AfroHouse`: `2` DJs -> 绑定到 `Afro House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Afrotech`: `2` DJs -> 绑定到 `Afro House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Berlin Techno`: `2` DJs -> 绑定到 `Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Cinematic Techno`: `2` DJs -> 绑定到 `Ambient Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Dark Disco`: `2` DJs -> 绑定到 `Electro-disco`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Dark EDM`: `2` DJs -> 绑定到 `Darkwave`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Dark Electronic`: `2` DJs -> 绑定到 `Dark Ambient`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Dark Wave`: `2` DJs -> 绑定到 `Darkwave`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Deep Bass`: `2` DJs -> 绑定到 `Deep Dubstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Deep Tech House`: `2` DJs -> 绑定到 `Minimal Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Drumstep`: `2` DJs -> 绑定到 `Drum and Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Electronic Pop`: `2` DJs -> 绑定到 `Synth-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Electropunk`: `2` DJs -> 绑定到 `Dance-punk`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Euphoric Trance`: `2` DJs -> 绑定到 `Uplifting Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Experimental Bass Music`: `2` DJs -> 绑定到 `UK bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Experimental Techno`: `2` DJs -> 绑定到 `Experimental`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Funk House`: `2` DJs -> 绑定到 `Funky Tech House`。说明：按已确认策略直接归到 `Funky Tech House`。
+- `Funk-infused House`: `2` DJs -> 绑定到 `Hip House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Global Bass`: `2` DJs -> 绑定到 `UK bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hard EDM`: `2` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hardcore Techno`: `2` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Harder Styles`: `2` DJs -> 绑定到 `Hardstyle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Heaven Trap`: `2` DJs -> 绑定到 `Melodic Dubstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Heavy Bass Music`: `2` DJs -> 绑定到 `Dubstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Indie House`: `2` DJs -> 绑定到 `Lo-fi House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Industrial Electronic`: `2` DJs -> 绑定到 `EBM`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Intelligent Drum and Bass`: `2` DJs -> 绑定到 `Atmospheric Drum and Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Jumpstyle`: `2` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Korean Bounce`: `2` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Latin`: `2` DJs -> 绑定到 `Latin Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Latin Tech`: `2` DJs -> 绑定到 `Latin Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Leftfield Electronic`: `2` DJs -> 绑定到 `Leftfield`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Lo-fi`: `2` DJs -> 绑定到 `Lo-fi House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Mashup`: `2` DJs -> 绑定到 `House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melbourne Bounce`: `2` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic`: `2` DJs -> 绑定到 `Melodic Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic Drum and Bass`: `2` DJs -> 绑定到 `Liquid Drum and Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic Progressive House`: `2` DJs -> 绑定到 `Progressive House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic Trap`: `2` DJs -> 绑定到 `Melodic Dubstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Metalstep`: `2` DJs -> 绑定到 `Brostep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `New Rave`: `2` DJs -> 绑定到 `Indie Electronic`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Peak Time Techno`: `2` DJs -> 绑定到 `Peak Time / Driving Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Peak-Time Techno`: `2` DJs -> 绑定到 `Peak Time / Driving Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Pop EDM`: `2` DJs -> 绑定到 `Dance-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Pop‑EDM`: `2` DJs -> 绑定到 `Dance-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Psy-Trance`: `2` DJs -> 绑定到 `Psytrance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Psychedelic Techno`: `2` DJs -> 绑定到 `Minimal Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Rawphoric`: `2` DJs -> 绑定到 `Hardstyle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Reverse Bass`: `2` DJs -> 绑定到 `Hardstyle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Synthpop`: `2` DJs -> 绑定到 `Synth-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Terror`: `2` DJs -> 绑定到 `Terrorcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Trip-hop`: `2` DJs -> 绑定到 `Trip hop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Tropical Bass`: `2` DJs -> 绑定到 `Moombahton`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `UK Garage / Bassline`: `2` DJs -> 绑定到 `UK Garage`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Uplifting House`: `2` DJs -> 绑定到 `Soulful House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `140`: `1` DJs -> 绑定到 `UK bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `140 Bass Music`: `1` DJs -> 绑定到 `UK bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `2-step`: `1` DJs -> 绑定到 `2-step Garage`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `3-Step`: `1` DJs -> 绑定到 `UK Garage`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `3step`: `1` DJs -> 绑定到 `UK Garage`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `90s Electronica`: `1` DJs -> 绑定到 `Breakbeat`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `90s Hardcore`: `1` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `90s Rave`: `1` DJs -> 绑定到 `Breakbeat hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Acid Guaracha`: `1` DJs -> 绑定到 `Latin Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Acid Rave`: `1` DJs -> 绑定到 `Acid breaks`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Afro Latin`: `1` DJs -> 绑定到 `Latin Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Afro Rhythm`: `1` DJs -> 绑定到 `Afro House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Afro-Latin House`: `1` DJs -> 绑定到 `Afro House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Algerian Dance Music`: `1` DJs -> 绑定到 `Global Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Alternative Electronica`: `1` DJs -> 绑定到 `Indie Electronic`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Ambient Electronica`: `1` DJs -> 绑定到 `Ambient`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Ambient Gabber`: `1` DJs -> 绑定到 `Experimental`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Atmospheric Electronica`: `1` DJs -> 绑定到 `Ambient`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Atmospheric Hard Dance`: `1` DJs -> 绑定到 `Hard Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Atomic Techno`: `1` DJs -> 绑定到 `Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Avant-Garde Electronic`: `1` DJs -> 绑定到 `Experimental`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Baile`: `1` DJs -> 绑定到 `Funk Carioca`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Balearic`: `1` DJs -> 绑定到 `Balearic Beat`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Balkan Electronic`: `1` DJs -> 绑定到 `Global Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Bass Future House`: `1` DJs -> 绑定到 `Future House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Bassline Riddim`: `1` DJs -> 绑定到 `Riddim`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Batida`: `1` DJs -> 绑定到 `Kuduro`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Beat Scene`: `1` DJs -> 绑定到 `IDM (Intelligent Dance Music)`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Belgian Dance`: `1` DJs -> 绑定到 `Eurodance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Big Room Bounce`: `1` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Big Room EDM`: `1` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Bigroom House`: `1` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Bollywood Remix`: `1` DJs -> 绑定到 `Global Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Boogie Funk`: `1` DJs -> 绑定到 `Boogie`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Booty Bass`: `1` DJs -> 绑定到 `Miami Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Bounce & Bass`: `1` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Bouncy House`: `1` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Brazilian Electronic`: `1` DJs -> 绑定到 `Funk Carioca`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Bubblegum Bass`: `1` DJs -> 绑定到 `Color Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Bubbling`: `1` DJs -> 绑定到 `Latin Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Chill EDM`: `1` DJs -> 绑定到 `Chill-out`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Chill Out`: `1` DJs -> 绑定到 `Chill-out`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Chill Trap`: `1` DJs -> 绑定到 `Chillstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Chillhop`: `1` DJs -> 绑定到 `Lo-fi Hip Hop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Chillout`: `1` DJs -> 绑定到 `Chill-out`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Chinese Style Electronic`: `1` DJs -> 绑定到 `Global Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Chunky House`: `1` DJs -> 绑定到 `Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Cinematic Electronic`: `1` DJs -> 绑定到 `Cinematic`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Club Progressive`: `1` DJs -> 绑定到 `Progressive Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Commercial Dance`: `1` DJs -> 绑定到 `Dance-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Country EDM`: `1` DJs -> 绑定到 `Dance-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Crunkstep`: `1` DJs -> 绑定到 `Brostep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Cyber Electronic`: `1` DJs -> 绑定到 `Synth-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Dance Remix`: `1` DJs -> 绑定到 `Dance-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Dancefloor Drum and Bass`: `1` DJs -> 绑定到 `Party Drum and Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Dark Bass`: `1` DJs -> 绑定到 `Dark Dubstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Dark Bass Music`: `1` DJs -> 绑定到 `UK Dubstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Dark Melodic Bass`: `1` DJs -> 绑定到 `Melodic Dubstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Darkpsy`: `1` DJs -> 绑定到 `Dark Psytrance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Deathstep`: `1` DJs -> 绑定到 `Brostep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Deep Dub`: `1` DJs -> 绑定到 `Dub House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Deep Dub House`: `1` DJs -> 绑定到 `Dub House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Deep Hypnotic Techno`: `1` DJs -> 绑定到 `Minimal Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Deep Jackin' House`: `1` DJs -> 绑定到 `Jackin' House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Detroit House`: `1` DJs -> 绑定到 `Classic Chicago House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Dirty House`: `1` DJs -> 绑定到 `Jackin' House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Disco Funk`: `1` DJs -> 绑定到 `Funk and Soul Fusion`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Disco-influenced Dance`: `1` DJs -> 绑定到 `Nu-disco`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Disco-influenced House`: `1` DJs -> 绑定到 `Nu-disco`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Disco-infused House`: `1` DJs -> 绑定到 `Nu-disco`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Disco-Pop`: `1` DJs -> 绑定到 `Nu-disco`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Drift`: `1` DJs -> 绑定到 `Drift Phonk`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Driving House`: `1` DJs -> 绑定到 `Peak Time / Driving Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Drone`: `1` DJs -> 绑定到 `Drone Ambient`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Early Hardstyle`: `1` DJs -> 绑定到 `Hardstyle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Edit Disco`: `1` DJs -> 绑定到 `Nu-disco`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `EDM-pop`: `1` DJs -> 绑定到 `Dance-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Electro Breakbeat`: `1` DJs -> 绑定到 `Acid breaks`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Electro Rock`: `1` DJs -> 绑定到 `Electronic Rock`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Electro Trash`: `1` DJs -> 绑定到 `Electroclash`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Electro-Funk`: `1` DJs -> 绑定到 `Electrofunk`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Electro-Soul`: `1` DJs -> 绑定到 `Electrofunk`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Electronic Funk`: `1` DJs -> 绑定到 `Electrofunk`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Electronicore`: `1` DJs -> 绑定到 `Electronic Rock`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Elektro-Jump-Hardstyle`: `1` DJs -> 绑定到 `Hardstyle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Emotional Dance Pop`: `1` DJs -> 绑定到 `Dance-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Emotional EDM`: `1` DJs -> 绑定到 `Dance-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Emotional House`: `1` DJs -> 绑定到 `Deep House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Emotional Pop EDM`: `1` DJs -> 绑定到 `Dance-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Emotional Techno`: `1` DJs -> 绑定到 `Ambient Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Euro Dance`: `1` DJs -> 绑定到 `Eurodance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Euro House`: `1` DJs -> 绑定到 `Eurodance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Euro Trance`: `1` DJs -> 绑定到 `Hard Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Eurodisco`: `1` DJs -> 绑定到 `Euro disco`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Eurotrance`: `1` DJs -> 绑定到 `Hard Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Experimental Dubstep`: `1` DJs -> 绑定到 `UK Dubstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Experimental Electronic Music`: `1` DJs -> 绑定到 `Experimental`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Experimental Electronica`: `1` DJs -> 绑定到 `Experimental`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Extra Rawstyle`: `1` DJs -> 绑定到 `Hardstyle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Extreme Uptempo`: `1` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Favela Bass`: `1` DJs -> 绑定到 `Funk Carioca`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Festival EDM`: `1` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Festival Trap`: `1` DJs -> 绑定到 `Trap (EDM)`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Folk House`: `1` DJs -> 绑定到 `Lo-fi House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Folk Trap`: `1` DJs -> 绑定到 `Trap (EDM)`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Folktronica`: `1` DJs -> 绑定到 `Indie Electronic`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Freestyle`: `1` DJs -> 绑定到 `Electro`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `French Touch`: `1` DJs -> 绑定到 `French House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Full on Night`: `1` DJs -> 绑定到 `Full-on Psytrance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Full On Psy-Trance`: `1` DJs -> 绑定到 `Full-on Psytrance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Full-on`: `1` DJs -> 绑定到 `Full-on Psytrance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Fullon Psytrance`: `1` DJs -> 绑定到 `Full-on Psytrance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Funk Dance`: `1` DJs -> 绑定到 `Electrofunk`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Funk Electronic`: `1` DJs -> 绑定到 `Electrofunk`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Funk-influenced Drum and Bass`: `1` DJs -> 绑定到 `Liquid Funk`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Funk-influenced Electronic`: `1` DJs -> 绑定到 `Electrofunk`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Funky`: `1` DJs -> 绑定到 `Funky Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Funky Bass`: `1` DJs -> 绑定到 `Tech Funk`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Future Afro`: `1` DJs -> 绑定到 `Afro House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Future Boogie`: `1` DJs -> 绑定到 `Future Funk`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Future Riddim`: `1` DJs -> 绑定到 `Riddim`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Futuristic Electronic`: `1` DJs -> 绑定到 `Experimental`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Gabba`: `1` DJs -> 绑定到 `Gabber`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Glitch Hip-Hop`: `1` DJs -> 绑定到 `Glitch Hop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Glitch-Hop`: `1` DJs -> 绑定到 `Glitch Hop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Goa Psy Trance`: `1` DJs -> 绑定到 `Goa Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Gospel House`: `1` DJs -> 绑定到 `Soulful House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Groovy House`: `1` DJs -> 绑定到 `Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Guaracha`: `1` DJs -> 绑定到 `Latin Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Halftime`: `1` DJs -> 绑定到 `Halftime Dubstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Halftime Drum and Bass`: `1` DJs -> 绑定到 `Drum and Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hard Bass Dubstep`: `1` DJs -> 绑定到 `Brostep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hard Industrial Techno`: `1` DJs -> 绑定到 `Industrial Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hard Psy`: `1` DJs -> 绑定到 `Psytrance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hard Wave`: `1` DJs -> 绑定到 `Hardwave`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hardbass`: `1` DJs -> 绑定到 `Gabber`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hardhouse`: `1` DJs -> 绑定到 `Hard House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hardstyle Bass`: `1` DJs -> 绑定到 `Hardstyle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hardstyle Classics`: `1` DJs -> 绑定到 `Hardstyle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hardtechno`: `1` DJs -> 绑定到 `Hard Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hardtek`: `1` DJs -> 绑定到 `Frenchcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hardtrance`: `1` DJs -> 绑定到 `Hard Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hi-Tech Psytrance`: `1` DJs -> 绑定到 `Full-on Psytrance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `High-Tech Minimal`: `1` DJs -> 绑定到 `Minimal Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hip Hop-influenced Electronic`: `1` DJs -> 绑定到 `Hip House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hip-House`: `1` DJs -> 绑定到 `Hip House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hippie House`: `1` DJs -> 绑定到 `Lo-fi House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `House Lak`: `1` DJs -> 绑定到 `House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hydro-House`: `1` DJs -> 绑定到 `House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hyper Techno`: `1` DJs -> 绑定到 `Hard Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hypertechno`: `1` DJs -> 绑定到 `Hard Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Hypnotic House`: `1` DJs -> 绑定到 `Minimal Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Indie-dance`: `1` DJs -> 绑定到 `Indie Dance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Indie-Electro`: `1` DJs -> 绑定到 `Indie Electronic`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Indietronica`: `1` DJs -> 绑定到 `Indie Electronic`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Industrial Bass`: `1` DJs -> 绑定到 `Industrial and Post-Industrial`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Industrial Hard Techno`: `1` DJs -> 绑定到 `Industrial Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Isolationist Drone`: `1` DJs -> 绑定到 `Isolationism`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Italian Euro Dance`: `1` DJs -> 绑定到 `Eurodance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Italo House`: `1` DJs -> 绑定到 `Italo disco`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `ItaloDance`: `1` DJs -> 绑定到 `Italo disco`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Jacking House`: `1` DJs -> 绑定到 `Jackin' House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Jazz Electronica`: `1` DJs -> 绑定到 `Nu-jazz`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Jazz-influenced Drum and Bass`: `1` DJs -> 绑定到 `Jazzstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Jazzy House`: `1` DJs -> 绑定到 `Jazz House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Jungle Hardcore`: `1` DJs -> 绑定到 `Jungle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Jungle Techno`: `1` DJs -> 绑定到 `Jungle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Korea Bounce`: `1` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Krach`: `1` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Latin Crossover House`: `1` DJs -> 绑定到 `Latin Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Latin EDM`: `1` DJs -> 绑定到 `Latin Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Latin Gabber`: `1` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Latin-infused Grooves`: `1` DJs -> 绑定到 `Latin Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Leftfield Bass`: `1` DJs -> 绑定到 `Leftfield`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Liquid DnB`: `1` DJs -> 绑定到 `Liquid Drum and Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Liquid Drum & Bass`: `1` DJs -> 绑定到 `Liquid Drum and Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Lo-Fi Electronic`: `1` DJs -> 绑定到 `Lo-fi House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Lofi Electronic`: `1` DJs -> 绑定到 `Lo-fi House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Main Stage EDM`: `1` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Mainstage House`: `1` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Mainstage Techno`: `1` DJs -> 绑定到 `Peak Time / Driving Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Mainstream House`: `1` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Maximal House`: `1` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic Afro House`: `1` DJs -> 绑定到 `Afro House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic Drum & Bass`: `1` DJs -> 绑定到 `Liquid Drum and Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic Goa Trance`: `1` DJs -> 绑定到 `Goa Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic Hardcore`: `1` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic Hardstyle`: `1` DJs -> 绑定到 `Hardstyle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic Psy-Trance`: `1` DJs -> 绑定到 `Progressive Psytrance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic Tech House`: `1` DJs -> 绑定到 `Progressive Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic Uptempo Hardcore`: `1` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Melodic-house & Techno`: `1` DJs -> 绑定到 `Melodic House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Metal Dubstep`: `1` DJs -> 绑定到 `Brostep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Minimal Bounce`: `1` DJs -> 绑定到 `Microhouse`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Minimal Electronic`: `1` DJs -> 绑定到 `Minimal Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Minimal/Deep Tech`: `1` DJs -> 绑定到 `Minimal Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Minimal/Deep-Tech`: `1` DJs -> 绑定到 `Minimal Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Modern Cumbia`: `1` DJs -> 绑定到 `Global Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Modern House`: `1` DJs -> 绑定到 `Progressive House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Neo Trance`: `1` DJs -> 绑定到 `Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Neo-Techno`: `1` DJs -> 绑定到 `Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Neorave`: `1` DJs -> 绑定到 `Neo Rave`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Neuro Drum and Bass`: `1` DJs -> 绑定到 `Neurofunk`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `New York House`: `1` DJs -> 绑定到 `Jackin' House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Nitzhonot`: `1` DJs -> 绑定到 `Goa Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Noise`: `1` DJs -> 绑定到 `Noise & Distortion`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Noise Music`: `1` DJs -> 绑定到 `Noise & Distortion`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Noise-influenced Electronic`: `1` DJs -> 绑定到 `Noise & Distortion`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Noise-influenced Techno`: `1` DJs -> 绑定到 `Industrial Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Nu Gabber`: `1` DJs -> 绑定到 `Gabber`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Nu Rave`: `1` DJs -> 绑定到 `Indie Electronic`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Nu Trance`: `1` DJs -> 绑定到 `Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Nu-Breaks`: `1` DJs -> 绑定到 `Nu skool breaks`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `NU-NRG`: `1` DJs -> 绑定到 `Hi-NRG`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Nu-Skool Breaks`: `1` DJs -> 绑定到 `Nu skool breaks`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Nu-Wave`: `1` DJs -> 绑定到 `New Wave`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Old School Electronic`: `1` DJs -> 绑定到 `Breakbeat`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Old School Rave`: `1` DJs -> 绑定到 `Breakbeat hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Old Skool Disco`: `1` DJs -> 绑定到 `Disco`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Oldschool Electronic`: `1` DJs -> 绑定到 `Breakbeat`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Oldschool Rave`: `1` DJs -> 绑定到 `Breakbeat hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Oldskool Hardcore`: `1` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Peaktime / Driving Techno`: `1` DJs -> 绑定到 `Peak Time / Driving Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Peak‑Time Techno`: `1` DJs -> 绑定到 `Peak Time / Driving Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Perreo Bass`: `1` DJs -> 绑定到 `Neoperreo`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Perreo Sexótico`: `1` DJs -> 绑定到 `Neoperreo`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Pop Dance`: `1` DJs -> 绑定到 `Dance-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Pop Electronic`: `1` DJs -> 绑定到 `Synth-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Pop-Dance`: `1` DJs -> 绑定到 `Dance-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Pop-infused EDM`: `1` DJs -> 绑定到 `Dance-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Poptronica`: `1` DJs -> 绑定到 `Synth-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Post Techno Punk`: `1` DJs -> 绑定到 `Electronic Rock`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Post-Dubstep`: `1` DJs -> 绑定到 `UK Dubstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Power House`: `1` DJs -> 绑定到 `Hard House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Powertrance`: `1` DJs -> 绑定到 `Hard Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Progressive EDM`: `1` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Progressive Electronic`: `1` DJs -> 绑定到 `Progressive House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Progressive Psy Trance`: `1` DJs -> 绑定到 `Progressive Psytrance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Progressive Psychedelic Trance`: `1` DJs -> 绑定到 `Progressive Psytrance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Progressive-Indie-EDM`: `1` DJs -> 绑定到 `Progressive House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Psy Tech`: `1` DJs -> 绑定到 `Hard Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Psybreaks`: `1` DJs -> 绑定到 `Psychedelic breakbeat`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Psychedelic`: `1` DJs -> 绑定到 `Psychedelic Goa`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Psychedelic Ambient`: `1` DJs -> 绑定到 `Psybient`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Psychedelic House`: `1` DJs -> 绑定到 `Deep House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Psystyle`: `1` DJs -> 绑定到 `Hardstyle`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Pure House`: `1` DJs -> 绑定到 `House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Raw Techno`: `1` DJs -> 绑定到 `Schranz`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Raw Trap`: `1` DJs -> 绑定到 `Trap (EDM)`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Raw/Deep/Hypnotic Techno`: `1` DJs -> 绑定到 `Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Retro Tech`: `1` DJs -> 绑定到 `Detroit Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Rollers Drum and Bass`: `1` DJs -> 绑定到 `Drum and Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Rolling Drum & Bass`: `1` DJs -> 绑定到 `Drum and Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Screwmbia`: `1` DJs -> 绑定到 `Global Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Sickcore`: `1` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Slo-mo Boogie`: `1` DJs -> 绑定到 `Boogie`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Soul Electronic`: `1` DJs -> 绑定到 `Funk and Soul Fusion`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Soulful Drum & Bass`: `1` DJs -> 绑定到 `Drum and Bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Speed House`: `1` DJs -> 绑定到 `Hard House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Steam House`: `1` DJs -> 绑定到 `Progressive House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Summer House`: `1` DJs -> 绑定到 `Tropical House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Synth Pop`: `1` DJs -> 绑定到 `Synth-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Synth‑Pop`: `1` DJs -> 绑定到 `Synth-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Tearout`: `1` DJs -> 绑定到 `Brostep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Tearout Dubstep`: `1` DJs -> 绑定到 `Brostep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Tech`: `1` DJs -> 绑定到 `Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Techfunk`: `1` DJs -> 绑定到 `Tech Funk`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Techno (Peak Time)`: `1` DJs -> 绑定到 `Peak Time / Driving Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Tecktonik`: `1` DJs -> 绑定到 `Electroclash`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Tek Tribal`: `1` DJs -> 绑定到 `Tribal Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Tekno`: `1` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Texcore`: `1` DJs -> 绑定到 `Hardcore`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Traditional House`: `1` DJs -> 绑定到 `Chicago House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Trance (Raw / Deep / Hypnotic)`: `1` DJs -> 绑定到 `Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Trance Brasileiro`: `1` DJs -> 绑定到 `Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Trance-Pop`: `1` DJs -> 绑定到 `Uplifting Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Trap House`: `1` DJs -> 绑定到 `Trap (EDM)`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Trapengue`: `1` DJs -> 绑定到 `Trap (EDM)`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Tribal Electronic`: `1` DJs -> 绑定到 `Tribal Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Tribal Techno`: `1` DJs -> 绑定到 `Tribal Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Tribal Textured House`: `1` DJs -> 绑定到 `Tribal Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Tribe`: `1` DJs -> 绑定到 `Tribal Tech House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Tropical Electronic`: `1` DJs -> 绑定到 `Moombahton`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `U.K. Bass Music`: `1` DJs -> 绑定到 `UK bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `UK Bass Music`: `1` DJs -> 绑定到 `UK bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `UK Beats`: `1` DJs -> 绑定到 `UK Garage`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `UK Techno`: `1` DJs -> 绑定到 `Hard Techno`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Underground Electronic`: `1` DJs -> 绑定到 `House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Underground Electronic Music`: `1` DJs -> 绑定到 `House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Underground Trance`: `1` DJs -> 绑定到 `Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Upfront House`: `1` DJs -> 绑定到 `Big Room House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Uplifting`: `1` DJs -> 绑定到 `Uplifting Trance`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Vina House`: `1` DJs -> 绑定到 `House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Vinahouse`: `1` DJs -> 绑定到 `House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Vocal Bass`: `1` DJs -> 绑定到 `Future bass`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Vocal EDM`: `1` DJs -> 绑定到 `Dance-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Vocal-driven Electronica`: `1` DJs -> 绑定到 `Synth-pop`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Weird House`: `1` DJs -> 绑定到 `Lo-fi House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Weirdo-House`: `1` DJs -> 绑定到 `Lo-fi House`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `Wobble Bass`: `1` DJs -> 绑定到 `Dubstep`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `World Electronic`: `1` DJs -> 绑定到 `Global Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+- `World Ethnic Electronic`: `1` DJs -> 绑定到 `Global Club`。说明：直接绑定到现有流派，并保留原始 displayName。
+
+## Recommended Execution Order
+
+1. 先删除 `delete` 类标签，避免把非电子/过泛标签继续展示在 DJ 详情页。
+2. 再处理 `normalize` 和 `split` 类，这两类回报高、风险低。
+3. 然后批量回填 `direct` 类到 `DJGenreBinding`。
+4. 最后执行批量回填即可，本轮已无人工复核项。

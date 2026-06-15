@@ -3784,8 +3784,10 @@ struct DJDetailView: View {
 
         for binding in dj.genreBindings ?? [] {
             let label = binding.label.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayLabel = binding.resolvedDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
             let genreID = binding.normalizedGenreID
             let labelKey = label.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
+            let displayKey = displayLabel.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
             guard !label.isEmpty else { continue }
             if let genreID {
                 guard seenGenreIDs.insert(genreID).inserted else { continue }
@@ -3793,6 +3795,9 @@ struct DJDetailView: View {
                 continue
             }
             seenLabels.insert(labelKey)
+            if !displayKey.isEmpty {
+                seenLabels.insert(displayKey)
+            }
             result.append(WebGenreTagBinding(genreId: genreID, label: label, displayName: binding.displayName, path: binding.path))
         }
 

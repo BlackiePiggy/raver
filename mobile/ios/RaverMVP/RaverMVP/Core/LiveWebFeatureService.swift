@@ -122,6 +122,10 @@ final class LiveWebFeatureService: WebFeatureService {
         try await request(path: "/v1/personality/result", method: "GET")
     }
 
+    func fetchPersonalityResultPreviews() async throws -> PersonalityResultPreviewListResponse {
+        try await request(path: "/api/admin/v1/personality/result-types", method: "GET")
+    }
+
     func createPersonalitySession(mode: PersonalitySessionMode) async throws -> PersonalitySessionCreateResponse {
         try await request(path: "/v1/personality/sessions", method: "POST", body: ["mode": mode.rawValue])
     }

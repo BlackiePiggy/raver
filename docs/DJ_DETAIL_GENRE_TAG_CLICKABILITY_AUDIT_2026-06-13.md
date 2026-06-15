@@ -1,0 +1,582 @@
+# DJ Detail Genre Tag Clickability Audit (2026-06-13)
+
+## Conclusion
+
+- Web current DJ detail page has no rendered non-clickable genre tag. It only renders `dj.genreBindings`, and every rendered tag is wrapped in a link to `/genres/[id]`.
+- iOS current DJ detail page still has non-clickable genre tags. It merges clickable `genreBindings` with fallback labels from raw `dj.genres`; any fallback tag without `genreId` is rendered as plain text and cannot enter genre detail.
+- Based on the current database snapshot, the non-clickable-tag problem is therefore an iOS DJ detail page problem, not a current Web DJ detail page problem.
+
+## Code Path
+
+- Web: `web/src/app/djs/[djId]/page.tsx:195-205` only renders `dj.genreBindings` and every item is a `<Link href={`/genres/${b.genreId}`}>`.
+- iOS clickability gate: `mobile/ios/RaverMVP/RaverMVP/Features/Discover/DJs/Views/DJsModuleView.swift:3755-3765` only makes the tag tappable when `binding.normalizedGenreID` is present.
+- iOS fallback source: `mobile/ios/RaverMVP/RaverMVP/Features/Discover/DJs/Views/DJsModuleView.swift:3780-3804` appends raw labels split from `dj.genres` when they are not already represented by `genreBindings`. These appended tags have `genreId: nil`, so they are not tappable.
+
+## Data Snapshot
+
+- Total DJs scanned: `7835`
+- iOS DJs affected by at least one non-clickable genre tag: `958`
+- Total non-clickable tag instances on iOS DJ detail: `1402`
+- Unique non-clickable labels on iOS DJ detail: `500`
+- Already resolvable to an existing genre node but not yet bound onto the DJ: `127` unique labels / `710` instances
+- Still unmatched by the current genre tree plus alias/exclusion rules: `373` unique labels / `692` instances
+- Raw-label duplicates shadowing an already clickable tag with the exact same display text: `0`
+
+## Method
+
+- Used the existing unmatched-label exporter: `server/prisma/export-unmatched-genre-labels.ts`.
+- Added a one-off analysis against the local database snapshot to simulate iOS `normalizedDJGenres(_:)` behavior:
+- start from `dj.genreBindings` as clickable labels
+- add split labels from raw `dj.genres` when that label is not already covered by a binding label
+- classify any fallback label without `genreId` as non-clickable on iOS
+- Source artifacts generated during this audit:
+- `server/prisma/.cache/dj-detail-non-clickable-genre-tags.json`
+- `server/prisma/.cache/unmatched-genre-labels-report.json`
+
+## Representative Labels
+
+### Resolvable Now (genre node already exists, but DJ is not bound)
+
+- `EDM`: `61` DJs
+  Sample DJs: Tiësto (`782838a6-4b02-4708-8a25-7ed2d6b2578b`), Marshmello (`9a3c1172-44c1-46e7-8e14-2129e1f31d37`), Avicii (`8e83e1cf-8200-4bf6-ba30-1c75096e6b5a`), Porter Robinson (`bc9144f4-fe67-4598-a7e6-8ea41e46ea30`), TUJAMO (`dcfc3ec7-b24f-41d5-b05d-a526ca6bea39`), NERVO (`f35b34aa-886b-4fa5-a2f1-e8731014d671`), Blasterjaxx (`6e2059ab-ec48-448d-9016-8bbb990d80d7`), Will Sparks (`219bc40d-16c3-4cc2-81d9-8cd13d91b877`)
+- `Trap`: `55` DJs
+  Sample DJs: RL Grime (`5258ebee-025c-4aa7-a183-fe9490e45cb5`), Gryffin (`d761faf6-8363-49e3-ba04-84faf1941aed`), NURKO (`3823b8d1-d504-4f51-b650-d1e4ab1935b9`), DJ Snake (`73c4b7d4-3467-4e0e-86f8-bed5172cd86f`), Pink Panda (`5ddc3202-58a8-4c02-a33a-b72af1bf960b`), WUKONG (`41bddeb1-df73-49c9-a3e3-9a2f78cd3d87`), Faustix (`b654c69d-839a-4205-9f0b-f327e4d558a8`), Rustie (`4a310c11-1ef3-43f3-8151-bee99179b5f3`)
+- `Big Room`: `41` DJs
+  Sample DJs: Martin Garrix (`76a3e1f3-a398-492d-92e0-8875d5494fce`), Nicky Romero (`5f8ebeb5-f6fa-43e2-9342-58f6ab6b10f1`), Steve Aoki (`27b3f238-350f-44cc-af9f-156a1cb2e711`), Dimitri Vegas & Like Mike (`dcf69f80-d292-4890-a938-59990334cfe0`), W&W (`1dc24cd4-f0aa-401d-8ae4-e6dccdfeaeca`), MORTEN (`b05d2f12-33db-4594-830a-65adfa2b9de0`), Julian Jordan (`7aee89bd-9c4f-4c4d-82dc-42a6bb353f9a`), Pink Panda (`5ddc3202-58a8-4c02-a33a-b72af1bf960b`)
+- `Melodic House`: `35` DJs
+  Sample DJs: Gryffin (`d761faf6-8363-49e3-ba04-84faf1941aed`), John Summit (`b0df669b-0edd-48e7-8c6f-a969acc7e690`), Chris Stussy (`d70b9191-89bb-4dbf-b6fd-2a9ffc522eb7`), Alex Schulz (`15f622eb-1d48-4886-b734-8735056cd94a`), Ashafar (`dd4e5511-ee9f-4639-bf76-e5e27e4a0c71`), Ava Silver (`b2b57a2f-dbb7-4dd0-8aab-590171dcf7b0`), AVIRA (`f16421f5-5278-42bf-8712-ff85c07d120b`), AXMO (`000089b1-b91f-4fc6-97b2-91c151c56b22`)
+- `Future House`: `34` DJs
+  Sample DJs: Avicii (`8e83e1cf-8200-4bf6-ba30-1c75096e6b5a`), Oliver Heldens (`137c5341-cb7c-4e8f-b232-fe101b220ada`), Don Diablo (`b44c8575-a548-4923-a5d6-6de75ca47ac5`), Timmy Trumpet (`1deda849-0e59-452e-9a6c-7ae91478ee60`), Joel Corry (`2976be0e-26bb-4bdd-a250-11e486210a41`), Lucas & Steve (`37f87153-6033-4fc5-b8ee-f1116f49fd43`), Lizzy Wang (`738a8441-3e0c-40ed-877f-b709ff1be30e`), Max Styler (`2503532d-95ab-401e-ae4f-dfe1df8b9dde`)
+- `Hard Dance`: `32` DJs
+  Sample DJs: W&W (`1dc24cd4-f0aa-401d-8ae4-e6dccdfeaeca`), Cera Khin (`6206defa-04dd-4de2-a6b9-c0ea40eeb2d0`), Kyle Starkey (`c11a6c7d-7c46-4463-bcb1-fb277a5ac976`), Partiboi69 (`b32178e9-95bd-468c-9c98-756e32440245`), Schrotthagen (`0e23441c-b930-4b23-9486-c464518f7603`), Trancemaster Krause (`bbf3872b-c38e-4897-acd6-187953aa8724`), Gammer (`3e620d76-622c-48ee-88fc-1308d7eb31af`), EWAVE (`111f5b1b-86d3-4a3c-9d6b-9b7bd32fca72`)
+- `Bass House`: `29` DJs
+  Sample DJs: Oliver Heldens (`137c5341-cb7c-4e8f-b232-fe101b220ada`), Fisher (`1ba398ee-8ff7-45d9-9f65-48efff5815b2`), James Hype (`28a868f1-4e12-4802-835f-9c0ab1b5fc23`), Mau P (`feb28236-60bc-4d11-b167-5279c3a84e3d`), Habstrakt (`e715937a-05c0-411e-a43a-292eed507794`), Malaa (`f20b6079-1989-40a0-806a-e318244f391c`), Odd Mob (`40c8f092-1a1b-425b-abaa-2fbabc95ab62`), Robert Falcon (`d59654cf-28d2-4640-830b-0b9ade2871db`)
+- `Indie Dance`: `24` DJs
+  Sample DJs: Adam Sellouk (`2ce49df0-0bc9-444d-979d-a77340e7d09d`), The Magician (`1396debf-9e51-4143-9151-95df19b68ff5`), Trikk (`b5add24d-1f58-47b3-896a-0207638ee493`), Zombies In Miami (`609e464f-9dd7-4d30-9b5b-82f80f951dc2`), Eze Ramirez (`1db13ad9-feec-4151-86c7-47775ef60b26`), Alexia Malo (`503b2747-8020-4e00-8139-dcec9bfd47e3`), ANNA FOREST (`e899d717-8c19-4f2f-b9d2-58b52d08c8e8`), Belben (`8f176892-0f64-42a2-87a3-0e1229043af3`)
+
+### Still Unmatched After Current Mapping Rules
+
+- `Experimental Electronic`: `16` DJs
+  Sample DJs: breakcore girl (`54cfba02-b850-4b58-856c-69ee43268804`), Djrum (`41a86033-78d1-4713-89e2-a08d37c30b35`), Ellen Allien (`7889ffb0-3716-4e64-9175-9ba01248ca9d`), Four Tet (`06a282e6-6ee0-4ae6-83e9-b8d5e20f67ae`), Jlin (`12ba1484-965d-4c28-ba39-cab7421a1cf6`), Oneohtrix Point Never (`c147b2fc-7ea8-49c1-86a2-4f246488985d`), Richie Hawtin (`590370d5-d4e5-48cc-ae6d-3949a28f288f`), Rustie (`4a310c11-1ef3-43f3-8151-bee99179b5f3`)
+- `Classic House`: `14` DJs
+  Sample DJs: Alan Dixon (`6aaa9a0a-c585-4a6a-a445-161c509297e8`), Binh (`4eddea85-5a85-4a0c-a920-004c92990ab3`), Cinthie (`996f34df-8c6e-4256-bcfc-bff3a1ab6435`), Durante (`c23a4ac4-bfb1-40b2-9429-99a7a049f345`), Frankie Knuckles (`2d73856d-c59b-4a53-b3ba-4a1bb939da0f`), Prosumer (`ec1aa9ae-6827-48a0-a5bf-fa9829e7b4c7`), Christian82 (`4b729059-dd46-4cc6-ae69-372d309b2efe`), Colored Craig (`63c45b40-7b11-4e58-8cdc-8fd26775099a`)
+- `Funky House`: `14` DJs
+  Sample DJs: Jesus Davila (`ae7f0a65-3666-4492-8409-fc4af1342048`), Arkins (`fe21427d-52ac-4abd-a515-90fa428fab1f`), Block & Crown (`fb5bc881-4838-4448-abaa-a8267dc5074a`), Chapeleiro (`73aca648-f076-43fd-8dcf-c2e7a16e8a82`), Daitto (`970b84ea-1e0b-4eba-948a-966a1a4499a6`), Golf Clap (`54b5c3c9-09dd-499d-9a9e-ff72f9c8e80b`), Hannah Wants (`87101673-978b-4ab8-9dd9-4fc090f911c9`), redling (`d5869890-fed4-4df9-8988-27a35dfe5d0b`)
+- `Rave`: `14` DJs
+  Sample DJs: AC Slater (`8682706f-cb5e-44d1-8065-32c7f8a8c026`), Orbital (`1d67d305-6a62-415c-9b1f-352f47dce730`), Special Request (`9b6a5c50-ce2c-4c7c-b263-4d5a64a074c6`), The Prodigy (`7c04efce-717e-4ddb-aad6-afeca9c08e33`), X CLUB. (`a6a9afc5-fca2-44df-bc74-6b97d316e0bb`), Azo (`02143373-e4a9-4bde-918a-5c1a01a5497b`), DJ Archie (`13e03f9a-9149-46dc-a539-452a8add8f90`), Lena De Roose (`ea2aa95c-b59f-45d8-8a12-61a9d10fd9eb`)
+- `Melodic House & Techno`: `13` DJs
+  Sample DJs: Gregor Tresher (`9709161b-3f56-4df9-abd5-2550140011dd`), Patrice Bäumel (`1f53607f-e2cf-4b0b-878e-64023ae245ab`), Temple Tears (`5d40b3cb-9e9d-4205-bdec-b33476a86a40`), Yulia Niko (`e05c5cdf-1d72-4cb5-9bc0-547614779153`), Bigfett (`60866b5d-0b1c-40c2-b84e-3bd7527a6fe9`), djs from mars (`9ef93a8d-e870-40d3-967d-49b8f8c66ab8`), Fancy Inc (`c36805b4-d494-4da2-ad44-865bfc1de48f`), HUMAN404 (`a843351b-9df9-4163-9598-880537393a26`)
+
+## Full Inventory
+
+### A. Resolvable Labels Not Yet Bound to DJs
+
+- `EDM`: `61` DJs
+- `Trap`: `55` DJs
+- `Big Room`: `41` DJs
+- `Melodic House`: `35` DJs
+- `Future House`: `34` DJs
+- `Hard Dance`: `32` DJs
+- `Bass House`: `29` DJs
+- `Indie Dance`: `24` DJs
+- `Breaks`: `20` DJs
+- `Techno (Peak Time / Driving)`: `19` DJs
+- `Melodic Bass`: `18` DJs
+- `Drum & Bass`: `16` DJs
+- `Funk`: `15` DJs
+- `Dance Pop`: `14` DJs
+- `Minimal`: `14` DJs
+- `House Music`: `12` DJs
+- `Disco House`: `11` DJs
+- `Garage`: `11` DJs
+- `Neo Rave`: `11` DJs
+- `Hip Hop`: `10` DJs
+- `Future Rave`: `9` DJs
+- `Organic House`: `9` DJs
+- `R&B`: `8` DJs
+- `Tribal House`: `8` DJs
+- `Dancehall`: `7` DJs
+- `Hip-Hop`: `7` DJs
+- `Nu Disco`: `7` DJs
+- `Hard Groove`: `6` DJs
+- `IDM`: `6` DJs
+- `Minimal / Deep Tech`: `6` DJs
+- `Psychedelic Trance`: `6` DJs
+- `Riddim Dubstep`: `6` DJs
+- `Afrobeats`: `5` DJs
+- `Afro-house`: `4` DJs
+- `G-house`: `4` DJs
+- `Latin Urban`: `4` DJs
+- `Progressive Techno`: `4` DJs
+- `Reggae`: `4` DJs
+- `Soul`: `4` DJs
+- `UK House`: `4` DJs
+- `Bigroom`: `3` DJs
+- `Deep Tech`: `3` DJs
+- `Electronic Dance Music`: `3` DJs
+- `Psy Trance`: `3` DJs
+- `AfroHouse`: `2` DJs
+- `Alternative Pop`: `2` DJs
+- `Contemporary R&B`: `2` DJs
+- `Dark Wave`: `2` DJs
+- `indie pop`: `2` DJs
+- `Melodic Drum and Bass`: `2` DJs
+- `Peak Time Techno`: `2` DJs
+- `Peak-Time Techno`: `2` DJs
+- `Pop`: `2` DJs
+- `Pop‑EDM`: `2` DJs
+- `Psy-Trance`: `2` DJs
+- `Synthpop`: `2` DJs
+- `Trip-hop`: `2` DJs
+- `UK Garage / Bassline`: `2` DJs
+- `Urban`: `2` DJs
+- `Afro/Organic House`: `1` DJs
+- `Afrobeat`: `1` DJs
+- `Alternative`: `1` DJs
+- `Balearic`: `1` DJs
+- `Big Room Bounce`: `1` DJs
+- `Big Room EDM`: `1` DJs
+- `Bigroom House`: `1` DJs
+- `Chill Out`: `1` DJs
+- `Chillout`: `1` DJs
+- `Cumbia`: `1` DJs
+- `Dark Pop`: `1` DJs
+- `Deep Dub House`: `1` DJs
+- `Dream Pop`: `1` DJs
+- `Drill`: `1` DJs
+- `Electro Rock`: `1` DJs
+- `Electro-Funk`: `1` DJs
+- `Emo Rock`: `1` DJs
+- `Emotional Pop`: `1` DJs
+- `Euro Dance`: `1` DJs
+- `Eurodisco`: `1` DJs
+- `French Indie Pop`: `1` DJs
+- `Full On Psy-Trance`: `1` DJs
+- `Fullon Psytrance`: `1` DJs
+- `Glitch-Hop`: `1` DJs
+- `Hard Wave`: `1` DJs
+- `Hardhouse`: `1` DJs
+- `Hardtechno`: `1` DJs
+- `Hardtrance`: `1` DJs
+- `Hip-Hop Dance`: `1` DJs
+- `Hip-Hop/Rap`: `1` DJs
+- `Hip-House`: `1` DJs
+- `IDM/Experimental`: `1` DJs
+- `Indie`: `1` DJs
+- `Indie-dance`: `1` DJs
+- `Industrial Hard Techno`: `1` DJs
+- `Jacking House`: `1` DJs
+- `Jazz`: `1` DJs
+- `Jazzy House`: `1` DJs
+- `K-Pop Electronic Remix`: `1` DJs
+- `K-Pop Remix`: `1` DJs
+- `Korean Hip-Hop`: `1` DJs
+- `Latin Alternative Rock`: `1` DJs
+- `Latin Urbano`: `1` DJs
+- `Liquid Drum & Bass`: `1` DJs
+- `Melodic Drum & Bass`: `1` DJs
+- `Melodic House/Techno`: `1` DJs
+- `Melodic-house & Techno`: `1` DJs
+- `Minimal/Deep Tech`: `1` DJs
+- `Minimal/Deep-Tech`: `1` DJs
+- `Neorave`: `1` DJs
+- `Nu Soul`: `1` DJs
+- `Nu-Skool Breaks`: `1` DJs
+- `Peak‑Time Techno`: `1` DJs
+- `Peaktime / Driving Techno`: `1` DJs
+- `Perreo`: `1` DJs
+- `Pop Dance`: `1` DJs
+- `Pop Rap`: `1` DJs
+- `Progressive Psy Trance`: `1` DJs
+- `Punk`: `1` DJs
+- `Reggaeton Mexicano`: `1` DJs
+- `Salsa`: `1` DJs
+- `Samba`: `1` DJs
+- `Soulful Pop`: `1` DJs
+- `Synth Pop`: `1` DJs
+- `Synth‑Pop`: `1` DJs
+- `Techfunk`: `1` DJs
+- `Urban Dance`: `1` DJs
+- `Worldbeat`: `1` DJs
+
+### B. Still Unmatched Labels
+
+- `Experimental Electronic`: `16` DJs
+- `Classic House`: `14` DJs
+- `Funky House`: `14` DJs
+- `Rave`: `14` DJs
+- `Melodic House & Techno`: `13` DJs
+- `Uptempo`: `11` DJs
+- `Rawstyle`: `10` DJs
+- `Uptempo Hardcore`: `10` DJs
+- `Acid`: `9` DJs
+- `Underground House`: `9` DJs
+- `Hybrid Trap`: `8` DJs
+- `Latin House`: `8` DJs
+- `Melodic Electronic`: `8` DJs
+- `Minimal House`: `8` DJs
+- `Baile Funk`: `7` DJs
+- `Bass`: `7` DJs
+- `Raw Hardstyle`: `7` DJs
+- `Tech Trance`: `7` DJs
+- `Techno (Raw / Deep / Hypnotic)`: `7` DJs
+- `Bounce`: `6` DJs
+- `Experimental Bass`: `6` DJs
+- `Afro Electronic`: `5` DJs
+- `Atmospheric Techno`: `5` DJs
+- `Dutch House`: `5` DJs
+- `Latin Electronic`: `5` DJs
+- `Mainstage`: `5` DJs
+- `Melodic Trance`: `5` DJs
+- `Psychedelic Electronic`: `5` DJs
+- `Brazilian Funk`: `4` DJs
+- `Commercial House`: `4` DJs
+- `Electronica`: `4` DJs
+- `Emotional Bass`: `4` DJs
+- `Hard Trap`: `4` DJs
+- `Heavy Bass`: `4` DJs
+- `Progressive`: `4` DJs
+- `Trance (Main Floor)`: `4` DJs
+- `Underground Techno`: `4` DJs
+- `Afro Tech`: `3` DJs
+- `Alternative Dance`: `3` DJs
+- `Ambient Electronic`: `3` DJs
+- `Chill Electronic`: `3` DJs
+- `Dark Techno`: `3` DJs
+- `Dub`: `3` DJs
+- `Early Hardcore`: `3` DJs
+- `Euphoric Hardstyle`: `3` DJs
+- `Extra Raw`: `3` DJs
+- `Future Bounce`: `3` DJs
+- `Hard Bounce`: `3` DJs
+- `Hypnotic Techno`: `3` DJs
+- `Industrial`: `3` DJs
+- `Jump-up Drum and Bass`: `3` DJs
+- `Mainstage EDM`: `3` DJs
+- `Minimal Deep Tech`: `3` DJs
+- `Retro House`: `3` DJs
+- `UK Hardcore`: `3` DJs
+- `Vocal House`: `3` DJs
+- `Afro`: `2` DJs
+- `Afrotech`: `2` DJs
+- `Berlin Techno`: `2` DJs
+- `Cinematic Techno`: `2` DJs
+- `Club Music`: `2` DJs
+- `Dance`: `2` DJs
+- `Dark Disco`: `2` DJs
+- `Dark EDM`: `2` DJs
+- `Dark Electronic`: `2` DJs
+- `Deep Bass`: `2` DJs
+- `Deep Tech House`: `2` DJs
+- `Drumstep`: `2` DJs
+- `Electronic Pop`: `2` DJs
+- `Electropunk`: `2` DJs
+- `Euphoric Trance`: `2` DJs
+- `Experimental Bass Music`: `2` DJs
+- `Experimental Techno`: `2` DJs
+- `Funk House`: `2` DJs
+- `Funk-infused House`: `2` DJs
+- `Global Bass`: `2` DJs
+- `Hard EDM`: `2` DJs
+- `Hardcore Techno`: `2` DJs
+- `Harder Styles`: `2` DJs
+- `Heaven Trap`: `2` DJs
+- `Heavy Bass Music`: `2` DJs
+- `Indie House`: `2` DJs
+- `Industrial Electronic`: `2` DJs
+- `Intelligent Drum and Bass`: `2` DJs
+- `Jumpstyle`: `2` DJs
+- `Korean Bounce`: `2` DJs
+- `Latin`: `2` DJs
+- `Latin Tech`: `2` DJs
+- `Leftfield Electronic`: `2` DJs
+- `Lo-fi`: `2` DJs
+- `Mashup`: `2` DJs
+- `Melbourne Bounce`: `2` DJs
+- `Melodic`: `2` DJs
+- `Melodic Progressive House`: `2` DJs
+- `Melodic Trap`: `2` DJs
+- `Metalstep`: `2` DJs
+- `New Rave`: `2` DJs
+- `Pop EDM`: `2` DJs
+- `Psychedelic Techno`: `2` DJs
+- `Rawphoric`: `2` DJs
+- `Reverse Bass`: `2` DJs
+- `Terror`: `2` DJs
+- `Tropical Bass`: `2` DJs
+- `Uplifting House`: `2` DJs
+- `140`: `1` DJs
+- `140 Bass Music`: `1` DJs
+- `2-step`: `1` DJs
+- `3-Step`: `1` DJs
+- `3step`: `1` DJs
+- `70’s Funk`: `1` DJs
+- `90s Electronica`: `1` DJs
+- `90s Hardcore`: `1` DJs
+- `90s Rave`: `1` DJs
+- `Acid Guaracha`: `1` DJs
+- `Acid Rave`: `1` DJs
+- `Afro Latin`: `1` DJs
+- `Afro Rhythm`: `1` DJs
+- `Afro-Latin House`: `1` DJs
+- `Algerian Dance Music`: `1` DJs
+- `Alternative Electronica`: `1` DJs
+- `Ambient Electronica`: `1` DJs
+- `Ambient Gabber`: `1` DJs
+- `Atmospheric Electronica`: `1` DJs
+- `Atmospheric Hard Dance`: `1` DJs
+- `Atomic Techno`: `1` DJs
+- `Avant-Garde Electronic`: `1` DJs
+- `Baile`: `1` DJs
+- `Balkan Electronic`: `1` DJs
+- `Bass Future House`: `1` DJs
+- `Bassline Riddim`: `1` DJs
+- `Batida`: `1` DJs
+- `Beat Scene`: `1` DJs
+- `Belgian Dance`: `1` DJs
+- `Bollywood Remix`: `1` DJs
+- `Boogie Funk`: `1` DJs
+- `Booty Bass`: `1` DJs
+- `Bounce & Bass`: `1` DJs
+- `Bouncy House`: `1` DJs
+- `Brazilian Electronic`: `1` DJs
+- `Bubblegum Bass`: `1` DJs
+- `Bubbling`: `1` DJs
+- `Chill EDM`: `1` DJs
+- `Chill Trap`: `1` DJs
+- `Chillhop`: `1` DJs
+- `Chinese Style Electronic`: `1` DJs
+- `Chunky House`: `1` DJs
+- `Cinematic Electronic`: `1` DJs
+- `Club`: `1` DJs
+- `Club Progressive`: `1` DJs
+- `Commercial Dance`: `1` DJs
+- `Country EDM`: `1` DJs
+- `Crunkstep`: `1` DJs
+- `Cyber Electronic`: `1` DJs
+- `Dance Remix`: `1` DJs
+- `Dancefloor Drum and Bass`: `1` DJs
+- `Dark Bass`: `1` DJs
+- `Dark Bass Music`: `1` DJs
+- `Dark Melodic Bass`: `1` DJs
+- `Darkpsy`: `1` DJs
+- `Deathstep`: `1` DJs
+- `Deep Dub`: `1` DJs
+- `Deep Hypnotic Techno`: `1` DJs
+- `Deep Jackin' House`: `1` DJs
+- `Detroit House`: `1` DJs
+- `Dirty House`: `1` DJs
+- `Disco Funk`: `1` DJs
+- `Disco-influenced Dance`: `1` DJs
+- `Disco-influenced House`: `1` DJs
+- `Disco-infused House`: `1` DJs
+- `Disco-Pop`: `1` DJs
+- `Drift`: `1` DJs
+- `Driving House`: `1` DJs
+- `Drone`: `1` DJs
+- `Early Hardstyle`: `1` DJs
+- `Edit Disco`: `1` DJs
+- `EDM-pop`: `1` DJs
+- `Electro Breakbeat`: `1` DJs
+- `Electro Trash`: `1` DJs
+- `Electro-Acoustic`: `1` DJs
+- `Electro-Soul`: `1` DJs
+- `Electronic Funk`: `1` DJs
+- `Electronicore`: `1` DJs
+- `Elektro-Jump-Hardstyle`: `1` DJs
+- `Emotional Dance Pop`: `1` DJs
+- `Emotional EDM`: `1` DJs
+- `Emotional House`: `1` DJs
+- `Emotional Pop EDM`: `1` DJs
+- `Emotional Techno`: `1` DJs
+- `Euro House`: `1` DJs
+- `Euro Trance`: `1` DJs
+- `Eurotrance`: `1` DJs
+- `Experimental Dubstep`: `1` DJs
+- `Experimental Electronic Music`: `1` DJs
+- `Experimental Electronica`: `1` DJs
+- `Extra Rawstyle`: `1` DJs
+- `Extreme Uptempo`: `1` DJs
+- `Favela Bass`: `1` DJs
+- `Festival EDM`: `1` DJs
+- `Festival Trap`: `1` DJs
+- `Folk House`: `1` DJs
+- `Folk Trap`: `1` DJs
+- `Folktronica`: `1` DJs
+- `Freestyle`: `1` DJs
+- `French Touch`: `1` DJs
+- `Full on Night`: `1` DJs
+- `Full-on`: `1` DJs
+- `Funk Dance`: `1` DJs
+- `Funk Electronic`: `1` DJs
+- `Funk-influenced Drum and Bass`: `1` DJs
+- `Funk-influenced Electronic`: `1` DJs
+- `Funky`: `1` DJs
+- `Funky Bass`: `1` DJs
+- `Future Afro`: `1` DJs
+- `Future Boogie`: `1` DJs
+- `Future Riddim`: `1` DJs
+- `Futuristic Electronic`: `1` DJs
+- `Gabba`: `1` DJs
+- `Glitch Hip-Hop`: `1` DJs
+- `Goa Psy Trance`: `1` DJs
+- `Gospel House`: `1` DJs
+- `Groovy House`: `1` DJs
+- `Guaracha`: `1` DJs
+- `Halftime`: `1` DJs
+- `Halftime Drum and Bass`: `1` DJs
+- `Hard Bass Dubstep`: `1` DJs
+- `Hard Industrial Techno`: `1` DJs
+- `Hard Psy`: `1` DJs
+- `Hardbass`: `1` DJs
+- `Hardstyle Bass`: `1` DJs
+- `Hardstyle Classics`: `1` DJs
+- `Hardtek`: `1` DJs
+- `Hi-Tech Psytrance`: `1` DJs
+- `High-Tech Minimal`: `1` DJs
+- `Hip Hop-influenced Electronic`: `1` DJs
+- `Hippie House`: `1` DJs
+- `House Lak`: `1` DJs
+- `Hydro-House`: `1` DJs
+- `Hyper Techno`: `1` DJs
+- `Hypertechno`: `1` DJs
+- `Hypnotic House`: `1` DJs
+- `Indie-Electro`: `1` DJs
+- `Indietronica`: `1` DJs
+- `Industrial Bass`: `1` DJs
+- `Isolationist Drone`: `1` DJs
+- `Italian Euro Dance`: `1` DJs
+- `Italo House`: `1` DJs
+- `ItaloDance`: `1` DJs
+- `Jackin’ House`: `1` DJs
+- `Jazz Electronica`: `1` DJs
+- `Jazz-influenced Drum and Bass`: `1` DJs
+- `Jungle Hardcore`: `1` DJs
+- `Jungle Techno`: `1` DJs
+- `Korea Bounce`: `1` DJs
+- `Krach`: `1` DJs
+- `Latin Crossover House`: `1` DJs
+- `Latin EDM`: `1` DJs
+- `Latin Gabber`: `1` DJs
+- `Latin-infused Grooves`: `1` DJs
+- `Leftfield Bass`: `1` DJs
+- `Liquid DnB`: `1` DJs
+- `Lo-Fi Electronic`: `1` DJs
+- `Lofi Electronic`: `1` DJs
+- `Main Stage EDM`: `1` DJs
+- `Mainstage House`: `1` DJs
+- `Mainstage Techno`: `1` DJs
+- `Mainstream House`: `1` DJs
+- `Maximal House`: `1` DJs
+- `Melodic Afro House`: `1` DJs
+- `Melodic Goa Trance`: `1` DJs
+- `Melodic Hardcore`: `1` DJs
+- `Melodic Hardstyle`: `1` DJs
+- `Melodic Psy-Trance`: `1` DJs
+- `Melodic Tech House`: `1` DJs
+- `Melodic Uptempo Hardcore`: `1` DJs
+- `Metal Dubstep`: `1` DJs
+- `Minimal Bounce`: `1` DJs
+- `Minimal Electronic`: `1` DJs
+- `Modern Cumbia`: `1` DJs
+- `Modern House`: `1` DJs
+- `Neo Trance`: `1` DJs
+- `Neo-Techno`: `1` DJs
+- `Neuro Drum and Bass`: `1` DJs
+- `New York House`: `1` DJs
+- `Nitzhonot`: `1` DJs
+- `Noise`: `1` DJs
+- `Noise Music`: `1` DJs
+- `Noise-influenced Electronic`: `1` DJs
+- `Noise-influenced Techno`: `1` DJs
+- `Nu Gabber`: `1` DJs
+- `Nu Rave`: `1` DJs
+- `Nu Trance`: `1` DJs
+- `Nu-Breaks`: `1` DJs
+- `NU-NRG`: `1` DJs
+- `Nu-Wave`: `1` DJs
+- `Old School Electronic`: `1` DJs
+- `Old School Rave`: `1` DJs
+- `Old Skool Disco`: `1` DJs
+- `Oldschool Electronic`: `1` DJs
+- `Oldschool Rave`: `1` DJs
+- `Oldskool Hardcore`: `1` DJs
+- `Perreo Bass`: `1` DJs
+- `Perreo Sexótico`: `1` DJs
+- `Pop Electronic`: `1` DJs
+- `Pop-Dance`: `1` DJs
+- `Pop-infused EDM`: `1` DJs
+- `Poptronica`: `1` DJs
+- `Post Techno Punk`: `1` DJs
+- `Post-Dubstep`: `1` DJs
+- `Power House`: `1` DJs
+- `Powertrance`: `1` DJs
+- `Progressive EDM`: `1` DJs
+- `Progressive Electronic`: `1` DJs
+- `Progressive Psychedelic Trance`: `1` DJs
+- `Progressive-Indie-EDM`: `1` DJs
+- `Psy Tech`: `1` DJs
+- `Psybreaks`: `1` DJs
+- `Psychedelic`: `1` DJs
+- `Psychedelic Ambient`: `1` DJs
+- `Psychedelic House`: `1` DJs
+- `Psystyle`: `1` DJs
+- `Pure House`: `1` DJs
+- `Raw Techno`: `1` DJs
+- `Raw Trap`: `1` DJs
+- `Raw/Deep/Hypnotic Techno`: `1` DJs
+- `Retro Tech`: `1` DJs
+- `Rollers Drum and Bass`: `1` DJs
+- `Rolling Drum & Bass`: `1` DJs
+- `Screwmbia`: `1` DJs
+- `Sickcore`: `1` DJs
+- `Slo-mo Boogie`: `1` DJs
+- `Soul Electronic`: `1` DJs
+- `Soulful Drum & Bass`: `1` DJs
+- `Speed House`: `1` DJs
+- `Steam House`: `1` DJs
+- `Summer House`: `1` DJs
+- `Tearout`: `1` DJs
+- `Tearout Dubstep`: `1` DJs
+- `Tech`: `1` DJs
+- `Techno (Peak Time)`: `1` DJs
+- `Tecktonik`: `1` DJs
+- `Tek Tribal`: `1` DJs
+- `Tekno`: `1` DJs
+- `Texcore`: `1` DJs
+- `Traditional House`: `1` DJs
+- `Trance (Raw / Deep / Hypnotic)`: `1` DJs
+- `Trance Brasileiro`: `1` DJs
+- `Trance-Pop`: `1` DJs
+- `Trap House`: `1` DJs
+- `Trapengue`: `1` DJs
+- `Tribal Electronic`: `1` DJs
+- `Tribal Techno`: `1` DJs
+- `Tribal Textured House`: `1` DJs
+- `Tribe`: `1` DJs
+- `Tropical Electronic`: `1` DJs
+- `U.K. Bass Music`: `1` DJs
+- `UK Bass Music`: `1` DJs
+- `UK Beats`: `1` DJs
+- `UK Techno`: `1` DJs
+- `Underground Electronic`: `1` DJs
+- `Underground Electronic Music`: `1` DJs
+- `Underground Trance`: `1` DJs
+- `Upfront House`: `1` DJs
+- `Uplifting`: `1` DJs
+- `Vina House`: `1` DJs
+- `Vinahouse`: `1` DJs
+- `Vocal Bass`: `1` DJs
+- `Vocal EDM`: `1` DJs
+- `Vocal-driven Electronica`: `1` DJs
+- `Weird House`: `1` DJs
+- `Weirdo-House`: `1` DJs
+- `Wobble Bass`: `1` DJs
+- `World Electronic`: `1` DJs
+- `World Ethnic Electronic`: `1` DJs
+
+## Suggested Follow-up
+
+- First wave: backfill the `127` resolvable labels into `DJGenreBinding`, because those labels already have a destination node in the current genre library and account for `710 / 1402` non-clickable instances.
+- Second wave: expand alias coverage or add missing genre nodes for the `373` still-unmatched labels, starting with the highest-frequency items such as `Experimental Electronic`, `Classic House`, `Funky House`, `Rave`, `Melodic House & Techno`, `Uptempo`, `Rawstyle`, and `Uptempo Hardcore`.
+- If product behavior should be consistent across platforms, consider making iOS DJ detail follow the Web rule: only render bound `genreBindings`, or resolve raw labels through the lookup before display.

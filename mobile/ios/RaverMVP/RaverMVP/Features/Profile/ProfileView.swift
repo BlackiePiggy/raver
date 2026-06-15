@@ -5665,6 +5665,9 @@ final class PersonalityFlowViewModel: ObservableObject {
     @Published var feedbackMessage: String?
     @Published var activeAlert: QuizAlert?
     @Published private(set) var isAbandoningSession = false
+    @Published private(set) var previewResults: [PersonalityResultPayload] = []
+    @Published private(set) var isLoadingPreviewResults = false
+    @Published private(set) var previewResultsErrorMessage: String?
 
     private let service: WebFeatureService
     private let mediaPreloader: MediaPreloader
@@ -5712,6 +5715,27 @@ final class PersonalityFlowViewModel: ObservableObject {
             result: result
         )
         phase = .result(synthetic)
+    }
+
+    func loadPreviewResultsIfNeeded() async {
+        guard previewResults.isEmpty else { return }
+        await loadPreviewResults(force: false)
+    }
+
+    func loadPreviewResults(force: Bool) async {
+        if isLoadingPreviewResults { return }
+        if !force, !previewResults.isEmpty { return }
+        isLoadingPreviewResults = true
+        previewResultsErrorMessage = nil
+        defer { isLoadingPreviewResults = false }
+        do {
+            let response = try await service.fetchPersonalityResultPreviews()
+            previewResults = response.items
+        } catch {
+            previewResults = []
+            previewResultsErrorMessage = error.userFacingMessage
+                ?? LT("人格结果列表加载失败，请稍后重试。", "Failed to load result previews. Please try again later.", "結果一覧の読み込みに失敗しました。時間をおいて再試行してください。")
+        }
     }
 
     func load() async {
@@ -5967,13 +5991,34 @@ final class PersonalityFlowViewModel: ObservableObject {
 }
 
 struct PersonalityFlowView: View {
+    private struct ResultPreviewNavigationTarget: Identifiable, Hashable {
+        let result: PersonalityResultPayload
+        let questionCount: Int
+
+        var id: String {
+            result.code
+        }
+    }
+
+    private struct GenreDetailNavigationTarget: Identifiable, Hashable {
+        let genreID: String
+
+        var id: String {
+            genreID
+        }
+    }
+
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.discoverPush) private var discoverPush
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: PersonalityFlowViewModel
+    @State private var isPreviewPickerPresented = false
+    @State private var resultPreviewNavigationTarget: ResultPreviewNavigationTarget?
+    @State private var genreDetailNavigationTarget: GenreDetailNavigationTarget?
+    private let service: WebFeatureService
     private let optionLetters = ["A", "B", "C", "D", "E", "F"]
 
     init(service: WebFeatureService) {
+        self.service = service
         _viewModel = StateObject(wrappedValue: PersonalityFlowViewModel(service: service))
     }
 
@@ -6256,6 +6301,21 @@ struct PersonalityFlowView: View {
                 )
             }
         }
+        .sheet(isPresented: $isPreviewPickerPresented) {
+            personalityResultPreviewPicker
+        }
+        .navigationDestination(item: $resultPreviewNavigationTarget) { target in
+            personalityResultView(
+                PersonalitySessionSubmitResponse(
+                    mode: .standard,
+                    sessionId: "personality-result-preview-\(target.result.code)",
+                    questionCount: target.questionCount,
+                    answeredCount: target.questionCount,
+                    axisScores: [:],
+                    result: target.result
+                )
+            )
+        }
     }
 
     private func summaryRow(_ title: String, _ value: String) -> some View {
@@ -6362,6 +6422,26 @@ struct PersonalityFlowView: View {
                     .disabled(!summary.canStartDebugQuestionSet)
                 }
 
+                if summary.canUseDebugQuestionSet {
+                    Button {
+                        isPreviewPickerPresented = true
+                        Task { await viewModel.loadPreviewResultsIfNeeded() }
+                    } label: {
+                        HStack {
+                            if viewModel.isLoadingPreviewResults {
+                                ProgressView()
+                                    .tint(RaverTheme.accent)
+                            }
+                            Text(LT("预览不同性格结果页", "Preview Other Result Pages", "別の結果ページをプレビュー"))
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(RaverTheme.accent)
+                }
+
                 if !summary.canStart && !summary.hasCompleted {
                     Text(disabledReasonText(summary.disabledReason))
                         .font(.footnote)
@@ -6372,6 +6452,105 @@ struct PersonalityFlowView: View {
             .padding(16)
         }
         .background(RaverTheme.background)
+    }
+
+    private var personalityResultPreviewPicker: some View {
+        NavigationStack {
+            Group {
+                if viewModel.isLoadingPreviewResults && viewModel.previewResults.isEmpty {
+                    VStack(spacing: 16) {
+                        ProgressView()
+                        Text(LT("正在加载人格结果列表", "Loading result previews", "結果一覧を読み込み中"))
+                            .font(.subheadline)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RaverTheme.background)
+                } else if let errorMessage = viewModel.previewResultsErrorMessage {
+                    VStack(spacing: 12) {
+                        Text(errorMessage)
+                            .font(.body)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                            .multilineTextAlignment(.center)
+                        Button(LT("重试", "Retry", "再試行")) {
+                            Task { await viewModel.loadPreviewResults(force: true) }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(24)
+                    .background(RaverTheme.background)
+                } else if viewModel.previewResults.isEmpty {
+                    VStack(spacing: 12) {
+                        Text(LT("暂无可预览的人格结果。", "No result previews available.", "プレビューできる結果がありません。"))
+                            .font(.body)
+                            .foregroundStyle(RaverTheme.secondaryText)
+                        Button(LT("重试", "Retry", "再試行")) {
+                            Task { await viewModel.loadPreviewResults(force: true) }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(24)
+                    .background(RaverTheme.background)
+                } else {
+                    List(viewModel.previewResults, id: \.code) { result in
+                        Button {
+                            let target = ResultPreviewNavigationTarget(
+                                result: result,
+                                questionCount: viewModel.summary?.questionCount ?? 16
+                            )
+                            isPreviewPickerPresented = false
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                resultPreviewNavigationTarget = target
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 8) {
+                                    Text(result.code)
+                                        .font(.subheadline.weight(.bold))
+                                        .foregroundStyle(RaverTheme.primaryText)
+                                    if result.isHidden {
+                                        Text(LT("隐藏", "Hidden", "隠し"))
+                                            .font(.caption2.weight(.semibold))
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 3)
+                                            .background(
+                                                Capsule(style: .continuous)
+                                                    .fill(RaverTheme.card)
+                                            )
+                                            .foregroundStyle(RaverTheme.secondaryText)
+                                    }
+                                }
+                                Text(result.title)
+                                    .font(.headline)
+                                    .foregroundStyle(RaverTheme.primaryText)
+                                if let tagline = result.slangTagline, !tagline.isEmpty {
+                                    Text(tagline)
+                                        .font(.footnote)
+                                        .foregroundStyle(RaverTheme.secondaryText)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(RaverTheme.background)
+                    }
+                    .scrollContentBackground(.hidden)
+                    .background(RaverTheme.background)
+                }
+            }
+            .navigationTitle(LT("选择结果页", "Choose Result Page", "結果ページを選択"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(LT("关闭", "Close", "閉じる")) {
+                        isPreviewPickerPresented = false
+                    }
+                }
+            }
+        }
     }
 
     private var personalityQuestionView: some View {
@@ -6475,6 +6654,9 @@ struct PersonalityFlowView: View {
             }
         }
         .background(RaverTheme.background)
+        .navigationDestination(item: $genreDetailNavigationTarget) { target in
+            PersonalityGenreDetailLoaderView(genreID: target.genreID, service: service)
+        }
     }
 
     private func personalityResultView(_ result: PersonalitySessionSubmitResponse) -> some View {
@@ -6644,6 +6826,9 @@ struct PersonalityFlowView: View {
             )
         }
         .background(RaverTheme.background)
+        .navigationDestination(item: $genreDetailNavigationTarget) { target in
+            PersonalityGenreDetailLoaderView(genreID: target.genreID, service: service)
+        }
     }
 
     @ViewBuilder
@@ -6729,7 +6914,7 @@ struct PersonalityFlowView: View {
 
     private func openGenreDetailIfAvailable(_ binding: WebGenreTagBinding) {
         guard let genreID = binding.normalizedGenreID else { return }
-        discoverPush(.genreDetail(genreID: genreID))
+        genreDetailNavigationTarget = GenreDetailNavigationTarget(genreID: genreID)
     }
 
     private func disabledReasonText(_ code: String?) -> String {
@@ -6749,6 +6934,66 @@ struct PersonalityFlowView: View {
         let formatter = ISO8601DateFormatter()
         guard let date = formatter.date(from: isoString) else { return isoString }
         return date.formatted(date: .abbreviated, time: .shortened)
+    }
+}
+
+private struct PersonalityGenreDetailLoaderView: View {
+    let genreID: String
+    let service: WebFeatureService
+
+    @State private var genre: LearnGenreDetail?
+    @State private var phase: LoadPhase = .idle
+
+    var body: some View {
+        Group {
+            switch phase {
+            case .idle, .initialLoading:
+                GenreDetailSkeletonView()
+            case .failure(let message), .offline(let message):
+                ScrollView {
+                    ScreenErrorCard(message: message, retryAction: {
+                        Task { await loadGenre(force: true) }
+                    })
+                    .padding(16)
+                    .padding(.top, 72)
+                }
+                .background(RaverTheme.background)
+            case .empty:
+                ContentUnavailableView(
+                    LT("内容不存在", "Content Unavailable", "コンテンツがありません"),
+                    systemImage: "exclamationmark.circle"
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RaverTheme.background)
+            case .success:
+                if let genre {
+                    LearnGenreDetailView(genre: genre)
+                } else {
+                    Color.clear
+                }
+            }
+        }
+        .task {
+            await loadGenre(force: false)
+        }
+    }
+
+    @MainActor
+    private func loadGenre(force: Bool) async {
+        if genre != nil && !force { return }
+        if genre == nil {
+            phase = .initialLoading
+        }
+
+        do {
+            let loaded = try await service.fetchLearnGenreDetail(id: genreID)
+            genre = loaded
+            phase = .success
+        } catch {
+            let message = error.userFacingMessage
+                ?? LT("流派详情加载失败，请稍后重试。", "Failed to load genre detail. Please try again later.", "ジャンル詳細の読み込みに失敗しました。時間をおいて再試行してください。")
+            phase = .failure(message: message)
+        }
     }
 }
 

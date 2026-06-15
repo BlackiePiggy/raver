@@ -14,6 +14,7 @@ protocol WebFeatureService {
     func abandonQuizSession(sessionId: String, reason: QuizSessionAbandonReason?) async throws -> QuizSessionAbandonResponse
     func fetchPersonalityStatus() async throws -> PersonalityStatusSummary
     func fetchPersonalityResult() async throws -> PersonalityResultEnvelope
+    func fetchPersonalityResultPreviews() async throws -> PersonalityResultPreviewListResponse
     func createPersonalitySession(mode: PersonalitySessionMode) async throws -> PersonalitySessionCreateResponse
     func savePersonalitySessionAnswer(
         sessionId: String,
@@ -443,6 +444,10 @@ struct PersonalitySessionAbandonResponse: Decodable {
 
 struct PersonalityResultEnvelope: Decodable {
     let result: PersonalityResultPayload?
+}
+
+struct PersonalityResultPreviewListResponse: Decodable {
+    let items: [PersonalityResultPayload]
 }
 
 extension WebFeatureService {

@@ -33,7 +33,7 @@ dependencies:
   shared_preferences: ^2.3.0
   flutter_map: ^7.0.1
   latlong2: ^0.9.1
-  apple_maps_flutter: ^2.0.0
+  apple_maps_flutter: ^1.4.0
 
 dev_dependencies:
   very_good_analysis: ^6.0.0
