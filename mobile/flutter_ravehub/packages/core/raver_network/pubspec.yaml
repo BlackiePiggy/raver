@@ -1,0 +1,21 @@
+name: raver_network
+description: Networking layer with Dio client and BFF interceptors for RaveHub
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  raver_core:
+    path: ../raver_core
+  raver_auth:
+    path: ../raver_auth
+  dio: ^5.7.0
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  very_good_analysis: ^6.0.0
+  flutter_test:
+    sdk: flutter

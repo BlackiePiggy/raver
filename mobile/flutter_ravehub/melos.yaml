@@ -1,0 +1,37 @@
+name: raver_workspace
+
+packages:
+  - packages/core/*
+  - packages/features/*
+  - app
+
+command:
+  bootstrap:
+    usePubspecOverrides: true
+
+scripts:
+  analyze:
+    run: melos exec -- "dart analyze --fatal-infos"
+    description: Run static analysis across all packages
+    packageFilters:
+      dirExists: lib
+
+  test:
+    run: melos exec -- "flutter test --no-pub"
+    description: Run tests across all packages
+    packageFilters:
+      dirExists: test
+
+  build_runner:
+    run: melos exec -- "dart run build_runner build --delete-conflicting-outputs"
+    description: Run build_runner for code generation
+    packageFilters:
+      dependsOn: build_runner
+
+  format:
+    run: melos exec -- "dart format ."
+    description: Format all Dart files
+
+  clean:
+    run: melos exec -- "flutter clean"
+    description: Clean all packages

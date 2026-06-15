@@ -1,0 +1,28 @@
+name: raver_platform
+description: Platform channels, permissions, and native bridge for RaveHub
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+  flutter: ^3.24.0
+
+dependencies:
+  raver_core:
+    path: ../raver_core
+  flutter:
+    sdk: flutter
+  permission_handler: ^11.3.0
+  geolocator: ^13.0.0
+  url_launcher: ^6.3.0
+  image_picker: ^1.1.0
+  image_cropper: ^8.0.0
+  share_plus: ^10.0.0
+  flutter_map: ^7.0.1
+  latlong2: ^0.9.1
+  apple_maps_flutter: ^2.0.0
+
+dev_dependencies:
+  very_good_analysis: ^6.0.0
+  flutter_test:
+    sdk: flutter

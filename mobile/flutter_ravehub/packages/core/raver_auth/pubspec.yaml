@@ -1,0 +1,19 @@
+name: raver_auth
+description: Authentication and session management for RaveHub
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  raver_core:
+    path: ../raver_core
+  flutter_secure_storage: ^9.2.0
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  very_good_analysis: ^6.0.0
+  flutter_test:
+    sdk: flutter

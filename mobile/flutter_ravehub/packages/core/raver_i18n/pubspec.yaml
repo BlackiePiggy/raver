@@ -1,0 +1,11 @@
+name: raver_i18n
+description: Tri-lingual inline localization for RaveHub (zh/en/ja)
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dev_dependencies:
+  very_good_analysis: ^6.0.0
+  test: ^1.25.0

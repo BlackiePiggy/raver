@@ -1,0 +1,33 @@
+name: feature_profile
+description: Profile tab feature module for RaveHub
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+  flutter: ^3.24.0
+
+dependencies:
+  raver_core:
+    path: ../../core/raver_core
+  raver_network:
+    path: ../../core/raver_network
+  raver_models:
+    path: ../../core/raver_models
+  raver_auth:
+    path: ../../core/raver_auth
+  raver_design_system:
+    path: ../../core/raver_design_system
+  raver_i18n:
+    path: ../../core/raver_i18n
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.0
+  go_router: ^14.6.0
+  dio: ^5.7.0
+  cached_network_image: ^3.4.0
+
+dev_dependencies:
+  very_good_analysis: ^6.0.0
+  flutter_test:
+    sdk: flutter

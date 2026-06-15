@@ -1,0 +1,106 @@
+name: ravehub
+description: RaveHub - Electronic Music Social Platform (iOS + Android + HarmonyOS)
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+  flutter: ^3.24.0
+
+dependencies:
+  # Core packages
+  raver_core:
+    path: ../packages/core/raver_core
+  raver_network:
+    path: ../packages/core/raver_network
+  raver_models:
+    path: ../packages/core/raver_models
+  raver_auth:
+    path: ../packages/core/raver_auth
+  raver_design_system:
+    path: ../packages/core/raver_design_system
+  raver_i18n:
+    path: ../packages/core/raver_i18n
+  raver_platform:
+    path: ../packages/core/raver_platform
+
+  # Feature packages
+  feature_discover:
+    path: ../packages/features/feature_discover
+  feature_circle:
+    path: ../packages/features/feature_circle
+  feature_inbox:
+    path: ../packages/features/feature_inbox
+  feature_profile:
+    path: ../packages/features/feature_profile
+  feature_auth:
+    path: ../packages/features/feature_auth
+
+  # Flutter
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.0
+
+  # Navigation
+  go_router: ^14.6.0
+
+  # Networking
+  dio: ^5.7.0
+
+  # Push notifications
+  firebase_messaging: ^15.1.0
+  firebase_core: ^3.6.0
+
+  # Storage
+  flutter_secure_storage: ^9.2.0
+  shared_preferences: ^2.3.0
+
+  # Widgets
+  home_widget: ^0.7.0
+
+dev_dependencies:
+  very_good_analysis: ^6.0.0
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_launcher_icons: ^0.14.1
+  flutter_native_splash: ^2.4.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  min_sdk_android: 23
+  web:
+    generate: false
+  windows:
+    generate: false
+  macos:
+    generate: false
+
+flutter_native_splash:
+  color: "#0D0D0D"
+  image: assets/splash/splash_logo.png
+  android: true
+  ios: true
+  android_gravity: center
+  ios_content_mode: center
+  fullscreen: true
+  android_12:
+    color: "#0D0D0D"
+    image: assets/splash/splash_logo.png
+    icon_background_color: "#0D0D0D"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icon/
+    - assets/splash/
+  fonts:
+    - family: AlteHaasGrotesk
+      fonts:
+        - asset: fonts/altehaasgroteskbold.ttf
+          weight: 700
