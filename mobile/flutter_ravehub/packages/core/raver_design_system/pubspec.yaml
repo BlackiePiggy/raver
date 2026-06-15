@@ -1,0 +1,25 @@
+name: raver_design_system
+description: Design system, theme, and shared UI components for RaveHub
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+  flutter: ^3.24.0
+
+dependencies:
+  raver_core:
+    path: ../raver_core
+  raver_models:
+    path: ../raver_models
+  raver_i18n:
+    path: ../raver_i18n
+  flutter:
+    sdk: flutter
+  cached_network_image: ^3.4.0
+  shimmer: ^3.0.0
+
+dev_dependencies:
+  very_good_analysis: ^6.0.0
+  flutter_test:
+    sdk: flutter

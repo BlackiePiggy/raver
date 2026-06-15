@@ -1,0 +1,86 @@
+default_platform(:ios)
+
+before_all do
+  ensure_git_status_clean
+end
+
+# ──────────────────────────────────────────────
+# iOS Lanes
+# ──────────────────────────────────────────────
+
+platform :ios do
+  desc "Build and upload to TestFlight (beta)"
+  lane :ios_beta do
+    sh("flutter build ipa --release --dart-define=FLAVOR=production --export-options-plist=ios/ExportOptions.plist")
+    upload_to_testflight(
+      ipa: "../build/ios/ipa/ravehub.ipa",
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+  desc "Build and upload to App Store (production)"
+  lane :ios_release do
+    sh("flutter build ipa --release --dart-define=FLAVOR=production --export-options-plist=ios/ExportOptions.plist")
+    upload_to_app_store(
+      ipa: "../build/ios/ipa/ravehub.ipa",
+      force: true,
+      skip_metadata: false,
+      skip_screenshots: true
+    )
+  end
+end
+
+# ──────────────────────────────────────────────
+# Android Lanes
+# ──────────────────────────────────────────────
+
+platform :android do
+  desc "Build and upload to Google Play internal track (beta)"
+  lane :android_beta do
+    sh("flutter build appbundle --release --dart-define=FLAVOR=production")
+    upload_to_play_store(
+      track: "internal",
+      aab: "../build/app/outputs/bundle/release/app-release.aab",
+      skip_upload_metadata: true,
+      skip_upload_changelogs: false,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  desc "Build and upload to Google Play production track"
+  lane :android_release do
+    sh("flutter build appbundle --release --dart-define=FLAVOR=production")
+    upload_to_play_store(
+      track: "production",
+      aab: "../build/app/outputs/bundle/release/app-release.aab",
+      skip_upload_metadata: false,
+      skip_upload_changelogs: false,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+end
+
+# ──────────────────────────────────────────────
+# Test Lanes
+# ──────────────────────────────────────────────
+
+desc "Run unit tests via melos"
+lane :test_unit do
+  sh("melos run test --no-select")
+end
+
+desc "Run contract tests for raver_models"
+lane :test_contract do
+  sh("dart test packages/core/raver_models/test/contract/")
+end
+
+# ──────────────────────────────────────────────
+# Default Lane
+# ──────────────────────────────────────────────
+
+desc "Default lane: run unit tests"
+lane :default do
+  test_unit
+end

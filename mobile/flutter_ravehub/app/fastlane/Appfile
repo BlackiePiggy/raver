@@ -1,0 +1,5 @@
+app_identifier("com.ravehub.app")
+apple_id("team@ravehub.io")
+team_id("FILL_IN_APPLE_TEAM_ID")
+json_key_file("fastlane/google-play-key.json")
+package_name("com.ravehub.app")
