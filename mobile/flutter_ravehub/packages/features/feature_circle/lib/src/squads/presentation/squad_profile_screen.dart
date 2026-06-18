@@ -4,8 +4,8 @@ import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_models/raver_models.dart';
 
-import '../view_models/squad_view_model.dart';
-import '../widgets/squad_member_list.dart';
+import 'view_models/squad_view_model.dart';
+import 'widgets/squad_member_list.dart';
 import '../../_shared/circle_service_locator.dart';
 
 /// Profile page for a specific squad.

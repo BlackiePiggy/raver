@@ -27,31 +27,30 @@ class LearnGenreNode {
     this.soundCueTracks,
   });
 
-  factory LearnGenreNode.fromJson(Map<String, dynamic> json) => LearnGenreNode(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        nameI18n: json['nameI18n'] != null
-            ? WebBiText.fromJson(json['nameI18n'] as Map<String, dynamic>)
-            : null,
-        parentId: json['parentId'] as String,
-        path: json['path'] as String,
-        children: json['children'] != null
-            ? (json['children'] as List<dynamic>)
-                .map((e) =>
-                    LearnGenreNode.fromJson(e as Map<String, dynamic>))
-                .toList()
-            : null,
-        description: json['description'] as String,
-        origin: json['origin'] as String,
-        era: json['era'] as String,
-        bpmRange: json['bpmRange'] as String,
-        soundCueTracks: json['soundCueTracks'] != null
-            ? (json['soundCueTracks'] as List<dynamic>)
-                .map((e) => LearnGenreSoundCueTrack.fromJson(
-                    e as Map<String, dynamic>))
-                .toList()
-            : null,
-      );
+  factory LearnGenreNode.fromJson(Map<String, dynamic> json) {
+    final id = _genreString(json, ['id', 'genreId', '_id', 'slug']);
+    final path = _genreString(json, ['path', 'fullPath'], fallback: id);
+    return LearnGenreNode(
+      id: id,
+      name: _genreString(json, ['name', 'title', 'displayName'], fallback: id),
+      nameI18n: json['nameI18n'] is Map<String, dynamic>
+          ? WebBiText.fromJson(json['nameI18n'] as Map<String, dynamic>)
+          : null,
+      parentId: _genreString(json, ['parentId', 'parentID', 'parent_id']),
+      path: path,
+      children: _genreObjects(json, ['children', 'subGenres', 'subgenres'])
+          ?.map(LearnGenreNode.fromJson)
+          .toList(),
+      description: _genreString(json, ['description', 'desc', 'intro']),
+      origin: _genreString(json, ['origin', 'originRegion', 'region']),
+      era: _genreString(json, ['era', 'period']),
+      bpmRange: _genreString(json, ['bpmRange', 'bpm', 'tempoRange']),
+      soundCueTracks:
+          _genreObjects(json, ['soundCueTracks', 'soundCues', 'tracks'])
+              ?.map(LearnGenreSoundCueTrack.fromJson)
+              .toList(),
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -110,8 +109,7 @@ class LearnGenreNode {
   int get hashCode => Object.hash(id, name, parentId, path);
 
   @override
-  String toString() =>
-      'LearnGenreNode(id: $id, name: $name, path: $path)';
+  String toString() => 'LearnGenreNode(id: $id, name: $name, path: $path)';
 }
 
 class LearnGenreSoundCueTrack {
@@ -129,10 +127,10 @@ class LearnGenreSoundCueTrack {
 
   factory LearnGenreSoundCueTrack.fromJson(Map<String, dynamic> json) =>
       LearnGenreSoundCueTrack(
-        title: json['title'] as String,
-        artist: json['artist'] as String,
-        spotifyUrl: json['spotifyUrl'] as String,
-        appleMusicUrl: json['appleMusicUrl'] as String,
+        title: _genreString(json, ['title', 'name']),
+        artist: _genreString(json, ['artist', 'artistName', 'creator']),
+        spotifyUrl: _genreString(json, ['spotifyUrl', 'spotifyURL']),
+        appleMusicUrl: _genreString(json, ['appleMusicUrl', 'appleMusicURL']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -184,13 +182,15 @@ class LearnGenreTreeSummaryNode {
     required this.childCount,
   });
 
-  factory LearnGenreTreeSummaryNode.fromJson(Map<String, dynamic> json) =>
-      LearnGenreTreeSummaryNode(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        path: json['path'] as String,
-        childCount: json['childCount'] as int,
-      );
+  factory LearnGenreTreeSummaryNode.fromJson(Map<String, dynamic> json) {
+    final id = _genreString(json, ['id', 'genreId', '_id', 'slug']);
+    return LearnGenreTreeSummaryNode(
+      id: id,
+      name: _genreString(json, ['name', 'title', 'displayName'], fallback: id),
+      path: _genreString(json, ['path', 'fullPath'], fallback: id),
+      childCount: _genreInt(json, ['childCount', 'childrenCount']),
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -244,19 +244,19 @@ class GenreSunburstNode {
     this.children,
   });
 
-  factory GenreSunburstNode.fromJson(Map<String, dynamic> json) =>
-      GenreSunburstNode(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        path: json['path'] as String,
-        themeColor: json['themeColor'] as String?,
-        children: json['children'] != null
-            ? (json['children'] as List<dynamic>)
-                .map((e) =>
-                    GenreSunburstNode.fromJson(e as Map<String, dynamic>))
-                .toList()
-            : null,
-      );
+  factory GenreSunburstNode.fromJson(Map<String, dynamic> json) {
+    final id = _genreString(json, ['id', 'genreId', '_id', 'slug']);
+    return GenreSunburstNode(
+      id: id,
+      name: _genreString(json, ['name', 'title', 'displayName'], fallback: id),
+      path: _genreString(json, ['path', 'fullPath'], fallback: id),
+      themeColor:
+          _genreOptionalString(json, ['themeColor', 'color', 'hexColor']),
+      children: _genreObjects(json, ['children', 'subGenres', 'subgenres'])
+          ?.map(GenreSunburstNode.fromJson)
+          .toList(),
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -295,6 +295,47 @@ class GenreSunburstNode {
   int get hashCode => Object.hash(id, name, path);
 
   @override
-  String toString() =>
-      'GenreSunburstNode(id: $id, name: $name, path: $path)';
+  String toString() => 'GenreSunburstNode(id: $id, name: $name, path: $path)';
+}
+
+String _genreString(
+  Map<String, dynamic> json,
+  List<String> keys, {
+  String fallback = '',
+}) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value == null) continue;
+    if (value is String) return value;
+    return value.toString();
+  }
+  return fallback;
+}
+
+String? _genreOptionalString(Map<String, dynamic> json, List<String> keys) {
+  final value = _genreString(json, keys);
+  return value.isEmpty ? null : value;
+}
+
+int _genreInt(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+  }
+  return 0;
+}
+
+List<Map<String, dynamic>>? _genreObjects(
+  Map<String, dynamic> json,
+  List<String> keys,
+) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is List<dynamic>) {
+      return value.whereType<Map<String, dynamic>>().toList();
+    }
+  }
+  return null;
 }

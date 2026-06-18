@@ -144,7 +144,7 @@ class _NotificationSettingsScreenState
         style: RaverTypography.body(color: theme.primaryText),
       ),
       value: _prefs[key] ?? true,
-      activeColor: theme.accent,
+      activeThumbColor: theme.accent,
       onChanged: (v) => _toggle(key, v),
     );
   }

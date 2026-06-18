@@ -75,8 +75,7 @@ class InboxViewModel extends ChangeNotifier {
   int _followedDJsTotalPages = 1;
   bool _isLoadingMoreFollowedDJs = false;
   bool get isLoadingMoreFollowedDJs => _isLoadingMoreFollowedDJs;
-  bool get canLoadMoreFollowedDJs =>
-      _followedDJsPage < _followedDJsTotalPages;
+  bool get canLoadMoreFollowedDJs => _followedDJsPage < _followedDJsTotalPages;
 
   // ---------------------------------------------------------------------------
   // Followed brands
@@ -132,7 +131,7 @@ class InboxViewModel extends ChangeNotifier {
       _unreadCount = counts;
       _unreadPhase = LoadPhase.success(counts);
     } catch (e) {
-      _unreadPhase = LoadPhase.failure(e);
+      _unreadPhase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -156,7 +155,7 @@ class InboxViewModel extends ChangeNotifier {
           ? const LoadPhase.empty()
           : LoadPhase.success(_alerts);
     } catch (e) {
-      _alertsPhase = LoadPhase.failure(e);
+      _alertsPhase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -173,7 +172,7 @@ class InboxViewModel extends ChangeNotifier {
           ? const LoadPhase.empty()
           : LoadPhase.success(_alerts);
     } catch (e) {
-      if (_alerts.isEmpty) _alertsPhase = LoadPhase.failure(e);
+      if (_alerts.isEmpty) _alertsPhase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -214,7 +213,7 @@ class InboxViewModel extends ChangeNotifier {
           ? const LoadPhase.empty()
           : LoadPhase.success(_followedEvents);
     } catch (e) {
-      _followedEventsPhase = LoadPhase.failure(e);
+      _followedEventsPhase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -232,7 +231,7 @@ class InboxViewModel extends ChangeNotifier {
           : LoadPhase.success(_followedEvents);
     } catch (e) {
       if (_followedEvents.isEmpty) {
-        _followedEventsPhase = LoadPhase.failure(e);
+        _followedEventsPhase = LoadPhase.fromError(e);
       }
     }
     notifyListeners();
@@ -275,7 +274,7 @@ class InboxViewModel extends ChangeNotifier {
           ? const LoadPhase.empty()
           : LoadPhase.success(_followedDJs);
     } catch (e) {
-      _followedDJsPhase = LoadPhase.failure(e);
+      _followedDJsPhase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -292,7 +291,7 @@ class InboxViewModel extends ChangeNotifier {
           ? const LoadPhase.empty()
           : LoadPhase.success(_followedDJs);
     } catch (e) {
-      if (_followedDJs.isEmpty) _followedDJsPhase = LoadPhase.failure(e);
+      if (_followedDJs.isEmpty) _followedDJsPhase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -334,7 +333,7 @@ class InboxViewModel extends ChangeNotifier {
           ? const LoadPhase.empty()
           : LoadPhase.success(_followedBrands);
     } catch (e) {
-      _followedBrandsPhase = LoadPhase.failure(e);
+      _followedBrandsPhase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -352,7 +351,7 @@ class InboxViewModel extends ChangeNotifier {
           : LoadPhase.success(_followedBrands);
     } catch (e) {
       if (_followedBrands.isEmpty) {
-        _followedBrandsPhase = LoadPhase.failure(e);
+        _followedBrandsPhase = LoadPhase.fromError(e);
       }
     }
     notifyListeners();
@@ -395,7 +394,7 @@ class InboxViewModel extends ChangeNotifier {
           ? const LoadPhase.empty()
           : LoadPhase.success(_contentReviews);
     } catch (e) {
-      _contentReviewsPhase = LoadPhase.failure(e);
+      _contentReviewsPhase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -413,7 +412,7 @@ class InboxViewModel extends ChangeNotifier {
           : LoadPhase.success(_contentReviews);
     } catch (e) {
       if (_contentReviews.isEmpty) {
-        _contentReviewsPhase = LoadPhase.failure(e);
+        _contentReviewsPhase = LoadPhase.fromError(e);
       }
     }
     notifyListeners();
@@ -450,5 +449,50 @@ class InboxViewModel extends ChangeNotifier {
     } catch (_) {
       // Non-critical; silently ignore.
     }
+  }
+
+  Future<void> markFollowedEventRead(String itemId) async {
+    _markFollowedEventReadLocally(itemId);
+    try {
+      await _repository.markFollowedEventRead(itemId: itemId);
+    } catch (_) {}
+  }
+
+  Future<void> markFollowedDJRead(String itemId) async {
+    _markFollowedDJReadLocally(itemId);
+    try {
+      await _repository.markFollowedDJRead(itemId: itemId);
+    } catch (_) {}
+  }
+
+  Future<void> markFollowedBrandRead(String itemId) async {
+    _markFollowedBrandReadLocally(itemId);
+    try {
+      await _repository.markFollowedBrandRead(itemId: itemId);
+    } catch (_) {}
+  }
+
+  void _markFollowedEventReadLocally(String itemId) {
+    final index = _followedEvents.indexWhere((item) => item.id == itemId);
+    if (index < 0 || _followedEvents[index].isRead) return;
+    _followedEvents[index] = _followedEvents[index].copyWith(isRead: true);
+    _followedEventsPhase = LoadPhase.success(_followedEvents);
+    notifyListeners();
+  }
+
+  void _markFollowedDJReadLocally(String itemId) {
+    final index = _followedDJs.indexWhere((item) => item.id == itemId);
+    if (index < 0 || _followedDJs[index].isRead) return;
+    _followedDJs[index] = _followedDJs[index].copyWith(isRead: true);
+    _followedDJsPhase = LoadPhase.success(_followedDJs);
+    notifyListeners();
+  }
+
+  void _markFollowedBrandReadLocally(String itemId) {
+    final index = _followedBrands.indexWhere((item) => item.id == itemId);
+    if (index < 0 || _followedBrands[index].isRead) return;
+    _followedBrands[index] = _followedBrands[index].copyWith(isRead: true);
+    _followedBrandsPhase = LoadPhase.success(_followedBrands);
+    notifyListeners();
   }
 }

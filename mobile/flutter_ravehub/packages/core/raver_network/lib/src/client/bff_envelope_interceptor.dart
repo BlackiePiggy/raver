@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
-import 'package:raver_core/raver_core.dart';
+
+import 'service_error_mapper.dart';
 
 /// Error thrown when the BFF response envelope indicates an application-level
 /// error (i.e. the envelope contains a non-null `errorCode`).
@@ -56,16 +57,10 @@ class BffEnvelopeInterceptor extends Interceptor {
     // Check for an application-level error in the envelope.
     final errorCode = body['errorCode'] as String?;
     if (errorCode != null && errorCode.isNotEmpty) {
-      final message =
-          body['message'] as String? ?? 'An unknown error occurred';
-
-      // On 403, check for enforcement restriction data and throw a typed
-      // ServiceError so the UI layer can present a specialised screen.
-      if (response.statusCode == 403) {
-        _handleEnforcementRestriction(body);
-      }
-
-      throw BffError(errorCode: errorCode, message: message);
+      throw NetworkServiceErrorMapper.fromBffEnvelope(
+        body,
+        statusCode: response.statusCode,
+      );
     }
 
     // Extract the inner data payload.
@@ -94,28 +89,14 @@ class BffEnvelopeInterceptor extends Interceptor {
       return handler.next(err);
     }
 
-    // On 403, check for enforcement restriction data.
-    if (response.statusCode == 403) {
-      _handleEnforcementRestriction(body);
-    }
+    final message = body['message'] as String? ?? 'An unknown error occurred';
 
-    final errorCode = body['errorCode'] as String?;
-    final message =
-        body['message'] as String? ?? 'An unknown error occurred';
-
-    throw BffError(errorCode: errorCode, message: message);
-  }
-
-  /// Parses enforcement restriction data from the response body and throws
-  /// [ServiceError.accountEnforcementRestricted] if present.
-  void _handleEnforcementRestriction(Map<String, dynamic> body) {
-    final restrictionData = body['restriction'];
-    if (restrictionData is Map<String, dynamic>) {
-      final restriction = AccountEnforcementRestriction(
-        scope: restrictionData['scope'] as String? ?? 'unknown',
-        displayReason: restrictionData['displayReason'] as String?,
-      );
-      throw ServiceError.accountEnforcementRestricted(restriction);
-    }
+    throw NetworkServiceErrorMapper.fromBffEnvelope(
+      {
+        ...body,
+        'message': message,
+      },
+      statusCode: response.statusCode,
+    );
   }
 }

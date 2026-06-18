@@ -19,6 +19,7 @@ class ProfileMeScreen extends StatefulWidget {
 
 class _ProfileMeScreenState extends State<ProfileMeScreen> {
   late final ProfileMeViewModel _viewModel;
+  final ScrollController _profileScrollController = ScrollController();
   final ScrollController _postsScrollController = ScrollController();
   final ScrollController _savesScrollController = ScrollController();
 
@@ -55,25 +56,39 @@ class _ProfileMeScreenState extends State<ProfileMeScreen> {
   @override
   void dispose() {
     _viewModel.removeListener(_rebuild);
+    _profileScrollController.dispose();
     _postsScrollController.dispose();
     _savesScrollController.dispose();
     _viewModel.dispose();
     super.dispose();
   }
 
+  void _scrollToTop() {
+    if (!_profileScrollController.hasClients) return;
+    _profileScrollController.animateTo(
+      0,
+      duration: RaverMotion.normal,
+      curve: RaverMotion.curve,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: LoadPhaseBuilder<UserProfile>(
-        phase: _viewModel.phase,
-        onLoading: () => const _ProfileSkeleton(),
-        onFailure: (error) => ErrorStateView(
-          title: lt('加载失败', 'Failed to Load', '読み込みに失敗しました'),
-          error: error,
-          onRetry: _viewModel.load,
-          retryLabel: lt('重试', 'Retry', '再試行'),
+    return RaverTabReselectionListener(
+      tabIndex: 3,
+      onReselected: _scrollToTop,
+      child: Scaffold(
+        body: LoadPhaseBuilder<UserProfile>(
+          phase: _viewModel.phase,
+          onLoading: () => const _ProfileSkeleton(),
+          onFailure: (error) => ErrorStateView(
+            title: lt('加载失败', 'Failed to Load', '読み込みに失敗しました'),
+            error: error,
+            onRetry: _viewModel.load,
+            retryLabel: lt('重试', 'Retry', '再試行'),
+          ),
+          onSuccess: (profile) => _buildProfileContent(context, profile),
         ),
-        onSuccess: (profile) => _buildProfileContent(context, profile),
       ),
     );
   }
@@ -85,6 +100,8 @@ class _ProfileMeScreenState extends State<ProfileMeScreen> {
       color: theme.accent,
       onRefresh: _viewModel.refresh,
       child: CustomScrollView(
+        controller: _profileScrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           // Gradient hero background — iOS: expandedHeight 250
           SliverAppBar(
@@ -102,21 +119,29 @@ class _ProfileMeScreenState extends State<ProfileMeScreen> {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // iOS fallback: accent@0.55 → near-black → card gradient
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          theme.accent.withValues(alpha: 0.55),
-                          const Color(0xFF0D0D14),
-                          theme.card,
-                        ],
-                        stops: const [0.0, 0.55, 1.0],
+                  if (profile.backgroundUrl != null &&
+                      profile.backgroundUrl!.isNotEmpty)
+                    RemoteCoverImage(
+                      url: profile.backgroundUrl!,
+                      fit: BoxFit.cover,
+                    )
+                  else
+                    // iOS fallback: accent@0.55 → near-black → card gradient
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            theme.accent.withValues(alpha: 0.55),
+                            const Color(0xFF0D0D14),
+                            theme.card,
+                          ],
+                          stops: const [0.0, 0.55, 1.0],
+                        ),
                       ),
                     ),
-                  ),
+                  Container(color: Colors.black.withValues(alpha: 0.18)),
                   // Radial white highlight overlay (iOS has this)
                   Positioned(
                     top: -40,
@@ -214,7 +239,9 @@ class _ProfileMeScreenState extends State<ProfileMeScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Quick actions
+                        _buildRecentCheckinsCard(context, theme),
+                        const SizedBox(height: 16),
+
                         _buildQuickActions(context, theme),
                         const SizedBox(height: 16),
 
@@ -245,36 +272,145 @@ class _ProfileMeScreenState extends State<ProfileMeScreen> {
   }
 
   Widget _buildQuickActions(BuildContext context, RaverThemeData theme) {
-    return Row(
-      children: [
-        _QuickActionItem(
-          icon: Icons.book_outlined,
-          label: lt('发布', 'Publishes', '投稿管理'),
-          theme: theme,
-          onTap: () => context.push('/profile/publishes'),
+    final items = [
+      _QuickActionData(
+        icon: Icons.view_in_ar_outlined,
+        label: lt('我的发布', 'My Posts', '自分の投稿'),
+        onTap: () => context.push('/profile/publishes'),
+      ),
+      _QuickActionData(
+        icon: Icons.groups_3_outlined,
+        label: lt('贡献中心', 'Contributions', '貢献センター'),
+        onTap: () => context.push('/profile/contributions'),
+      ),
+      _QuickActionData(
+        icon: Icons.checklist_rounded,
+        label: lt('答题系统', 'Quiz', 'クイズ'),
+        onTap: () => context.push('/profile/quiz'),
+      ),
+      _QuickActionData(
+        icon: Icons.psychology_outlined,
+        label: 'EDMTI',
+        onTap: () => context.push('/profile/personality'),
+      ),
+      _QuickActionData(
+        icon: Icons.star_rounded,
+        label: lt('我的收藏', 'My Saves', '保存済み'),
+        onTap: () => context.push('/profile/saves'),
+      ),
+      _QuickActionData(
+        icon: Icons.route_outlined,
+        label: lt('我的路线', 'My Routes', 'マイルート'),
+        onTap: () => context.push('/profile/tools/route'),
+      ),
+      _QuickActionData(
+        icon: Icons.qr_code_scanner,
+        label: lt('扫一扫', 'Scan', 'スキャン'),
+        onTap: () => context.push('/scan'),
+      ),
+      _QuickActionData(
+        icon: Icons.auto_awesome,
+        label: lt('装扮中心', 'Style Center', 'スタイルセンター'),
+        onTap: () => context.push('/profile/virtual-assets'),
+      ),
+      _QuickActionData(
+        icon: Icons.auto_fix_high_outlined,
+        label: lt('小工具', 'Tools', 'ツール'),
+        onTap: () => context.push('/profile/tools/widgets'),
+      ),
+    ];
+
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            lt('快捷入口', 'Quick Actions', 'クイックアクション'),
+            style: RaverTypography.title(size: 17, color: theme.primaryText),
+          ),
+          const SizedBox(height: 14),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: items.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 4,
+              mainAxisSpacing: 14,
+              crossAxisSpacing: 8,
+              mainAxisExtent: 66,
+            ),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return _QuickActionItem(
+                icon: item.icon,
+                label: item.label,
+                theme: theme,
+                onTap: item.onTap,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentCheckinsCard(BuildContext context, RaverThemeData theme) {
+    return GlassCard(
+      child: InkWell(
+        onTap: () => context.push('/profile/checkins'),
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: theme.accent.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.location_on_outlined,
+                  color: theme.accent,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      lt('我的近期打卡', 'My Recent Check-ins', '最近のチェックイン'),
+                      style: RaverTypography.label(
+                        size: 15,
+                        color: theme.primaryText,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      lt(
+                        '去发现页完成活动或 DJ 打卡，记录会显示在这里。',
+                        'Complete event or DJ check-ins from Discover. Records will appear here.',
+                        '発見ページでイベントまたはDJチェックインを完了すると、記録がここに表示されます。',
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          RaverTypography.caption(color: theme.secondaryText),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                color: theme.secondaryText,
+              ),
+            ],
+          ),
         ),
-        const SizedBox(width: 12),
-        _QuickActionItem(
-          icon: Icons.emoji_events_outlined,
-          label: lt('贡献', 'Contributions', '貢献'),
-          theme: theme,
-          onTap: () => context.push('/profile/contributions'),
-        ),
-        const SizedBox(width: 12),
-        _QuickActionItem(
-          icon: Icons.psychology_outlined,
-          label: lt('测验', 'Quiz', 'クイズ'),
-          theme: theme,
-          onTap: () => context.push('/profile/quiz'),
-        ),
-        const SizedBox(width: 12),
-        _QuickActionItem(
-          icon: Icons.fingerprint,
-          label: 'EDMTI',
-          theme: theme,
-          onTap: () => context.push('/profile/personality'),
-        ),
-      ],
+      ),
     );
   }
 
@@ -299,8 +435,8 @@ class _ProfileMeScreenState extends State<ProfileMeScreen> {
           child: EmptyStateView(
             icon: Icons.article_outlined,
             title: lt('暂无动态', 'No Posts', '投稿はありません'),
-            subtitle: lt('发布你的第一条动态吧', 'Share your first post',
-                '最初の投稿をシェアしましょう'),
+            subtitle:
+                lt('发布你的第一条动态吧', 'Share your first post', '最初の投稿をシェアしましょう'),
           ),
         ),
       );
@@ -326,6 +462,7 @@ class _ProfileMeScreenState extends State<ProfileMeScreen> {
                 content: post.content,
                 createdAt: post.createdAt,
                 images: post.images ?? [],
+                videos: post.videos ?? [],
                 likeCount: post.likeCount,
                 commentCount: post.commentCount,
                 shareCount: post.shareCount,
@@ -335,8 +472,8 @@ class _ProfileMeScreenState extends State<ProfileMeScreen> {
             ),
           );
         },
-        childCount: _viewModel.posts.length +
-            (_viewModel.canLoadMorePosts ? 1 : 0),
+        childCount:
+            _viewModel.posts.length + (_viewModel.canLoadMorePosts ? 1 : 0),
       ),
     );
   }
@@ -379,6 +516,7 @@ class _ProfileMeScreenState extends State<ProfileMeScreen> {
                 content: post.content,
                 createdAt: post.createdAt,
                 images: post.images ?? [],
+                videos: post.videos ?? [],
                 likeCount: post.likeCount,
                 commentCount: post.commentCount,
                 shareCount: post.shareCount,
@@ -388,8 +526,8 @@ class _ProfileMeScreenState extends State<ProfileMeScreen> {
             ),
           );
         },
-        childCount: _viewModel.saves.length +
-            (_viewModel.canLoadMoreSaves ? 1 : 0),
+        childCount:
+            _viewModel.saves.length + (_viewModel.canLoadMoreSaves ? 1 : 0),
       ),
     );
   }
@@ -408,13 +546,15 @@ class _ProfileMeScreenState extends State<ProfileMeScreen> {
                   const SizedBox(height: 12),
                   Text(
                     lt('喜欢的内容', 'Liked Content', 'いいねしたコンテンツ'),
-                    style: RaverTypography.title(size: 16, color: theme.primaryText),
+                    style: RaverTypography.title(
+                        size: 16, color: theme.primaryText),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     lt('查看你喜欢过的所有内容', 'View all content you have liked',
                         'いいねしたすべてのコンテンツを見る'),
-                    style: RaverTypography.body(size: 14, color: theme.secondaryText),
+                    style: RaverTypography.body(
+                        size: 14, color: theme.secondaryText),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -425,6 +565,18 @@ class _ProfileMeScreenState extends State<ProfileMeScreen> {
       ),
     );
   }
+}
+
+class _QuickActionData {
+  const _QuickActionData({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
 }
 
 class _QuickActionItem extends StatelessWidget {
@@ -442,33 +594,25 @@ class _QuickActionItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: theme.card,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.cardBorder),
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          Icon(icon, size: 24, color: theme.accent),
+          const SizedBox(height: 7),
+          Text(
+            label,
+            style: RaverTypography.caption(
+              color: theme.primaryText,
+              weight: FontWeight.w600,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 22, color: theme.accent),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: RaverTypography.caption(
-                  color: theme.primaryText,
-                  weight: FontWeight.w500,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }

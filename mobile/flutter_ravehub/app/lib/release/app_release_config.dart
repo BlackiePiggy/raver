@@ -5,9 +5,6 @@
 /// - Settings / About screens (privacy policy, terms, support email)
 /// - Platform-specific identifiers (bundle IDs matching each store listing)
 ///
-/// **Important:** Update the placeholder store IDs (e.g. `id0000000000`,
-/// `C0000000`) with real values after each platform's app store submission
-/// is accepted.
 abstract final class AppReleaseConfig {
   // ---------------------------------------------------------------------------
   // Bundle / package identifiers
@@ -23,30 +20,32 @@ abstract final class AppReleaseConfig {
   static const harmonyBundleName = 'com.ravehub.app';
 
   // ---------------------------------------------------------------------------
-  // App Store URLs (fill in after app store submission)
+  // App Store URLs
   // ---------------------------------------------------------------------------
 
   /// iOS App Store product page URL.
-  static const iosAppStoreUrl =
-      'https://apps.apple.com/app/ravehub/id0000000000';
+  ///
+  /// Keep this `null` until Apple assigns the production listing URL.
+  static const String? iosAppStoreUrl = null;
 
   /// Google Play Store listing URL.
-  static const androidPlayStoreUrl =
+  static const String androidPlayStoreUrl =
       'https://play.google.com/store/apps/details?id=com.ravehub.app';
 
   /// Huawei AppGallery listing URL.
-  static const harmonyAppGalleryUrl =
-      'https://appgallery.huawei.com/#/app/C0000000';
+  ///
+  /// Keep this `null` until AppGallery assigns the production listing URL.
+  static const String? harmonyAppGalleryUrl = null;
 
   // ---------------------------------------------------------------------------
   // Support links
   // ---------------------------------------------------------------------------
 
   /// Privacy policy page URL, shown in Settings and registration flow.
-  static const privacyPolicyUrl = 'https://ravehub.top/privacy';
+  static const privacyPolicyUrl = 'https://ravehub.top/legal/privacy';
 
   /// Terms of service page URL, shown in Settings and registration flow.
-  static const termsOfServiceUrl = 'https://ravehub.top/terms';
+  static const termsOfServiceUrl = 'https://ravehub.top/legal/terms';
 
   /// Customer support email address.
   static const supportEmail = 'support@ravehub.top';

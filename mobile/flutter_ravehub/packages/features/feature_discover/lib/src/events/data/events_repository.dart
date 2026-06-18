@@ -51,9 +51,57 @@ class EventsRepository {
     return _api.fetchEventTimetable(eventId: eventId);
   }
 
-  Future<EventFavoriteStatus> fetchFavoriteStatus({
+  Future<FeedPage> fetchEventPosts({
     required String eventId,
+    int limit = 20,
+    String mode = 'latest',
+    String? cursor,
   }) {
+    return _api.fetchEventPosts(
+      eventId: eventId,
+      limit: limit,
+      mode: mode,
+      cursor: cursor,
+    );
+  }
+
+  Future<List<WebDJSet>> fetchEventSets({
+    required String eventId,
+    String eventName = '',
+    int limit = 200,
+  }) {
+    return _api.fetchEventSets(
+      eventId: eventId,
+      eventName: eventName,
+      limit: limit,
+    );
+  }
+
+  Future<List<WebRatingEvent>> fetchEventRatingEvents({
+    required String eventId,
+    int page = 1,
+    int limit = 20,
+  }) {
+    return _api.fetchEventRatingEvents(
+      eventId: eventId,
+      page: page,
+      limit: limit,
+    );
+  }
+
+  Future<NewsPage> fetchEventNews({
+    required String eventId,
+    int limit = 20,
+    String? cursor,
+  }) {
+    return _api.fetchEventNews(
+      eventId: eventId,
+      limit: limit,
+      cursor: cursor,
+    );
+  }
+
+  Future<EventFavoriteStatus> fetchFavoriteStatus({required String eventId}) {
     return _api.fetchFavoriteStatus(eventId: eventId);
   }
 
@@ -68,6 +116,13 @@ class EventsRepository {
       await _api.favoriteEvent(eventId: eventId);
       return true;
     }
+  }
+
+  Future<ShareLinkPayload> resolveShareLink({
+    required WebEvent event,
+    String channel = 'system_share',
+  }) {
+    return _api.resolveShareLink(event: event, channel: channel);
   }
 
   // ---------------------------------------------------------------------------
@@ -101,5 +156,29 @@ class EventsRepository {
     int limit = 10,
   }) {
     return _api.fetchCheckins(eventId: eventId, limit: limit);
+  }
+
+  Future<BFFListPage<WebCheckin>> fetchEventRelatedCheckins({
+    required String eventId,
+    int page = 1,
+    int limit = 20,
+  }) {
+    return _api.fetchEventRelatedCheckins(
+      eventId: eventId,
+      page: page,
+      limit: limit,
+    );
+  }
+
+  Future<void> reportEvent({
+    required String eventId,
+    required String reason,
+    String? detail,
+  }) {
+    return _api.reportEvent(
+      eventId: eventId,
+      reason: reason,
+      detail: detail,
+    );
   }
 }

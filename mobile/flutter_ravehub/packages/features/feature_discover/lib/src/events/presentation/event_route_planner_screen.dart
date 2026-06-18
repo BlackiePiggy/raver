@@ -45,6 +45,7 @@ class _EventRoutePlannerScreenState extends State<EventRoutePlannerScreen> {
 
     try {
       final position = await LocationService.getCurrentPosition();
+      if (position == null) return;
       _currentLat = position.latitude;
       _currentLng = position.longitude;
     } catch (e) {
@@ -88,8 +89,9 @@ class _EventRoutePlannerScreenState extends State<EventRoutePlannerScreen> {
 
   void _navigate() {
     MapLauncher.launchNavigation(
-      destination: LatLng(widget.latitude, widget.longitude),
-      destinationName: widget.venueName,
+      latitude: widget.latitude,
+      longitude: widget.longitude,
+      label: widget.venueName,
     );
   }
 

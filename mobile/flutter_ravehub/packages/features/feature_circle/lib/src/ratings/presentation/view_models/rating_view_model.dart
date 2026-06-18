@@ -22,8 +22,8 @@ class RatingViewModel extends ChangeNotifier {
   bool get isLoadingMore => _isLoadingMore;
   bool get canLoadMore => _currentPage < _totalPages;
 
-  String _statusFilter = 'ongoing'; // 'ongoing' or 'ended'
-  String get statusFilter => _statusFilter;
+  String? _statusFilter;
+  String? get statusFilter => _statusFilter;
 
   Future<void> load() async {
     _phase = const LoadPhase.loading();
@@ -43,7 +43,7 @@ class RatingViewModel extends ChangeNotifier {
           ? const LoadPhase.empty()
           : LoadPhase.success(_events);
     } catch (e) {
-      _phase = LoadPhase.failure(e);
+      _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -64,7 +64,7 @@ class RatingViewModel extends ChangeNotifier {
           : LoadPhase.success(_events);
     } catch (e) {
       if (_events.isEmpty) {
-        _phase = LoadPhase.failure(e);
+        _phase = LoadPhase.fromError(e);
       }
     }
     notifyListeners();
@@ -92,7 +92,7 @@ class RatingViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setStatusFilter(String status) {
+  void setStatusFilter(String? status) {
     if (_statusFilter == status) return;
     _statusFilter = status;
     load();
@@ -117,6 +117,9 @@ class RatingDetailViewModel extends ChangeNotifier {
   final List<WebRatingUnit> _units = [];
   List<WebRatingUnit> get units => List.unmodifiable(_units);
 
+  bool _isSaving = false;
+  bool get isSaving => _isSaving;
+
   Future<void> load() async {
     _phase = const LoadPhase.loading();
     notifyListeners();
@@ -126,7 +129,7 @@ class RatingDetailViewModel extends ChangeNotifier {
       _phase = LoadPhase.success(_event!);
       _loadUnits();
     } catch (e) {
-      _phase = LoadPhase.failure(e);
+      _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -136,8 +139,7 @@ class RatingDetailViewModel extends ChangeNotifier {
       _units
         ..clear()
         ..addAll(await _repository.fetchRatingUnits(ratingId: ratingId));
-      // Sort by rating descending
-      _units.sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
+      _sortUnits();
     } catch (_) {}
     notifyListeners();
   }
@@ -145,18 +147,97 @@ class RatingDetailViewModel extends ChangeNotifier {
   Future<void> createUnit({
     required String name,
     required String djId,
+    String description = '',
+    String? imageUrl,
   }) async {
     try {
       final unit = await _repository.createRatingUnit(
         ratingId: ratingId,
         name: name,
         djId: djId,
+        description: description,
+        imageUrl: imageUrl,
       );
       _units.add(unit);
+      _sortUnits();
       notifyListeners();
     } catch (_) {
       // Silently fail.
     }
+  }
+
+  Future<bool> updateEvent({
+    required String name,
+    required String description,
+    String? imageUrl,
+  }) async {
+    if (_isSaving) return false;
+    _isSaving = true;
+    notifyListeners();
+
+    try {
+      final updated = await _repository.updateRatingEvent(
+        id: ratingId,
+        name: name.trim(),
+        description: description.trim(),
+        imageUrl: imageUrl?.trim(),
+      );
+      _event = updated;
+      _phase = LoadPhase.success(updated);
+      if (updated.units != null) {
+        _units
+          ..clear()
+          ..addAll(updated.units!);
+        _sortUnits();
+      }
+      _isSaving = false;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      _isSaving = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> updateUnit({
+    required String unitId,
+    required String name,
+    required String description,
+    required String djId,
+    String? imageUrl,
+  }) async {
+    if (_isSaving) return false;
+    _isSaving = true;
+    notifyListeners();
+
+    try {
+      final updated = await _repository.updateRatingUnit(
+        unitId: unitId,
+        name: name.trim(),
+        description: description.trim(),
+        djId: djId.trim(),
+        imageUrl: imageUrl?.trim(),
+      );
+      final index = _units.indexWhere((unit) => unit.id == unitId);
+      if (index == -1) {
+        _units.add(updated);
+      } else {
+        _units[index] = updated;
+      }
+      _sortUnits();
+      _isSaving = false;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      _isSaving = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  void _sortUnits() {
+    _units.sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
   }
 }
 
@@ -192,16 +273,17 @@ class RatingUnitDetailViewModel extends ChangeNotifier {
   bool _isSendingComment = false;
   bool get isSendingComment => _isSendingComment;
 
+  bool _isSaving = false;
+  bool get isSaving => _isSaving;
+
   void setUserScore(double score) {
     _userScore = score;
     notifyListeners();
   }
 
   Future<void> load() async {
-    // Load units to find our unit
     try {
-      final units = await _repository.fetchRatingUnits(ratingId: ratingId);
-      _unit = units.firstWhere((u) => u.id == unitId);
+      _unit = await _repository.fetchRatingUnit(unitId: unitId);
       _loadComments();
     } catch (_) {}
     notifyListeners();
@@ -284,6 +366,34 @@ class RatingUnitDetailViewModel extends ChangeNotifier {
       return true;
     } catch (_) {
       _isSendingComment = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> updateUnit({
+    required String name,
+    required String description,
+    required String djId,
+    String? imageUrl,
+  }) async {
+    if (_isSaving) return false;
+    _isSaving = true;
+    notifyListeners();
+
+    try {
+      _unit = await _repository.updateRatingUnit(
+        unitId: unitId,
+        name: name.trim(),
+        description: description.trim(),
+        djId: djId.trim(),
+        imageUrl: imageUrl?.trim(),
+      );
+      _isSaving = false;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      _isSaving = false;
       notifyListeners();
       return false;
     }

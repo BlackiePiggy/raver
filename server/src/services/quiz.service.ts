@@ -13,6 +13,10 @@ const MIN_OPTION_COUNT = 2;
 const MAX_OPTION_COUNT = 6;
 const QUIZ_DEBUG_ADMIN_ROLE = 'admin';
 const QUIZ_STANDARD_RESERVE_QUESTION_COUNT = 10;
+const QUIZ_STANDARD_TEXT_QUESTION_COUNT = 15;
+const QUIZ_STANDARD_IMAGE_QUESTION_COUNT = 5;
+const QUIZ_STANDARD_QUESTION_COUNT =
+  QUIZ_STANDARD_TEXT_QUESTION_COUNT + QUIZ_STANDARD_IMAGE_QUESTION_COUNT;
 
 export type QuizSessionMode = 'standard' | 'debug_set';
 
@@ -303,6 +307,36 @@ const isEligibleQuizQuestionRow = (question: {
   return question.options.some((option) => option.id === question.correctOptionId);
 };
 
+const isImageQuizQuestionRow = (question: {
+  stemImageUrl: string | null;
+  options: Array<{ imageUrl: string | null }>;
+}): boolean => {
+  return Boolean(question.stemImageUrl) || question.options.some((option) => Boolean(option.imageUrl));
+};
+
+const selectStandardQuizQuestions = <
+  T extends {
+    stemImageUrl: string | null;
+    options: Array<{ imageUrl: string | null }>;
+  },
+>(
+  questions: T[]
+): T[] => {
+  const imageQuestions = questions.filter(isImageQuizQuestionRow);
+  const textQuestions = questions.filter((question) => !isImageQuizQuestionRow(question));
+  const selectedTextQuestions = shuffle(textQuestions).slice(0, QUIZ_STANDARD_TEXT_QUESTION_COUNT);
+  const selectedImageQuestions = shuffle(imageQuestions).slice(0, QUIZ_STANDARD_IMAGE_QUESTION_COUNT);
+
+  if (
+    selectedTextQuestions.length < QUIZ_STANDARD_TEXT_QUESTION_COUNT ||
+    selectedImageQuestions.length < QUIZ_STANDARD_IMAGE_QUESTION_COUNT
+  ) {
+    return [];
+  }
+
+  return shuffle([...selectedTextQuestions, ...selectedImageQuestions]);
+};
+
 const buildQuestionSnapshot = (
   question: {
     id: string;
@@ -497,7 +531,7 @@ export const createQuizSession = async (
       ? config.debugQuestionIds
           .map((id) => eligibleQuestionRows.find((question) => question.id === id) ?? null)
           .filter((question): question is (typeof eligibleQuestionRows)[number] => Boolean(question))
-      : shuffle(eligibleQuestionRows).slice(0, config.questionCount);
+      : selectStandardQuizQuestions(eligibleQuestionRows);
     const reserveQuestions = !isDebugSession
       ? shuffle(eligibleQuestionRows)
           .filter((question) => !selectedQuestions.some((selected) => selected.id === question.id))
@@ -508,11 +542,11 @@ export const createQuizSession = async (
       if (selectedQuestions.length === 0) {
         throw new QuizServiceError(409, 'QUIZ_DEBUG_SET_EMPTY', 'Debug quiz question set is empty');
       }
-    } else if (selectedQuestions.length < config.questionCount) {
+    } else if (selectedQuestions.length < QUIZ_STANDARD_QUESTION_COUNT) {
       throw new QuizServiceError(409, 'QUIZ_QUESTION_POOL_INSUFFICIENT', 'Not enough active quiz questions');
     }
 
-    const resolvedQuestionCount = isDebugSession ? selectedQuestions.length : config.questionCount;
+    const resolvedQuestionCount = isDebugSession ? selectedQuestions.length : QUIZ_STANDARD_QUESTION_COUNT;
     const resolvedPassCorrectCount = Math.max(1, Math.min(config.passCorrectCount, resolvedQuestionCount));
     const questionSnapshots: QuizQuestionServerSnapshot[] = [...selectedQuestions, ...reserveQuestions].map((question) =>
       buildQuestionSnapshot(question, config.defaultTimeLimitSec)

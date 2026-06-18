@@ -2,8 +2,10 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 import 'package:raver_auth/raver_auth.dart';
+import 'package:raver_core/raver_core.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_models/raver_models.dart';
+import 'package:raver_platform/raver_platform.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ---------------------------------------------------------------------------
@@ -58,12 +60,16 @@ class AppStateNotifier extends ChangeNotifier {
   // ---- Session ------------------------------------------------------------
 
   Session? _session;
+  String? _sessionExpiredMessage;
 
   /// Whether the user has an active session.
   bool get isLoggedIn => _session != null;
 
   /// The current session, or `null` when unauthenticated.
   Session? get session => _session;
+
+  /// User-facing message for the most recent automatic session expiration.
+  String? get sessionExpiredMessage => _sessionExpiredMessage;
 
   // ---- Language -----------------------------------------------------------
 
@@ -158,6 +164,7 @@ class AppStateNotifier extends ChangeNotifier {
   /// Sets a new session after a successful login or token refresh.
   void setSession(Session session) {
     _session = session;
+    _sessionExpiredMessage = null;
     notifyListeners();
   }
 
@@ -166,14 +173,74 @@ class AppStateNotifier extends ChangeNotifier {
   /// Also resets badge counts and enforcement status.
   Future<void> clearSession() async {
     _session = null;
+    _sessionExpiredMessage = null;
     communityUnreadCount = 0;
     followedEventsUnreadCount = 0;
     followedDJsUnreadCount = 0;
     followedBrandsUnreadCount = 0;
     enforcementStatus = null;
     notifyListeners();
+    await AppBadgeService.clearBadge();
     await _tokenStore.clearTokens();
     developer.log('Session cleared.', name: 'AppState');
+  }
+
+  /// Expires the current session because the backend rejected it.
+  ///
+  /// Mirrors iOS `AppState.expireSession(_:)`: clear local auth state, reset
+  /// unread/account restriction state, keep a user-facing reason, and wipe
+  /// persisted tokens.
+  Future<void> expireSession(SessionExpirationReason reason) async {
+    _session = null;
+    _sessionExpiredMessage = _sessionExpirationMessage(reason);
+    communityUnreadCount = 0;
+    followedEventsUnreadCount = 0;
+    followedDJsUnreadCount = 0;
+    followedBrandsUnreadCount = 0;
+    enforcementStatus = null;
+    notifyListeners();
+    await AppBadgeService.clearBadge();
+    await _tokenStore.clearTokens();
+    developer.log(
+      'Session expired: $reason',
+      name: 'AppState',
+      level: 900,
+    );
+  }
+
+  String _sessionExpirationMessage(SessionExpirationReason reason) {
+    return switch (reason) {
+      SessionExpirationReason.expired => lt(
+          '登录已过期，请重新登录。',
+          'Your session expired. Please log in again.',
+          'ログインの有効期限が切れました。再度ログインしてください。',
+        ),
+      SessionExpirationReason.revoked => lt(
+          '当前设备已被退出登录。',
+          'This device has been signed out.',
+          'この端末はログアウトされました。',
+        ),
+      SessionExpirationReason.idleTimeout => lt(
+          '长时间未操作，已自动退出登录。',
+          'You were signed out after being inactive.',
+          '長時間操作がなかったため、自動的にログアウトしました。',
+        ),
+      SessionExpirationReason.absoluteTimeout => lt(
+          '为了账号安全，请重新登录。',
+          'For your account security, please log in again.',
+          'アカウント保護のため、再度ログインしてください。',
+        ),
+      SessionExpirationReason.accountInactive => lt(
+          '账号已删除或停用，请重新登录其他账号。',
+          'This account has been deleted or disabled. Please log in with another account.',
+          'このアカウントは削除または停止されています。別のアカウントでログインしてください。',
+        ),
+      SessionExpirationReason.unknown => lt(
+          '登录状态已失效，请重新登录。',
+          'Session expired. Please log in again.',
+          'ログイン状態が無効です。再度ログインしてください。',
+        ),
+    };
   }
 
   // =========================================================================

@@ -19,6 +19,8 @@ class RaverNavigationChrome extends StatelessWidget
     this.titleWidget,
     this.leading,
     this.trailing,
+    this.actions,
+    this.child,
     this.scrollOffset = 0,
     this.opacityThreshold = 60,
     this.height = 56,
@@ -37,6 +39,12 @@ class RaverNavigationChrome extends StatelessWidget
 
   /// Trailing widget (e.g. action buttons).
   final Widget? trailing;
+
+  /// Trailing action widgets.
+  final List<Widget>? actions;
+
+  /// Optional content rendered below the navigation chrome.
+  final Widget? child;
 
   /// Current scroll offset used to interpolate the chrome opacity.
   /// Typically comes from a [ScrollController].
@@ -59,6 +67,19 @@ class RaverNavigationChrome extends StatelessWidget
 
   @override
   Widget build(BuildContext context) {
+    final chrome = _buildChrome(context);
+    if (child != null) {
+      return Column(
+        children: [
+          chrome,
+          Expanded(child: child!),
+        ],
+      );
+    }
+    return chrome;
+  }
+
+  Widget _buildChrome(BuildContext context) {
     final theme = context.raver;
     final topPadding = MediaQuery.of(context).padding.top;
 
@@ -140,7 +161,14 @@ class RaverNavigationChrome extends StatelessWidget
                   // Trailing
                   SizedBox(
                     width: 56,
-                    child: trailing,
+                    child: trailing ??
+                        (actions == null
+                            ? null
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                mainAxisSize: MainAxisSize.min,
+                                children: actions!,
+                              )),
                   ),
                 ],
               ),

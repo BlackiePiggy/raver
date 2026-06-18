@@ -14,8 +14,7 @@ class VirtualAssetViewModel extends ChangeNotifier {
   int get selectedTab => _selectedTab;
 
   // All definitions (shop)
-  LoadPhase<List<VirtualAssetDefinition>> _allPhase =
-      const LoadPhase.loading();
+  LoadPhase<List<VirtualAssetDefinition>> _allPhase = const LoadPhase.loading();
   LoadPhase<List<VirtualAssetDefinition>> get allPhase => _allPhase;
   List<VirtualAssetDefinition> _allAssets = [];
   List<VirtualAssetDefinition> get allAssets => _allAssets;
@@ -41,7 +40,7 @@ class VirtualAssetViewModel extends ChangeNotifier {
           ? const LoadPhase.empty()
           : LoadPhase.success(_myAssets);
     } catch (e) {
-      _myPhase = LoadPhase.failure(e);
+      _myPhase = LoadPhase.fromError(e);
     }
 
     try {
@@ -50,7 +49,7 @@ class VirtualAssetViewModel extends ChangeNotifier {
           ? const LoadPhase.empty()
           : LoadPhase.success(_allAssets);
     } catch (e) {
-      _allPhase = LoadPhase.failure(e);
+      _allPhase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }

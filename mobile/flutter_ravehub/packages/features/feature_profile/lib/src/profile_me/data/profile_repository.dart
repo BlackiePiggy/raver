@@ -57,6 +57,7 @@ class ProfileRepository {
     String? birthday,
     String? city,
     String? avatarUrl,
+    String? backgroundUrl,
   }) =>
       _api.updateProfile(
         displayName: displayName,
@@ -65,7 +66,22 @@ class ProfileRepository {
         birthday: birthday,
         city: city,
         avatarUrl: avatarUrl,
+        backgroundUrl: backgroundUrl,
       );
+
+  Future<void> updateLocation({required String location}) =>
+      _api.updateLocation(location: location);
+
+  Future<void> deleteAccount() => _api.deleteAccount();
+
+  Future<String> uploadMyAvatar(String localPath) =>
+      _api.uploadMyAvatar(localPath);
+
+  Future<String> uploadMyBackground(String localPath) =>
+      _api.uploadMyBackground(localPath);
+
+  Future<void> logout({required String refreshToken}) =>
+      _api.logout(refreshToken: refreshToken);
 
   Future<bool> checkDisplayName({required String name}) =>
       _api.checkDisplayName(name: name);

@@ -16,11 +16,27 @@ class DjsListScreen extends ConsumerStatefulWidget {
 }
 
 class _DjsListScreenState extends ConsumerState<DjsListScreen> {
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-        () => ref.read(djsListProvider.notifier).loadIfNeeded());
+    Future.microtask(() => ref.read(djsListProvider.notifier).loadIfNeeded());
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: RaverMotion.normal,
+      curve: RaverMotion.curve,
+    );
   }
 
   @override
@@ -40,8 +56,7 @@ class _DjsListScreenState extends ConsumerState<DjsListScreen> {
             Icon(Icons.error_outline, size: 48, color: theme.secondaryText),
             const SizedBox(height: 12),
             Text(
-              lt('DJ 列表加载失败', 'Failed to load DJs',
-                  'DJ一覧を読み込めませんでした'),
+              lt('DJ 列表加载失败', 'Failed to load DJs', 'DJ一覧を読み込めませんでした'),
               style: TextStyle(color: theme.primaryText, fontSize: 16),
             ),
             const SizedBox(height: 12),
@@ -54,48 +69,53 @@ class _DjsListScreenState extends ConsumerState<DjsListScreen> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () => ref.read(djsListProvider.notifier).reload(),
-      child: CustomScrollView(
-        cacheExtent: 500,
-        slivers: [
-          if (state.carouselDJs.isNotEmpty)
-            SliverToBoxAdapter(
-              child: _SpotlightCarousel(
-                djs: state.carouselDJs,
-                theme: theme,
+    return RaverTabReselectionListener(
+      tabIndex: 0,
+      onReselected: _scrollToTop,
+      child: RefreshIndicator(
+        onRefresh: () => ref.read(djsListProvider.notifier).reload(),
+        child: CustomScrollView(
+          controller: _scrollController,
+          cacheExtent: 500,
+          slivers: [
+            if (state.carouselDJs.isNotEmpty)
+              SliverToBoxAdapter(
+                child: _SpotlightCarousel(
+                  djs: state.carouselDJs,
+                  theme: theme,
+                ),
               ),
-            ),
-          if (state.djs.isNotEmpty) ...[
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              sliver: SliverToBoxAdapter(
-                child: Text(
-                  lt('随机热门 DJ', 'Hot DJs', 'ホット DJ'),
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: theme.primaryText,
+            if (state.djs.isNotEmpty) ...[
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                sliver: SliverToBoxAdapter(
+                  child: Text(
+                    lt('随机热门 DJ', 'Hot DJs', 'ホット DJ'),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: theme.primaryText,
+                    ),
                   ),
                 ),
               ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final dj = state.djs[index];
-                    return _DjListTile(dj: dj);
-                  },
-                  childCount: state.djs.length,
-                  addRepaintBoundaries: true,
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final dj = state.djs[index];
+                      return _DjListTile(dj: dj);
+                    },
+                    childCount: state.djs.length,
+                    addRepaintBoundaries: true,
+                  ),
                 ),
               ),
-            ),
+            ],
+            const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
           ],
-          const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
-        ],
+        ),
       ),
     );
   }
@@ -130,8 +150,7 @@ class _SpotlightCarousel extends StatelessWidget {
                         ? CachedNetworkImage(
                             imageUrl: dj.avatarUrl,
                             fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) =>
-                                _fallbackGradient(),
+                            errorWidget: (_, __, ___) => _fallbackGradient(),
                           )
                         : _fallbackGradient(),
                     Container(
@@ -243,8 +262,7 @@ class _DjListTile extends StatelessWidget {
                     ? CachedNetworkImage(
                         imageUrl: dj.avatarUrl,
                         fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) =>
-                            _avatarFallback(theme),
+                        errorWidget: (_, __, ___) => _avatarFallback(theme),
                       )
                     : _avatarFallback(theme),
               ),
@@ -268,8 +286,8 @@ class _DjListTile extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       dj.country,
-                      style: TextStyle(
-                          fontSize: 12, color: theme.secondaryText),
+                      style:
+                          TextStyle(fontSize: 12, color: theme.secondaryText),
                     ),
                   ],
                 ],
@@ -282,8 +300,7 @@ class _DjListTile extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(
                   '${dj.followerCount}',
-                  style:
-                      TextStyle(fontSize: 12, color: theme.secondaryText),
+                  style: TextStyle(fontSize: 12, color: theme.secondaryText),
                 ),
               ],
             ),

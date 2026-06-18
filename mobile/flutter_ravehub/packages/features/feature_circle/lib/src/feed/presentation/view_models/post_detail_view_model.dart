@@ -40,7 +40,7 @@ class PostDetailViewModel extends ChangeNotifier {
       _phase = LoadPhase.success(_post!);
       _loadComments();
     } catch (e) {
-      _phase = LoadPhase.failure(e);
+      _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -97,6 +97,10 @@ class PostDetailViewModel extends ChangeNotifier {
         parentId: parentId,
       );
       _comments.insert(0, comment);
+      if (_post != null) {
+        _post = _post!.copyWith(commentCount: _post!.commentCount + 1);
+        _phase = LoadPhase.success(_post!);
+      }
       _isSendingComment = false;
       notifyListeners();
       return true;
@@ -111,24 +115,10 @@ class PostDetailViewModel extends ChangeNotifier {
     if (_post == null) return;
     final wasLiked = _post!.isLiked ?? false;
 
-    _post = Post(
-      id: _post!.id,
-      content: _post!.content,
-      images: _post!.images,
-      videos: _post!.videos,
-      user: _post!.user,
+    final previous = _post!;
+    _post = previous.copyWith(
       likeCount: _post!.likeCount + (wasLiked ? -1 : 1),
-      commentCount: _post!.commentCount,
-      repostCount: _post!.repostCount,
-      saveCount: _post!.saveCount,
-      shareCount: _post!.shareCount,
       isLiked: !wasLiked,
-      isReposted: _post!.isReposted,
-      isSaved: _post!.isSaved,
-      eventId: _post!.eventId,
-      eventName: _post!.eventName,
-      squad: _post!.squad,
-      createdAt: _post!.createdAt,
     );
     _phase = LoadPhase.success(_post!);
     notifyListeners();
@@ -139,7 +129,87 @@ class PostDetailViewModel extends ChangeNotifier {
         currentlyLiked: wasLiked,
       );
     } catch (_) {
-      // Revert optimistic update already shown; not critical.
+      _post = previous;
+      _phase = LoadPhase.success(_post!);
+      notifyListeners();
+    }
+  }
+
+  Future<void> toggleSave() async {
+    if (_post == null) return;
+    final previous = _post!;
+    final wasSaved = previous.isSaved ?? false;
+
+    _post = previous.copyWith(
+      saveCount: previous.saveCount + (wasSaved ? -1 : 1),
+      isSaved: !wasSaved,
+    );
+    _phase = LoadPhase.success(_post!);
+    notifyListeners();
+
+    try {
+      final updated = await _repository.toggleFavoritePost(
+        postId: previous.id,
+        currentlySaved: wasSaved,
+      );
+      _post = updated;
+      _phase = LoadPhase.success(_post!);
+      notifyListeners();
+    } catch (_) {
+      _post = previous;
+      _phase = LoadPhase.success(_post!);
+      notifyListeners();
+    }
+  }
+
+  Future<String> resolveShareUrl() {
+    if (_post == null) return Future.value('https://ravehub.top');
+    return _repository.resolvePostShareUrl(
+      post: _post!,
+      channel: 'system_share',
+    );
+  }
+
+  Future<void> reportShare() async {
+    if (_post == null) return;
+    final previous = _post!;
+    try {
+      final updated = await _repository.sharePost(
+        postId: previous.id,
+        channel: 'system_share',
+      );
+      _post = updated;
+    } catch (_) {
+      _post = previous.copyWith(shareCount: previous.shareCount + 1);
+    }
+    _phase = LoadPhase.success(_post!);
+    notifyListeners();
+  }
+
+  Future<bool> hidePost({String reason = 'not_relevant'}) async {
+    if (_post == null) return false;
+    try {
+      await _repository.hidePost(postId: _post!.id, reason: reason);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> reportPost({
+    required String reason,
+    String? detail,
+  }) async {
+    if (_post == null) return false;
+    try {
+      await _repository.reportPost(
+        postId: _post!.id,
+        reason: reason,
+        detail: detail,
+      );
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 }

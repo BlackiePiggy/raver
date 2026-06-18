@@ -6,6 +6,7 @@ import 'package:raver_models/raver_models.dart';
 
 import '../_shared/profile_service_locator.dart';
 import 'view_models/publishes_view_model.dart';
+import 'widgets/submission_status_badge.dart';
 
 /// Screen listing content published by the current user.
 class MyPublishesScreen extends StatefulWidget {
@@ -83,7 +84,8 @@ class _MyPublishesScreenState extends State<MyPublishesScreen> {
               onEmpty: () => EmptyStateView(
                 icon: Icons.article_outlined,
                 title: lt('暂无发布', 'No Submissions', '投稿なし'),
-                subtitle: lt('你还没有提交过内容',
+                subtitle: lt(
+                    '你还没有提交过内容',
                     'You haven\'t submitted any content yet',
                     'まだコンテンツを投稿していません'),
               ),
@@ -182,65 +184,21 @@ class _SubmissionCard extends StatelessWidget {
                       const SizedBox(width: 8),
                       Text(
                         item.createdAt,
-                        style: RaverTypography.caption(
-                            color: theme.secondaryText),
+                        style:
+                            RaverTypography.caption(color: theme.secondaryText),
                       ),
                     ],
                   ),
                 ],
               ),
             ),
-            _StatusBadge(status: item.status, theme: theme),
+            SubmissionStatusBadge(
+              status: item.status,
+              statusLabel: item.statusLabel,
+            ),
             const SizedBox(width: 4),
-            Icon(Icons.chevron_right,
-                color: theme.secondaryText, size: 20),
+            Icon(Icons.chevron_right, color: theme.secondaryText, size: 20),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status, required this.theme});
-
-  final String status;
-  final RaverThemeData theme;
-
-  @override
-  Widget build(BuildContext context) {
-    Color color;
-    String label;
-
-    switch (status.toLowerCase()) {
-      case 'pending':
-        color = Colors.orange;
-        label = lt('待审核', 'Pending', '審査中');
-        break;
-      case 'approved':
-        color = Colors.green;
-        label = lt('已通过', 'Approved', '承認済み');
-        break;
-      case 'rejected':
-        color = Colors.redAccent;
-        label = lt('已拒绝', 'Rejected', '却下');
-        break;
-      default:
-        color = theme.secondaryText;
-        label = status;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: RaverTypography.caption(
-          color: color,
-          weight: FontWeight.w600,
         ),
       ),
     );

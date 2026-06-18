@@ -2,10 +2,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:raver_models/raver_models.dart';
 
+import '../../_shared/discover_dio.dart';
+
 final genreApiProvider = Provider<GenreApi>((ref) {
-  throw UnimplementedError(
-    'genreApiProvider must be overridden with a Dio instance',
-  );
+  return GenreApi(ref.watch(discoverDioProvider));
 });
 
 class GenreApi {
@@ -13,17 +13,19 @@ class GenreApi {
   final Dio _dio;
 
   Future<List<GenreSunburstNode>> fetchSunburstTree() async {
-    final response = await _dio.get<List<dynamic>>('/v1/learn/genres');
-    final list = response.data ?? [];
-    return list
-        .cast<Map<String, dynamic>>()
+    final response = await _dio.get<dynamic>('/v1/learn/genres');
+    return LiveApiPayload.items(
+      response.data,
+    )
+        .whereType<Map<String, dynamic>>()
         .map(GenreSunburstNode.fromJson)
         .toList();
   }
 
   Future<LearnGenreNode> fetchGenreDetail(String genreId) async {
-    final response =
-        await _dio.get<Map<String, dynamic>>('/v1/learn/genres/$genreId');
-    return LearnGenreNode.fromJson(response.data!);
+    final response = await _dio.get<dynamic>(
+      '/v1/learn/genres/$genreId',
+    );
+    return LearnGenreNode.fromJson(LiveApiPayload.object(response.data));
   }
 }

@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:raver_auth/raver_auth.dart';
 import 'package:raver_core/raver_core.dart';
+
+import 'service_error_mapper.dart';
 
 /// Paths that must not carry an Authorization header.
 const _publicPaths = <String>[
@@ -8,6 +12,11 @@ const _publicPaths = <String>[
   '/v1/auth/register',
   '/v1/auth/refresh',
 ];
+
+/// Called when the interceptor determines that the local session is no longer
+/// valid and the app should return to the unauthenticated state.
+typedef SessionExpiredCallback = FutureOr<void> Function(
+    SessionExpirationReason reason);
 
 /// Dio interceptor that attaches an OAuth bearer token to every request and
 /// transparently refreshes expired tokens on 401 responses.
@@ -28,13 +37,16 @@ class AuthInterceptor extends Interceptor {
     required SessionTokenStore tokenStore,
     required AuthRefreshGate refreshGate,
     required Dio dio,
+    SessionExpiredCallback? onSessionExpired,
   })  : _tokenStore = tokenStore,
         _refreshGate = refreshGate,
-        _dio = dio;
+        _dio = dio,
+        _onSessionExpired = onSessionExpired;
 
   final SessionTokenStore _tokenStore;
   final AuthRefreshGate _refreshGate;
   final Dio _dio;
+  final SessionExpiredCallback? _onSessionExpired;
 
   // ------------------------------------------------------------------
   // Request phase
@@ -86,6 +98,23 @@ class AuthInterceptor extends Interceptor {
       return handler.next(err);
     }
 
+    final explicitReason =
+        NetworkServiceErrorMapper.sessionExpirationReasonFromPayload(
+      response.data,
+    );
+    if (explicitReason != null) {
+      await _expireSession(explicitReason);
+      if (explicitReason == SessionExpirationReason.accountInactive) {
+        return handler.reject(
+          _serviceErrorException(err, const ServiceError.accountInactive()),
+        );
+      }
+      return handler.reject(
+        _serviceErrorException(
+            err, ServiceError.sessionExpired(explicitReason)),
+      );
+    }
+
     try {
       final refreshed = await _refreshGate.refreshIfNeeded(() async {
         final refreshToken = await _tokenStore.readRefreshToken();
@@ -113,7 +142,13 @@ class AuthInterceptor extends Interceptor {
       });
 
       if (!refreshed) {
-        throw const ServiceError.sessionExpired(SessionExpirationReason.expired);
+        await _expireSession(SessionExpirationReason.expired);
+        return handler.reject(
+          _serviceErrorException(
+            err,
+            const ServiceError.sessionExpired(SessionExpirationReason.expired),
+          ),
+        );
       }
 
       // Retry the original request with the new token.
@@ -123,10 +158,35 @@ class AuthInterceptor extends Interceptor {
 
       final retryResponse = await _dio.fetch<dynamic>(options);
       return handler.resolve(retryResponse);
-    } on ServiceError {
-      rethrow;
+    } on ServiceError catch (error) {
+      if (error is SessionExpiredError) {
+        await _expireSession(error.reason);
+      } else if (error is AccountInactiveError) {
+        await _expireSession(SessionExpirationReason.accountInactive);
+      }
+      return handler.reject(_serviceErrorException(err, error));
     } catch (_) {
-      throw const ServiceError.sessionExpired(SessionExpirationReason.expired);
+      await _expireSession(SessionExpirationReason.expired);
+      return handler.reject(
+        _serviceErrorException(
+          err,
+          const ServiceError.sessionExpired(SessionExpirationReason.expired),
+        ),
+      );
     }
+  }
+
+  Future<void> _expireSession(SessionExpirationReason reason) async {
+    await _tokenStore.clearTokens();
+    await _onSessionExpired?.call(reason);
+  }
+
+  DioException _serviceErrorException(DioException original, Object error) {
+    return DioException(
+      requestOptions: original.requestOptions,
+      response: original.response,
+      type: DioExceptionType.unknown,
+      error: error,
+    );
   }
 }

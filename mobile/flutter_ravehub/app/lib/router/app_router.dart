@@ -6,8 +6,11 @@ import 'package:feature_profile/feature_profile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:ravehub/state/app_state_notifier.dart';
+import 'package:ravehub/router/deep_link_scan_screen.dart';
 import 'package:ravehub/router/deep_link_handler.dart';
 import 'package:ravehub/router/route_guards.dart';
+import 'package:ravehub/router/share_link_redirect_screen.dart';
 import 'package:ravehub/shell/raver_shell_scaffold.dart';
 
 // ---------------------------------------------------------------------------
@@ -27,12 +30,10 @@ abstract final class TabIndex {
 // ---------------------------------------------------------------------------
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
-final _discoverNavigatorKey =
-    GlobalKey<NavigatorState>(debugLabel: 'discover');
+final _discoverNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'discover');
 final _circleNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'circle');
 final _inboxNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'inbox');
-final _profileNavigatorKey =
-    GlobalKey<NavigatorState>(debugLabel: 'profile');
+final _profileNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'profile');
 
 // ---------------------------------------------------------------------------
 // Helper: attach parentNavigatorKey to a list of routes
@@ -102,11 +103,12 @@ List<RouteBase> _withParentKey(
 /// /profile/settings           -> Settings (over shell)
 /// ... etc.
 /// ```
-GoRouter createRouter(Ref ref) {
+GoRouter createRouter(Ref ref, AppStateNotifier appState) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/discover',
     debugLogDiagnostics: true,
+    refreshListenable: appState,
     redirect: (context, state) {
       // First, check for deep link URI conversion.
       final uri = state.uri;
@@ -125,6 +127,16 @@ GoRouter createRouter(Ref ref) {
       GoRoute(
         path: '/',
         redirect: (_, __) => '/discover',
+      ),
+      GoRoute(
+        path: '/s/:code',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => ShareLinkRedirectScreen(uri: state.uri),
+      ),
+      GoRoute(
+        path: '/scan',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const DeepLinkScanScreen(),
       ),
 
       // ------------------------------------------------------------------

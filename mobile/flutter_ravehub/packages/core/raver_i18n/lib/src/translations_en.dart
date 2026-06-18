@@ -48,7 +48,6 @@ const Map<String, String> translationsEn = {
   '回复': 'Reply',
   '举报': 'Report',
   '屏蔽': 'Block',
-  '私信': 'Direct Message',
 
   // ── Actions ───────────────────────────────────────────────────────────
   '搜索': 'Search',

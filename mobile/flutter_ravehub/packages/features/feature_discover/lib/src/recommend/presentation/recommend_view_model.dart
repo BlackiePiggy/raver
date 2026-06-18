@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:raver_models/raver_models.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 
-import '../data/events_repository.dart';
+import '../../events/data/events_repository.dart';
 
 class RecommendViewModel extends ChangeNotifier {
   RecommendViewModel({required EventsRepository repository})

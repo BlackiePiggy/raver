@@ -349,8 +349,8 @@ class ProfileSkeleton extends StatelessWidget {
             const SizedBox(height: 24),
             ...List.generate(
               3,
-              (_) => const Padding(
-                padding: EdgeInsets.only(bottom: 20),
+              (_) => Padding(
+                padding: const EdgeInsets.only(bottom: 20),
                 child: _PostCardSkeleton(),
               ),
             ),

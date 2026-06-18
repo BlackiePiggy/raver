@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 import 'raver_colors.dart';
@@ -47,6 +45,9 @@ class RaverThemeData extends ThemeExtension<RaverThemeData> {
   final Color tabBarSelectionStroke;
   final Color tabBarShadowPrimary;
   final Color tabBarShadowAccent;
+
+  /// Backwards-compatible divider token.
+  Color get divider => cardBorder;
 
   // ---------------------------------------------------------------------------
   // Factory constructors
@@ -112,7 +113,8 @@ class RaverThemeData extends ThemeExtension<RaverThemeData> {
     return _buildThemeData(Brightness.dark, raver);
   }
 
-  static ThemeData _buildThemeData(Brightness brightness, RaverThemeData raver) {
+  static ThemeData _buildThemeData(
+      Brightness brightness, RaverThemeData raver) {
     final colorScheme = ColorScheme.fromSeed(
       seedColor: raver.accent,
       brightness: brightness,
@@ -234,8 +236,7 @@ class RaverThemeData extends ThemeExtension<RaverThemeData> {
       accent: Color.lerp(accent, other.accent, t)!,
       tabBarChromeStart:
           Color.lerp(tabBarChromeStart, other.tabBarChromeStart, t)!,
-      tabBarChromeEnd:
-          Color.lerp(tabBarChromeEnd, other.tabBarChromeEnd, t)!,
+      tabBarChromeEnd: Color.lerp(tabBarChromeEnd, other.tabBarChromeEnd, t)!,
       tabBarSelectionStart:
           Color.lerp(tabBarSelectionStart, other.tabBarSelectionStart, t)!,
       tabBarSelectionEnd:

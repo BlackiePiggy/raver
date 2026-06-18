@@ -1,3 +1,5 @@
+import 'package:raver_models/raver_models.dart';
+
 import 'circle_id_api.dart';
 
 class CircleIdRepository {
@@ -9,16 +11,16 @@ class CircleIdRepository {
     return _api.fetchMyCircleIds();
   }
 
-  Future<CircleIdCard> createCircleId({
-    required String nickname,
-    required String tagline,
-    required int gradientIndex,
-  }) {
-    return _api.createCircleId(
-      nickname: nickname,
-      tagline: tagline,
-      gradientIndex: gradientIndex,
-    );
+  Future<List<WebEvent>> searchEvents({String? search}) {
+    return _api.searchEvents(search: search);
+  }
+
+  Future<List<WebDJ>> searchDjs({String? search}) {
+    return _api.searchDjs(search: search);
+  }
+
+  Future<CircleIdCard> createCircleId(CircleIdCreationDraft draft) {
+    return _api.createCircleId(draft);
   }
 
   Future<CircleIdCard> fetchCircleId({required String id}) {

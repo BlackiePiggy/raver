@@ -1,3 +1,7 @@
+import 'package:dio/dio.dart';
+import 'package:feature_inbox/src/data/inbox_service_locator.dart';
+import 'package:feature_inbox/src/presentation/followed_events_inbox_screen.dart';
+import 'package:feature_inbox/src/presentation/inbox_home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:raver_design_system/raver_design_system.dart';
@@ -129,6 +133,112 @@ void main() {
         find.byType(SwitchListTile),
       );
       expect(switchesAfter.first.value, !firstValue);
+    });
+  });
+
+  group('InboxHomeScreen', () {
+    tearDown(() {
+      InboxServiceLocator.configureUnreadCountSync(null);
+    });
+
+    testWidgets('syncs live unread counts for the app tab badge', (
+      tester,
+    ) async {
+      NotificationUnreadCount? syncedCounts;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.ravehub.top'))
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.path == '/v1/notification-center/unread-count') {
+                handler.resolve(
+                  Response<Map<String, dynamic>>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: const {
+                      'community': 2,
+                      'followedEvents': 3,
+                      'followedDJs': 5,
+                      'followedBrands': 7,
+                    },
+                  ),
+                );
+                return;
+              }
+              handler.reject(DioException(requestOptions: options));
+            },
+          ),
+        );
+
+      InboxServiceLocator.configureDio(dio);
+      InboxServiceLocator.configureUnreadCountSync((counts) {
+        syncedCounts = counts;
+      });
+
+      await tester.pumpWidget(_buildApp(const InboxHomeScreen()));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(syncedCounts, isNotNull);
+      expect(syncedCounts!.community, 2);
+      expect(syncedCounts!.followedEvents, 3);
+      expect(syncedCounts!.followedDJs, 5);
+      expect(syncedCounts!.followedBrands, 7);
+      expect(find.text('Community'), findsOneWidget);
+      expect(find.text('Followed Events'), findsOneWidget);
+      expect(find.text('Followed DJs'), findsOneWidget);
+      expect(find.text('Followed Brands'), findsOneWidget);
+      expect(find.text('Content Reviews'), findsOneWidget);
+      expect(find.byType(RefreshIndicator), findsOneWidget);
+      final list = tester.widget<ListView>(find.byType(ListView));
+      expect(list.physics, isA<AlwaysScrollableScrollPhysics>());
+    });
+
+    testWidgets('followed events empty state remains refreshable', (
+      tester,
+    ) async {
+      var followedEventsRequests = 0;
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.ravehub.top'))
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.path ==
+                  '/v1/notification-center/followed-events/items') {
+                followedEventsRequests += 1;
+                handler.resolve(
+                  Response<Map<String, dynamic>>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: const {
+                      'items': <Map<String, dynamic>>[],
+                      'pagination': {
+                        'page': 1,
+                        'limit': 20,
+                        'total': 0,
+                        'totalPages': 1,
+                      },
+                    },
+                  ),
+                );
+                return;
+              }
+              handler.reject(DioException(requestOptions: options));
+            },
+          ),
+        );
+
+      InboxServiceLocator.configureDio(dio);
+
+      await tester.pumpWidget(_buildApp(const FollowedEventsInboxScreen()));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(EmptyStateView), findsOneWidget);
+      expect(find.byType(RefreshIndicator), findsOneWidget);
+      expect(followedEventsRequests, 1);
+      final scrollView = tester.widget<SingleChildScrollView>(
+        find.byType(SingleChildScrollView),
+      );
+      expect(scrollView.physics, isA<AlwaysScrollableScrollPhysics>());
     });
   });
 }

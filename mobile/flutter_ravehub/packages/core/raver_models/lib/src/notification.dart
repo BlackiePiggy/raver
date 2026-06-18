@@ -142,10 +142,58 @@ class NotificationUnreadCount {
 
   factory NotificationUnreadCount.fromJson(Map<String, dynamic> json) =>
       NotificationUnreadCount(
-        community: json['community'] as int,
-        followedEvents: json['followedEvents'] as int,
-        followedDJs: json['followedDJs'] as int,
-        followedBrands: json['followedBrands'] as int,
+        community: _intFromJson(
+          json,
+          const [
+            'community',
+            'communityUnread',
+            'communityUnreadCount',
+            'community_unread',
+            'community_unread_count',
+            'circle',
+            'circleUnread',
+            'circle_unread',
+          ],
+        ),
+        followedEvents: _intFromJson(
+          json,
+          const [
+            'followedEvents',
+            'followedEventsUnread',
+            'followedEventsUnreadCount',
+            'followed_events',
+            'followed_events_unread',
+            'followed_events_unread_count',
+            'events',
+          ],
+        ),
+        followedDJs: _intFromJson(
+          json,
+          const [
+            'followedDJs',
+            'followedDjs',
+            'followedDJsUnread',
+            'followedDjsUnread',
+            'followedDJsUnreadCount',
+            'followedDjsUnreadCount',
+            'followed_djs',
+            'followed_djs_unread',
+            'followed_djs_unread_count',
+            'djs',
+          ],
+        ),
+        followedBrands: _intFromJson(
+          json,
+          const [
+            'followedBrands',
+            'followedBrandsUnread',
+            'followedBrandsUnreadCount',
+            'followed_brands',
+            'followed_brands_unread',
+            'followed_brands_unread_count',
+            'brands',
+          ],
+        ),
       );
 
   Map<String, dynamic> toJson() => {
@@ -187,65 +235,126 @@ class NotificationUnreadCount {
       'NotificationUnreadCount(community: $community, followedEvents: $followedEvents, followedDJs: $followedDJs, followedBrands: $followedBrands)';
 }
 
+int _intFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+  }
+  return 0;
+}
+
 class FollowedEventNotificationItem {
   final String id;
+  final String type;
   final String eventId;
   final String eventName;
-  final String coverImageUrl;
-  final String changeType;
-  final String summary;
-  final String createdAt;
+  final String newsId;
+  final String newsTitle;
+  final String newsSummary;
+  final String newsCoverImageUrl;
+  final bool isRead;
+  final String occurredAt;
 
   const FollowedEventNotificationItem({
     required this.id,
+    required this.type,
     required this.eventId,
     required this.eventName,
-    required this.coverImageUrl,
-    required this.changeType,
-    required this.summary,
-    required this.createdAt,
+    required this.newsId,
+    required this.newsTitle,
+    required this.newsSummary,
+    required this.newsCoverImageUrl,
+    required this.isRead,
+    required this.occurredAt,
   });
+
+  String get coverImageUrl => newsCoverImageUrl;
+  String get changeType => type;
+  String get summary => newsSummary;
+  String get createdAt => occurredAt;
 
   factory FollowedEventNotificationItem.fromJson(
     Map<String, dynamic> json,
   ) =>
       FollowedEventNotificationItem(
-        id: json['id'] as String,
-        eventId: json['eventId'] as String,
-        eventName: json['eventName'] as String,
-        coverImageUrl: json['coverImageUrl'] as String,
-        changeType: json['changeType'] as String,
-        summary: json['summary'] as String,
-        createdAt: json['createdAt'] as String,
+        id: _readString(json, 'id'),
+        type: _readString(json, 'type',
+            fallback: _readString(json, 'changeType')),
+        eventId: _readString(json, 'eventId'),
+        eventName: _readString(json, 'eventName'),
+        newsId: _readString(
+          json,
+          'newsId',
+          fallback: _readString(json, 'eventId'),
+        ),
+        newsTitle: _readString(
+          json,
+          'newsTitle',
+          fallback: _readString(json, 'eventName'),
+        ),
+        newsSummary: _readString(
+          json,
+          'newsSummary',
+          fallback: _readString(json, 'summary'),
+        ),
+        newsCoverImageUrl: _readString(
+          json,
+          'newsCoverImageURL',
+          fallback: _readString(
+            json,
+            'newsCoverImageUrl',
+            fallback: _readString(json, 'coverImageUrl'),
+          ),
+        ),
+        isRead: _readBool(json, 'isRead'),
+        occurredAt: _readString(
+          json,
+          'occurredAt',
+          fallback: _readString(json, 'createdAt'),
+        ),
       );
 
   Map<String, dynamic> toJson() => {
         'id': id,
+        'type': type,
         'eventId': eventId,
         'eventName': eventName,
-        'coverImageUrl': coverImageUrl,
-        'changeType': changeType,
-        'summary': summary,
-        'createdAt': createdAt,
+        'newsId': newsId,
+        'newsTitle': newsTitle,
+        'newsSummary': newsSummary,
+        'newsCoverImageURL': newsCoverImageUrl,
+        'isRead': isRead,
+        'occurredAt': occurredAt,
       };
 
   FollowedEventNotificationItem copyWith({
     String? id,
+    String? type,
     String? eventId,
     String? eventName,
-    String? coverImageUrl,
-    String? changeType,
-    String? summary,
-    String? createdAt,
+    String? newsId,
+    String? newsTitle,
+    String? newsSummary,
+    String? newsCoverImageUrl,
+    bool? isRead,
+    String? occurredAt,
   }) =>
       FollowedEventNotificationItem(
         id: id ?? this.id,
+        type: type ?? this.type,
         eventId: eventId ?? this.eventId,
         eventName: eventName ?? this.eventName,
-        coverImageUrl: coverImageUrl ?? this.coverImageUrl,
-        changeType: changeType ?? this.changeType,
-        summary: summary ?? this.summary,
-        createdAt: createdAt ?? this.createdAt,
+        newsId: newsId ?? this.newsId,
+        newsTitle: newsTitle ?? this.newsTitle,
+        newsSummary: newsSummary ?? this.newsSummary,
+        newsCoverImageUrl: newsCoverImageUrl ?? this.newsCoverImageUrl,
+        isRead: isRead ?? this.isRead,
+        occurredAt: occurredAt ?? this.occurredAt,
       );
 
   @override
@@ -264,61 +373,114 @@ class FollowedEventNotificationItem {
 
 class FollowedDJNotificationItem {
   final String id;
+  final String type;
   final String djId;
   final String djName;
   final String avatarUrl;
-  final String changeType;
-  final String summary;
-  final String createdAt;
+  final String newsId;
+  final String newsTitle;
+  final String newsSummary;
+  final String newsCoverImageUrl;
+  final bool isRead;
+  final String occurredAt;
 
   const FollowedDJNotificationItem({
     required this.id,
+    required this.type,
     required this.djId,
     required this.djName,
     required this.avatarUrl,
-    required this.changeType,
-    required this.summary,
-    required this.createdAt,
+    required this.newsId,
+    required this.newsTitle,
+    required this.newsSummary,
+    required this.newsCoverImageUrl,
+    required this.isRead,
+    required this.occurredAt,
   });
+
+  String get changeType => type;
+  String get summary => newsSummary;
+  String get createdAt => occurredAt;
 
   factory FollowedDJNotificationItem.fromJson(Map<String, dynamic> json) =>
       FollowedDJNotificationItem(
-        id: json['id'] as String,
-        djId: json['djId'] as String,
-        djName: json['djName'] as String,
-        avatarUrl: json['avatarUrl'] as String,
-        changeType: json['changeType'] as String,
-        summary: json['summary'] as String,
-        createdAt: json['createdAt'] as String,
+        id: _readString(json, 'id'),
+        type: _readString(json, 'type',
+            fallback: _readString(json, 'changeType')),
+        djId: _readString(json, 'djId'),
+        djName: _readString(json, 'djName'),
+        avatarUrl: _readString(
+          json,
+          'avatarUrl',
+          fallback: _readString(json, 'djAvatarUrl'),
+        ),
+        newsId: _readString(json, 'newsId'),
+        newsTitle: _readString(
+          json,
+          'newsTitle',
+          fallback: _readString(json, 'djName'),
+        ),
+        newsSummary: _readString(
+          json,
+          'newsSummary',
+          fallback: _readString(json, 'summary'),
+        ),
+        newsCoverImageUrl: _readString(
+          json,
+          'newsCoverImageURL',
+          fallback: _readString(
+            json,
+            'newsCoverImageUrl',
+            fallback: _readString(json, 'coverImageUrl'),
+          ),
+        ),
+        isRead: _readBool(json, 'isRead'),
+        occurredAt: _readString(
+          json,
+          'occurredAt',
+          fallback: _readString(json, 'createdAt'),
+        ),
       );
 
   Map<String, dynamic> toJson() => {
         'id': id,
+        'type': type,
         'djId': djId,
         'djName': djName,
         'avatarUrl': avatarUrl,
-        'changeType': changeType,
-        'summary': summary,
-        'createdAt': createdAt,
+        'newsId': newsId,
+        'newsTitle': newsTitle,
+        'newsSummary': newsSummary,
+        'newsCoverImageURL': newsCoverImageUrl,
+        'isRead': isRead,
+        'occurredAt': occurredAt,
       };
 
   FollowedDJNotificationItem copyWith({
     String? id,
+    String? type,
     String? djId,
     String? djName,
     String? avatarUrl,
-    String? changeType,
-    String? summary,
-    String? createdAt,
+    String? newsId,
+    String? newsTitle,
+    String? newsSummary,
+    String? newsCoverImageUrl,
+    bool? isRead,
+    String? occurredAt,
   }) =>
       FollowedDJNotificationItem(
         id: id ?? this.id,
+        type: type ?? this.type,
         djId: djId ?? this.djId,
         djName: djName ?? this.djName,
         avatarUrl: avatarUrl ?? this.avatarUrl,
-        changeType: changeType ?? this.changeType,
-        summary: summary ?? this.summary,
-        createdAt: createdAt ?? this.createdAt,
+        newsId: newsId ?? this.newsId,
+        newsTitle: newsTitle ?? this.newsTitle,
+        newsSummary: newsSummary ?? this.newsSummary,
+        newsCoverImageUrl: newsCoverImageUrl ?? this.newsCoverImageUrl,
+        isRead: isRead ?? this.isRead,
+        occurredAt: occurredAt ?? this.occurredAt,
       );
 
   @override
@@ -331,69 +493,121 @@ class FollowedDJNotificationItem {
   int get hashCode => id.hashCode;
 
   @override
-  String toString() =>
-      'FollowedDJNotificationItem(id: $id, djName: $djName)';
+  String toString() => 'FollowedDJNotificationItem(id: $id, djName: $djName)';
 }
 
 class FollowedBrandNotificationItem {
   final String id;
+  final String type;
   final String brandId;
   final String brandName;
   final String imageUrl;
-  final String changeType;
-  final String summary;
-  final String createdAt;
+  final String newsId;
+  final String newsTitle;
+  final String newsSummary;
+  final String newsCoverImageUrl;
+  final bool isRead;
+  final String occurredAt;
 
   const FollowedBrandNotificationItem({
     required this.id,
+    required this.type,
     required this.brandId,
     required this.brandName,
     required this.imageUrl,
-    required this.changeType,
-    required this.summary,
-    required this.createdAt,
+    required this.newsId,
+    required this.newsTitle,
+    required this.newsSummary,
+    required this.newsCoverImageUrl,
+    required this.isRead,
+    required this.occurredAt,
   });
+
+  String get changeType => type;
+  String get summary => newsSummary;
+  String get createdAt => occurredAt;
 
   factory FollowedBrandNotificationItem.fromJson(
     Map<String, dynamic> json,
   ) =>
       FollowedBrandNotificationItem(
-        id: json['id'] as String,
-        brandId: json['brandId'] as String,
-        brandName: json['brandName'] as String,
-        imageUrl: json['imageUrl'] as String,
-        changeType: json['changeType'] as String,
-        summary: json['summary'] as String,
-        createdAt: json['createdAt'] as String,
+        id: _readString(json, 'id'),
+        type: _readString(json, 'type',
+            fallback: _readString(json, 'changeType')),
+        brandId: _readString(json, 'brandId'),
+        brandName: _readString(json, 'brandName'),
+        imageUrl: _readString(
+          json,
+          'imageUrl',
+          fallback: _readString(json, 'brandImageUrl'),
+        ),
+        newsId: _readString(json, 'newsId'),
+        newsTitle: _readString(
+          json,
+          'newsTitle',
+          fallback: _readString(json, 'brandName'),
+        ),
+        newsSummary: _readString(
+          json,
+          'newsSummary',
+          fallback: _readString(json, 'summary'),
+        ),
+        newsCoverImageUrl: _readString(
+          json,
+          'newsCoverImageURL',
+          fallback: _readString(
+            json,
+            'newsCoverImageUrl',
+            fallback: _readString(json, 'coverImageUrl'),
+          ),
+        ),
+        isRead: _readBool(json, 'isRead'),
+        occurredAt: _readString(
+          json,
+          'occurredAt',
+          fallback: _readString(json, 'createdAt'),
+        ),
       );
 
   Map<String, dynamic> toJson() => {
         'id': id,
+        'type': type,
         'brandId': brandId,
         'brandName': brandName,
         'imageUrl': imageUrl,
-        'changeType': changeType,
-        'summary': summary,
-        'createdAt': createdAt,
+        'newsId': newsId,
+        'newsTitle': newsTitle,
+        'newsSummary': newsSummary,
+        'newsCoverImageURL': newsCoverImageUrl,
+        'isRead': isRead,
+        'occurredAt': occurredAt,
       };
 
   FollowedBrandNotificationItem copyWith({
     String? id,
+    String? type,
     String? brandId,
     String? brandName,
     String? imageUrl,
-    String? changeType,
-    String? summary,
-    String? createdAt,
+    String? newsId,
+    String? newsTitle,
+    String? newsSummary,
+    String? newsCoverImageUrl,
+    bool? isRead,
+    String? occurredAt,
   }) =>
       FollowedBrandNotificationItem(
         id: id ?? this.id,
+        type: type ?? this.type,
         brandId: brandId ?? this.brandId,
         brandName: brandName ?? this.brandName,
         imageUrl: imageUrl ?? this.imageUrl,
-        changeType: changeType ?? this.changeType,
-        summary: summary ?? this.summary,
-        createdAt: createdAt ?? this.createdAt,
+        newsId: newsId ?? this.newsId,
+        newsTitle: newsTitle ?? this.newsTitle,
+        newsSummary: newsSummary ?? this.newsSummary,
+        newsCoverImageUrl: newsCoverImageUrl ?? this.newsCoverImageUrl,
+        isRead: isRead ?? this.isRead,
+        occurredAt: occurredAt ?? this.occurredAt,
       );
 
   @override
@@ -483,4 +697,23 @@ class ContentReviewNotificationItem {
   @override
   String toString() =>
       'ContentReviewNotificationItem(id: $id, entityName: $entityName)';
+}
+
+String _readString(
+  Map<String, dynamic> json,
+  String key, {
+  String fallback = '',
+}) {
+  final value = json[key];
+  if (value == null) return fallback;
+  if (value is String) return value;
+  return value.toString();
+}
+
+bool _readBool(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  if (value is String) return value.trim().toLowerCase() == 'true';
+  return false;
 }

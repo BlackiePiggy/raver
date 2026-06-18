@@ -19,8 +19,7 @@ class ContributionViewModel extends ChangeNotifier {
   String get level => (_data?['level'] as String?) ?? '';
   List<dynamic> get distribution =>
       (_data?['distribution'] as List<dynamic>?) ?? [];
-  List<dynamic> get history =>
-      (_data?['history'] as List<dynamic>?) ?? [];
+  List<dynamic> get history => (_data?['history'] as List<dynamic>?) ?? [];
 
   Future<void> load() async {
     _phase = const LoadPhase.loading();
@@ -30,7 +29,7 @@ class ContributionViewModel extends ChangeNotifier {
       _data = await _repository.fetchContributions();
       _phase = LoadPhase.success(_data!);
     } catch (e) {
-      _phase = LoadPhase.failure(e);
+      _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -40,7 +39,7 @@ class ContributionViewModel extends ChangeNotifier {
       _data = await _repository.fetchContributions();
       _phase = LoadPhase.success(_data!);
     } catch (e) {
-      if (_data == null) _phase = LoadPhase.failure(e);
+      if (_data == null) _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }

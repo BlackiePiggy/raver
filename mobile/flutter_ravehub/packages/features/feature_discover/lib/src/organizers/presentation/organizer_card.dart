@@ -1,7 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:raver_design_system/raver_design_system.dart';
-import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_models/raver_models.dart';
 
 class OrganizerCard extends StatelessWidget {

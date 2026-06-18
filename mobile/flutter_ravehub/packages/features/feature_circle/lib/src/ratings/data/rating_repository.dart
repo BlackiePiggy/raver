@@ -29,23 +29,94 @@ class RatingRepository {
     );
   }
 
+  Future<WebRatingEvent> updateRatingEvent({
+    required String id,
+    required String name,
+    required String description,
+    String? imageUrl,
+  }) {
+    return _api.updateRatingEvent(
+      id: id,
+      name: name,
+      description: description,
+      imageUrl: imageUrl,
+    );
+  }
+
   Future<WebRatingEvent> fetchRatingEvent({required String id}) {
     return _api.fetchRatingEvent(id: id);
+  }
+
+  Future<ShareLinkPayload> resolveRatingEventShareLink({
+    required WebRatingEvent event,
+    String channel = 'system_share',
+  }) {
+    return _api.resolveRatingEventShareLink(event: event, channel: channel);
   }
 
   Future<List<WebRatingUnit>> fetchRatingUnits({required String ratingId}) {
     return _api.fetchRatingUnits(ratingId: ratingId);
   }
 
+  Future<WebRatingUnit> fetchRatingUnit({required String unitId}) {
+    return _api.fetchRatingUnit(unitId: unitId);
+  }
+
+  Future<ShareLinkPayload> resolveRatingUnitShareLink({
+    required String ratingId,
+    required WebRatingUnit unit,
+    String channel = 'system_share',
+  }) {
+    return _api.resolveRatingUnitShareLink(
+      ratingId: ratingId,
+      unit: unit,
+      channel: channel,
+    );
+  }
+
   Future<WebRatingUnit> createRatingUnit({
     required String ratingId,
     required String name,
     required String djId,
+    String description = '',
+    String? imageUrl,
   }) {
     return _api.createRatingUnit(
       ratingId: ratingId,
       name: name,
       djId: djId,
+      description: description,
+      imageUrl: imageUrl,
+    );
+  }
+
+  Future<WebRatingUnit> updateRatingUnit({
+    required String unitId,
+    required String name,
+    required String description,
+    required String djId,
+    String? imageUrl,
+  }) {
+    return _api.updateRatingUnit(
+      unitId: unitId,
+      name: name,
+      description: description,
+      djId: djId,
+      imageUrl: imageUrl,
+    );
+  }
+
+  Future<String> uploadRatingImage({
+    required String localPath,
+    String? ratingEventId,
+    String? ratingUnitId,
+    String? usage,
+  }) {
+    return _api.uploadRatingImage(
+      localPath: localPath,
+      ratingEventId: ratingEventId,
+      ratingUnitId: ratingUnitId,
+      usage: usage,
     );
   }
 

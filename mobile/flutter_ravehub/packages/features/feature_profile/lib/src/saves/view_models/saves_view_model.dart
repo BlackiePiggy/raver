@@ -42,11 +42,10 @@ class SavesViewModel extends ChangeNotifier {
         ..addAll(page.items);
       _currentPage = 1;
       _totalPages = page.pagination?.totalPages ?? 1;
-      _phase = _saves.isEmpty
-          ? const LoadPhase.empty()
-          : LoadPhase.success(_saves);
+      _phase =
+          _saves.isEmpty ? const LoadPhase.empty() : LoadPhase.success(_saves);
     } catch (e) {
-      _phase = LoadPhase.failure(e);
+      _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -62,11 +61,10 @@ class SavesViewModel extends ChangeNotifier {
         ..addAll(page.items);
       _currentPage = 1;
       _totalPages = page.pagination?.totalPages ?? 1;
-      _phase = _saves.isEmpty
-          ? const LoadPhase.empty()
-          : LoadPhase.success(_saves);
+      _phase =
+          _saves.isEmpty ? const LoadPhase.empty() : LoadPhase.success(_saves);
     } catch (e) {
-      if (_saves.isEmpty) _phase = LoadPhase.failure(e);
+      if (_saves.isEmpty) _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }

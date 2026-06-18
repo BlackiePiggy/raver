@@ -73,4 +73,16 @@ class NotificationRepository {
   }) {
     return _api.markAsRead(category: category, ids: ids);
   }
+
+  Future<void> markFollowedEventRead({required String itemId}) {
+    return _api.markFollowedEventRead(itemId: itemId);
+  }
+
+  Future<void> markFollowedDJRead({required String itemId}) {
+    return _api.markFollowedDJRead(itemId: itemId);
+  }
+
+  Future<void> markFollowedBrandRead({required String itemId}) {
+    return _api.markFollowedBrandRead(itemId: itemId);
+  }
 }

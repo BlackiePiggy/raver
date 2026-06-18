@@ -83,6 +83,22 @@ class RaverTypography {
     );
   }
 
+  /// Material-style medium body alias.
+  static TextStyle bodyMedium({
+    double size = 14,
+    Color? color,
+    FontWeight weight = FontWeight.w400,
+  }) =>
+      body(size: size, color: color, weight: weight);
+
+  /// Material-style small headline alias.
+  static TextStyle headlineSmall({
+    double size = 24,
+    Color? color,
+    FontWeight weight = FontWeight.w700,
+  }) =>
+      headline(size: size, color: color, weight: weight);
+
   /// Small secondary labels and timestamps.
   static TextStyle caption({
     double size = 12,

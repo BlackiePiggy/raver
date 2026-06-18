@@ -26,6 +26,7 @@ export 'src/widgets/raver_floating_tab_bar.dart';
 export 'src/widgets/raver_navigation_chrome.dart';
 export 'src/widgets/raver_scrollable_tab_pager.dart';
 export 'src/widgets/raver_segmented_control.dart';
+export 'src/widgets/raver_tab_reselection_scope.dart';
 export 'src/widgets/remote_cover_image.dart';
 export 'src/widgets/report_sheet.dart';
 export 'src/widgets/share_card_generator.dart';

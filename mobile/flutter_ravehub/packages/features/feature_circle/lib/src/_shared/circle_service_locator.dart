@@ -10,10 +10,13 @@ import '../ids/data/circle_id_repository.dart';
 import '../ratings/data/rating_api.dart';
 import '../ratings/data/rating_repository.dart';
 
+typedef CurrentUserIdProvider = String? Function();
+
 class CircleServiceLocator {
   CircleServiceLocator._();
 
   static Dio? _dio;
+  static CurrentUserIdProvider? _currentUserIdProvider;
 
   static Dio get dio {
     _dio ??= Dio(
@@ -29,7 +32,23 @@ class CircleServiceLocator {
 
   static void configureDio(Dio dio) {
     _dio = dio;
+    _feedApi = null;
+    _feedRepository = null;
+    _squadApi = null;
+    _squadRepository = null;
+    _circleIdApi = null;
+    _circleIdRepository = null;
+    _ratingApi = null;
+    _ratingRepository = null;
   }
+
+  static void configureCurrentUserIdProvider(
+    CurrentUserIdProvider provider,
+  ) {
+    _currentUserIdProvider = provider;
+  }
+
+  static String? get currentUserId => _currentUserIdProvider?.call();
 
   // Feed
   static FeedApi? _feedApi;

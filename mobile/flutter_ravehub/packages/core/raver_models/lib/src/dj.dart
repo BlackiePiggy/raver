@@ -36,53 +36,55 @@ class WebDJ {
   });
 
   factory WebDJ.fromJson(Map<String, dynamic> json) => WebDJ(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        nameI18n: json['nameI18n'] != null
-            ? WebBiText.fromJson(json['nameI18n'] as Map<String, dynamic>)
-            : null,
-        aliases: (json['aliases'] as List<dynamic>?)
-            ?.map((e) => e as String)
-            .toList(),
-        genres: (json['genres'] as List<dynamic>?)
-            ?.map((e) => e as String)
-            .toList(),
-        genreBindings: (json['genreBindings'] as List<dynamic>?)
-            ?.map((e) =>
-                WebGenreTagBinding.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        bio: json['bio'] as String,
-        avatarUrl: json['avatarUrl'] as String,
-        country: json['country'] as String,
-        instagramUrl: json['instagramUrl'] as String,
-        soundcloudUrl: json['soundcloudUrl'] as String,
-        spotifyUrl: json['spotifyUrl'] as String,
-        honors: (json['honors'] as List<dynamic>?)
-            ?.map((e) => WebDJHonor.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        followerCount: json['followerCount'] as int,
-        isFollowing: json['isFollowing'] as bool?,
-      );
+    id: json['id'] as String,
+    name: json['name'] as String,
+    nameI18n: json['nameI18n'] != null
+        ? WebBiText.fromJson(json['nameI18n'] as Map<String, dynamic>)
+        : null,
+    aliases: (json['aliases'] as List<dynamic>?)
+        ?.map((e) => e as String)
+        .toList(),
+    genres: (json['genres'] as List<dynamic>?)
+        ?.map((e) => e as String)
+        .toList(),
+    genreBindings: (json['genreBindings'] as List<dynamic>?)
+        ?.map((e) => WebGenreTagBinding.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    bio: json['bio'] as String? ?? '',
+    avatarUrl:
+        json['avatarUrl'] as String? ??
+        json['avatarMediumUrl'] as String? ??
+        json['avatarSmallUrl'] as String? ??
+        '',
+    country: json['country'] as String? ?? '',
+    instagramUrl: json['instagramUrl'] as String? ?? '',
+    soundcloudUrl: json['soundcloudUrl'] as String? ?? '',
+    spotifyUrl: json['spotifyUrl'] as String? ?? '',
+    honors: (json['honors'] as List<dynamic>?)
+        ?.map((e) => WebDJHonor.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    followerCount: json['followerCount'] as int? ?? 0,
+    isFollowing: json['isFollowing'] as bool?,
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        if (nameI18n != null) 'nameI18n': nameI18n!.toJson(),
-        if (aliases != null) 'aliases': aliases,
-        if (genres != null) 'genres': genres,
-        if (genreBindings != null)
-          'genreBindings': genreBindings!.map((e) => e.toJson()).toList(),
-        'bio': bio,
-        'avatarUrl': avatarUrl,
-        'country': country,
-        'instagramUrl': instagramUrl,
-        'soundcloudUrl': soundcloudUrl,
-        'spotifyUrl': spotifyUrl,
-        if (honors != null)
-          'honors': honors!.map((e) => e.toJson()).toList(),
-        'followerCount': followerCount,
-        if (isFollowing != null) 'isFollowing': isFollowing,
-      };
+    'id': id,
+    'name': name,
+    if (nameI18n != null) 'nameI18n': nameI18n!.toJson(),
+    if (aliases != null) 'aliases': aliases,
+    if (genres != null) 'genres': genres,
+    if (genreBindings != null)
+      'genreBindings': genreBindings!.map((e) => e.toJson()).toList(),
+    'bio': bio,
+    'avatarUrl': avatarUrl,
+    'country': country,
+    'instagramUrl': instagramUrl,
+    'soundcloudUrl': soundcloudUrl,
+    'spotifyUrl': spotifyUrl,
+    if (honors != null) 'honors': honors!.map((e) => e.toJson()).toList(),
+    'followerCount': followerCount,
+    if (isFollowing != null) 'isFollowing': isFollowing,
+  };
 
   WebDJ copyWith({
     String? id,
@@ -100,24 +102,23 @@ class WebDJ {
     List<WebDJHonor>? honors,
     int? followerCount,
     bool? isFollowing,
-  }) =>
-      WebDJ(
-        id: id ?? this.id,
-        name: name ?? this.name,
-        nameI18n: nameI18n ?? this.nameI18n,
-        aliases: aliases ?? this.aliases,
-        genres: genres ?? this.genres,
-        genreBindings: genreBindings ?? this.genreBindings,
-        bio: bio ?? this.bio,
-        avatarUrl: avatarUrl ?? this.avatarUrl,
-        country: country ?? this.country,
-        instagramUrl: instagramUrl ?? this.instagramUrl,
-        soundcloudUrl: soundcloudUrl ?? this.soundcloudUrl,
-        spotifyUrl: spotifyUrl ?? this.spotifyUrl,
-        honors: honors ?? this.honors,
-        followerCount: followerCount ?? this.followerCount,
-        isFollowing: isFollowing ?? this.isFollowing,
-      );
+  }) => WebDJ(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    nameI18n: nameI18n ?? this.nameI18n,
+    aliases: aliases ?? this.aliases,
+    genres: genres ?? this.genres,
+    genreBindings: genreBindings ?? this.genreBindings,
+    bio: bio ?? this.bio,
+    avatarUrl: avatarUrl ?? this.avatarUrl,
+    country: country ?? this.country,
+    instagramUrl: instagramUrl ?? this.instagramUrl,
+    soundcloudUrl: soundcloudUrl ?? this.soundcloudUrl,
+    spotifyUrl: spotifyUrl ?? this.spotifyUrl,
+    honors: honors ?? this.honors,
+    followerCount: followerCount ?? this.followerCount,
+    isFollowing: isFollowing ?? this.isFollowing,
+  );
 
   @override
   bool operator ==(Object other) {
@@ -144,22 +145,18 @@ class WebDJHonor {
   });
 
   factory WebDJHonor.fromJson(Map<String, dynamic> json) => WebDJHonor(
-        title: json['title'] as String,
-        year: json['year'] as int,
-        rank: json['rank'] as int,
-      );
+    title: json['title'] as String,
+    year: json['year'] as int,
+    rank: json['rank'] as int,
+  );
 
-  Map<String, dynamic> toJson() => {
-        'title': title,
-        'year': year,
-        'rank': rank,
-      };
+  Map<String, dynamic> toJson() => {'title': title, 'year': year, 'rank': rank};
 
   WebDJHonor copyWith({String? title, int? year, int? rank}) => WebDJHonor(
-        title: title ?? this.title,
-        year: year ?? this.year,
-        rank: rank ?? this.rank,
-      );
+    title: title ?? this.title,
+    year: year ?? this.year,
+    rank: rank ?? this.rank,
+  );
 
   @override
   bool operator ==(Object other) {
@@ -196,10 +193,10 @@ class WebGenreTagBinding {
       );
 
   Map<String, dynamic> toJson() => {
-        'genreId': genreId,
-        'label': label,
-        'path': path,
-      };
+    'genreId': genreId,
+    'label': label,
+    'path': path,
+  };
 
   WebGenreTagBinding copyWith({String? genreId, String? label, String? path}) =>
       WebGenreTagBinding(
@@ -244,10 +241,10 @@ class DJExactMatchItem {
       );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'avatarUrl': avatarUrl,
-      };
+    'id': id,
+    'name': name,
+    'avatarUrl': avatarUrl,
+  };
 
   DJExactMatchItem copyWith({String? id, String? name, String? avatarUrl}) =>
       DJExactMatchItem(
@@ -296,12 +293,12 @@ class SpotifyDJCandidate {
       );
 
   Map<String, dynamic> toJson() => {
-        'spotifyId': spotifyId,
-        'name': name,
-        'imageUrl': imageUrl,
-        'genres': genres,
-        'followers': followers,
-      };
+    'spotifyId': spotifyId,
+    'name': name,
+    'imageUrl': imageUrl,
+    'genres': genres,
+    'followers': followers,
+  };
 
   SpotifyDJCandidate copyWith({
     String? spotifyId,
@@ -309,14 +306,13 @@ class SpotifyDJCandidate {
     String? imageUrl,
     List<String>? genres,
     int? followers,
-  }) =>
-      SpotifyDJCandidate(
-        spotifyId: spotifyId ?? this.spotifyId,
-        name: name ?? this.name,
-        imageUrl: imageUrl ?? this.imageUrl,
-        genres: genres ?? this.genres,
-        followers: followers ?? this.followers,
-      );
+  }) => SpotifyDJCandidate(
+    spotifyId: spotifyId ?? this.spotifyId,
+    name: name ?? this.name,
+    imageUrl: imageUrl ?? this.imageUrl,
+    genres: genres ?? this.genres,
+    followers: followers ?? this.followers,
+  );
 
   @override
   bool operator ==(Object other) {
@@ -330,8 +326,7 @@ class SpotifyDJCandidate {
   int get hashCode => Object.hash(spotifyId, name);
 
   @override
-  String toString() =>
-      'SpotifyDJCandidate(spotifyId: $spotifyId, name: $name)';
+  String toString() => 'SpotifyDJCandidate(spotifyId: $spotifyId, name: $name)';
 }
 
 class DiscogsDJCandidate {
@@ -353,21 +348,20 @@ class DiscogsDJCandidate {
       );
 
   Map<String, dynamic> toJson() => {
-        'discogsId': discogsId,
-        'name': name,
-        'imageUrl': imageUrl,
-      };
+    'discogsId': discogsId,
+    'name': name,
+    'imageUrl': imageUrl,
+  };
 
   DiscogsDJCandidate copyWith({
     String? discogsId,
     String? name,
     String? imageUrl,
-  }) =>
-      DiscogsDJCandidate(
-        discogsId: discogsId ?? this.discogsId,
-        name: name ?? this.name,
-        imageUrl: imageUrl ?? this.imageUrl,
-      );
+  }) => DiscogsDJCandidate(
+    discogsId: discogsId ?? this.discogsId,
+    name: name ?? this.name,
+    imageUrl: imageUrl ?? this.imageUrl,
+  );
 
   @override
   bool operator ==(Object other) {
@@ -381,6 +375,5 @@ class DiscogsDJCandidate {
   int get hashCode => Object.hash(discogsId, name);
 
   @override
-  String toString() =>
-      'DiscogsDJCandidate(discogsId: $discogsId, name: $name)';
+  String toString() => 'DiscogsDJCandidate(discogsId: $discogsId, name: $name)';
 }

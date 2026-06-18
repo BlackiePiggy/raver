@@ -94,8 +94,7 @@ List<RouteBase> buildDiscoverDetailRoutes() => [
       ),
       GoRoute(
         path: '/djs/:djId/edit',
-        builder: (BuildContext context, GoRouterState state) =>
-            DjEditorScreen(
+        builder: (BuildContext context, GoRouterState state) => DjEditorScreen(
           djId: state.pathParameters['djId'],
           djApi: DiscoverServiceLocator.djApi,
         ),
@@ -108,14 +107,21 @@ List<RouteBase> buildDiscoverDetailRoutes() => [
             SetEditorScreen(setApi: DiscoverServiceLocator.setApi),
       ),
       GoRoute(
+        path: '/sets/:setId/tracklist/edit',
+        builder: (BuildContext context, GoRouterState state) => SetEditorScreen(
+          setId: state.pathParameters['setId'],
+          setApi: DiscoverServiceLocator.setApi,
+          openTracklistOnLoad: true,
+        ),
+      ),
+      GoRoute(
         path: '/sets/:setId',
         builder: (BuildContext context, GoRouterState state) =>
             SetDetailScreen(setId: state.pathParameters['setId']!),
       ),
       GoRoute(
         path: '/sets/:setId/edit',
-        builder: (BuildContext context, GoRouterState state) =>
-            SetEditorScreen(
+        builder: (BuildContext context, GoRouterState state) => SetEditorScreen(
           setId: state.pathParameters['setId'],
           setApi: DiscoverServiceLocator.setApi,
         ),
@@ -169,6 +175,7 @@ List<RouteBase> buildDiscoverDetailRoutes() => [
         builder: (BuildContext context, GoRouterState state) =>
             RankingBoardDetailScreen(
           boardId: state.pathParameters['boardId']!,
+          year: int.tryParse(state.uri.queryParameters['year'] ?? ''),
         ),
       ),
       GoRoute(
@@ -177,6 +184,7 @@ List<RouteBase> buildDiscoverDetailRoutes() => [
             RankingEntryDetailScreen(
           boardId: state.pathParameters['boardId']!,
           entryId: state.pathParameters['entryId']!,
+          year: int.tryParse(state.uri.queryParameters['year'] ?? ''),
         ),
       ),
 

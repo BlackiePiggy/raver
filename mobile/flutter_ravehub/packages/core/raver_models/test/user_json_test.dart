@@ -226,6 +226,39 @@ void main() {
         expect(profile.avatarUrl, isNull);
         expect(profile.bio, isNull);
       });
+
+      test('parses iOS/live aliases for profile counts and media fields', () {
+        final json = <String, dynamic>{
+          'id': 'p3',
+          'username': 'user3',
+          'display_name': 'User 3',
+          'avatar_url': 'https://cdn.example.com/avatar.jpg',
+          'background_url': 'https://cdn.example.com/bg.jpg',
+          'follower_count': '1200',
+          'following_count': 45.0,
+          'friend_count': '7',
+          'post_count': '31',
+          'age_band': '25-34',
+          'is_following': false,
+          'is_blocked': true,
+        };
+
+        final profile = UserProfile.fromJson(json);
+
+        expect(profile.displayName, equals('User 3'));
+        expect(profile.avatarUrl, equals('https://cdn.example.com/avatar.jpg'));
+        expect(
+          profile.backgroundUrl,
+          equals('https://cdn.example.com/bg.jpg'),
+        );
+        expect(profile.followerCount, equals(1200));
+        expect(profile.followingCount, equals(45));
+        expect(profile.friendCount, equals(7));
+        expect(profile.postCount, equals(31));
+        expect(profile.ageBand, equals('25-34'));
+        expect(profile.isFollowing, isFalse);
+        expect(profile.isBlocked, isTrue);
+      });
     });
   });
 

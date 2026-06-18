@@ -52,6 +52,13 @@ class SquadRepository {
     return _api.deleteSquad(id: id);
   }
 
+  Future<String> uploadSquadAvatar({
+    required String squadId,
+    required String localPath,
+  }) {
+    return _api.uploadSquadAvatar(squadId: squadId, localPath: localPath);
+  }
+
   Future<List<SquadMemberProfile>> fetchMembers({required String squadId}) {
     return _api.fetchMembers(squadId: squadId);
   }

@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_models/raver_models.dart';
+import 'package:raver_platform/raver_platform.dart';
 
 import '../_shared/profile_service_locator.dart';
 import 'view_models/checkin_view_model.dart';
+import 'widgets/checkin_share_card.dart';
 
 /// Screen listing the current user's event check-ins.
 class MyCheckinsScreen extends StatefulWidget {
@@ -18,6 +22,7 @@ class MyCheckinsScreen extends StatefulWidget {
 class _MyCheckinsScreenState extends State<MyCheckinsScreen> {
   late final CheckinViewModel _viewModel;
   final ScrollController _scrollController = ScrollController();
+  bool _isSharing = false;
 
   @override
   void initState() {
@@ -50,6 +55,7 @@ class _MyCheckinsScreenState extends State<MyCheckinsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = context.raver;
+    final overview = _viewModel.overview;
 
     return Scaffold(
       appBar: AppBar(
@@ -58,6 +64,21 @@ class _MyCheckinsScreenState extends State<MyCheckinsScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
+        actions: [
+          if (overview != null)
+            IconButton(
+              icon: _isSharing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator.adaptive(
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(Icons.ios_share_outlined),
+              onPressed: _isSharing ? null : () => unawaited(_share(overview)),
+            ),
+        ],
       ),
       body: LoadPhaseBuilder<MyCheckinsOverviewResponse>(
         phase: _viewModel.phase,
@@ -73,6 +94,44 @@ class _MyCheckinsScreenState extends State<MyCheckinsScreen> {
         onSuccess: (overview) => _buildContent(context, theme, overview),
       ),
     );
+  }
+
+  Future<void> _share(MyCheckinsOverviewResponse overview) async {
+    if (_isSharing) return;
+    setState(() => _isSharing = true);
+    const fallbackUrl = 'https://ravehub.top/profile/checkins';
+    try {
+      final payload =
+          await ProfileServiceLocator.checkinApi.resolveMyCheckinsShareLink(
+        overview: overview,
+        channel: 'system_share',
+      );
+      final shareUrl = payload.shortUrl.isNotEmpty
+          ? payload.shortUrl
+          : (payload.url.isNotEmpty ? payload.url : fallbackUrl);
+      final stats = overview.stats;
+      final bytes = await ShareCardGenerator.capture(
+        card: CheckinShareCard(
+          title: lt('我的 RaveHub 签到', 'My RaveHub Check-ins', '私のRaveHubチェックイン'),
+          totalLabel: '${stats.totalCheckins} ${lt("总签到", "total", "合計")}',
+          eventsLabel: '${stats.uniqueEvents} ${lt("活动", "events", "イベント")}',
+          djsLabel: '${stats.uniqueDJs} ${lt("DJ", "DJs", "DJ")}',
+          daysLabel: '${stats.totalDays} ${lt("天数", "days", "日数")}',
+          shortUrl: shareUrl,
+        ),
+        size: const Size(390, 520),
+      );
+      await ShareService.shareBytes(
+        bytes,
+        fileName: 'ravehub-my-checkins.png',
+        mimeType: 'image/png',
+        text: shareUrl,
+      );
+    } catch (_) {
+      await ShareService.shareUrl(fallbackUrl, subject: 'RaveHub Check-ins');
+    } finally {
+      if (mounted) setState(() => _isSharing = false);
+    }
   }
 
   Widget _buildContent(
@@ -121,8 +180,7 @@ class _MyCheckinsScreenState extends State<MyCheckinsScreen> {
     );
   }
 
-  Widget _buildStatsCard(
-      RaverThemeData theme, MyCheckinsOverviewStats stats) {
+  Widget _buildStatsCard(RaverThemeData theme, MyCheckinsOverviewStats stats) {
     return GlassCard(
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -179,8 +237,8 @@ class _MyCheckinsScreenState extends State<MyCheckinsScreen> {
               children: [
                 // Year header
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: theme.accent.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
@@ -321,8 +379,8 @@ class _MyCheckinsScreenState extends State<MyCheckinsScreen> {
         children: [
           Expanded(
             child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(12)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(12)),
               child: checkin.eventCoverUrl.isNotEmpty
                   ? RemoteCoverImage(
                       url: checkin.eventCoverUrl,
@@ -331,8 +389,7 @@ class _MyCheckinsScreenState extends State<MyCheckinsScreen> {
                     )
                   : Container(
                       color: theme.cardBorder,
-                      child:
-                          Icon(Icons.event, color: theme.secondaryText),
+                      child: Icon(Icons.event, color: theme.secondaryText),
                     ),
             ),
           ),
@@ -354,8 +411,7 @@ class _MyCheckinsScreenState extends State<MyCheckinsScreen> {
                 const SizedBox(height: 2),
                 Text(
                   checkin.attendedAt,
-                  style: RaverTypography.caption(
-                      color: theme.secondaryText),
+                  style: RaverTypography.caption(color: theme.secondaryText),
                 ),
               ],
             ),

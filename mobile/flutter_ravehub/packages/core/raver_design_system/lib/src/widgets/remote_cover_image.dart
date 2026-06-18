@@ -1,7 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/raver_theme.dart';
+import 'remote_cover_image_web_stub.dart'
+    if (dart.library.html) 'remote_cover_image_web.dart';
 
 /// A cached network image widget with Alibaba Cloud OSS URL processing.
 ///
@@ -56,13 +59,20 @@ class RemoteCoverImage extends StatelessWidget {
     // Already has processing parameters.
     if (rawUrl.contains('x-oss-process=')) return rawUrl;
 
+    final hasTargetWidth = targetWidth != null && targetWidth.isFinite;
+    final hasTargetHeight = targetHeight != null && targetHeight.isFinite;
+
+    if (!hasTargetWidth && !hasTargetHeight) {
+      return rawUrl;
+    }
+
     final buffer = StringBuffer(rawUrl);
     buffer.write('?x-oss-process=image/resize');
 
-    if (targetWidth != null) {
+    if (hasTargetWidth) {
       buffer.write(',w_${targetWidth.toInt()}');
     }
-    if (targetHeight != null) {
+    if (hasTargetHeight) {
       buffer.write(',h_${targetHeight.toInt()}');
     }
 
@@ -79,9 +89,10 @@ class RemoteCoverImage extends StatelessWidget {
 
     // Compute physical pixel dimensions for the OSS resize.
     final physicalWidth =
-        width != null ? (width! * devicePixelRatio) : null;
-    final physicalHeight =
-        height != null ? (height! * devicePixelRatio) : null;
+        width != null && width!.isFinite ? (width! * devicePixelRatio) : null;
+    final physicalHeight = height != null && height!.isFinite
+        ? (height! * devicePixelRatio)
+        : null;
 
     final processedUrl = processOssUrl(
       url,
@@ -95,29 +106,37 @@ class RemoteCoverImage extends StatelessWidget {
       color: placeholderColor ?? theme.cardBorder,
     );
 
-    Widget image = CachedNetworkImage(
-      imageUrl: processedUrl,
+    final error = Container(
       width: width,
       height: height,
-      fit: fit,
-      placeholder: (_, __) => placeholder,
-      errorWidget: (_, __, ___) => Container(
-        width: width,
-        height: height,
-        color: theme.cardBorder,
-        child: Icon(
-          Icons.broken_image_outlined,
-          color: theme.secondaryText,
-          size: 24,
-        ),
+      color: theme.cardBorder,
+      child: Icon(
+        Icons.broken_image_outlined,
+        color: theme.secondaryText,
+        size: 24,
       ),
     );
 
+    Widget image = kIsWeb
+        ? buildWebRemoteCoverImage(
+            processedUrl,
+            width: width,
+            height: height,
+            fit: fit,
+          )
+        : CachedNetworkImage(
+            imageUrl: processedUrl,
+            width: width,
+            height: height,
+            memCacheWidth: physicalWidth?.round(),
+            memCacheHeight: physicalHeight?.round(),
+            fit: fit,
+            placeholder: (_, __) => placeholder,
+            errorWidget: (_, __, ___) => error,
+          );
+
     if (borderRadius != null) {
-      image = ClipRRect(
-        borderRadius: borderRadius!,
-        child: image,
-      );
+      image = ClipRRect(borderRadius: borderRadius!, child: image);
     }
 
     return image;

@@ -53,7 +53,7 @@ class LearnFestival {
         imageUrls: (json['imageUrls'] as List<dynamic>?)
             ?.map((e) => e as String)
             .toList(),
-        followerCount: json['followerCount'] as int,
+        followerCount: json['followerCount'] as int? ?? 0,
         isFollowing: json['isFollowing'] as bool?,
       );
 
@@ -104,9 +104,7 @@ class LearnFestival {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is LearnFestival &&
-        other.id == id &&
-        other.name == name;
+    return other is LearnFestival && other.id == id && other.name == name;
   }
 
   @override
@@ -130,22 +128,14 @@ class LearnFestivalLink {
 
   factory LearnFestivalLink.fromJson(Map<String, dynamic> json) =>
       LearnFestivalLink(
-        type: json['type'] as String,
-        url: json['url'] as String,
-        label: json['label'] as String,
+        type: json['type'] as String? ?? json['icon'] as String? ?? '',
+        url: json['url'] as String? ?? '',
+        label: json['label'] as String? ?? json['title'] as String? ?? '',
       );
 
-  Map<String, dynamic> toJson() => {
-        'type': type,
-        'url': url,
-        'label': label,
-      };
+  Map<String, dynamic> toJson() => {'type': type, 'url': url, 'label': label};
 
-  LearnFestivalLink copyWith({
-    String? type,
-    String? url,
-    String? label,
-  }) =>
+  LearnFestivalLink copyWith({String? type, String? url, String? label}) =>
       LearnFestivalLink(
         type: type ?? this.type,
         url: url ?? this.url,
@@ -155,9 +145,7 @@ class LearnFestivalLink {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is LearnFestivalLink &&
-        other.type == type &&
-        other.url == url;
+    return other is LearnFestivalLink && other.type == type && other.url == url;
   }
 
   @override
@@ -203,8 +191,14 @@ class LearnLabel {
                     LearnLabelFounder.fromJson(e as Map<String, dynamic>))
                 .toList()
             : null,
-        imageUrl: json['imageUrl'] as String,
-        websiteUrl: json['websiteUrl'] as String,
+        imageUrl: json['imageUrl'] as String? ??
+            json['avatarUrl'] as String? ??
+            json['logoUrl'] as String? ??
+            '',
+        websiteUrl: json['websiteUrl'] as String? ??
+            json['officialWebsiteUrl'] as String? ??
+            json['profileUrl'] as String? ??
+            '',
       );
 
   Map<String, dynamic> toJson() => {
@@ -243,47 +237,32 @@ class LearnLabel {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is LearnLabel &&
-        other.id == id &&
-        other.name == name;
+    return other is LearnLabel && other.id == id && other.name == name;
   }
 
   @override
   int get hashCode => Object.hash(id, name);
 
   @override
-  String toString() =>
-      'LearnLabel(id: $id, name: $name, slug: $slug)';
+  String toString() => 'LearnLabel(id: $id, name: $name, slug: $slug)';
 }
 
 class LearnLabelFounder {
   final String name;
   final String djId;
 
-  const LearnLabelFounder({
-    required this.name,
-    required this.djId,
-  });
+  const LearnLabelFounder({required this.name, required this.djId});
 
   factory LearnLabelFounder.fromJson(Map<String, dynamic> json) =>
       LearnLabelFounder(
         name: json['name'] as String,
-        djId: json['djId'] as String,
+        djId: json['djId'] as String? ?? '',
       );
 
-  Map<String, dynamic> toJson() => {
-        'name': name,
-        'djId': djId,
-      };
+  Map<String, dynamic> toJson() => {'name': name, 'djId': djId};
 
-  LearnLabelFounder copyWith({
-    String? name,
-    String? djId,
-  }) =>
-      LearnLabelFounder(
-        name: name ?? this.name,
-        djId: djId ?? this.djId,
-      );
+  LearnLabelFounder copyWith({String? name, String? djId}) =>
+      LearnLabelFounder(name: name ?? this.name, djId: djId ?? this.djId);
 
   @override
   bool operator ==(Object other) {
@@ -311,25 +290,19 @@ class RankingBoard {
     required this.years,
   });
 
-  factory RankingBoard.fromJson(Map<String, dynamic> json) => RankingBoard(
-        id: json['id'] as String,
-        title: json['title'] as String,
-        years: (json['years'] as List<dynamic>)
-            .map((e) => e as int)
-            .toList(),
-      );
+  factory RankingBoard.fromJson(Map<String, dynamic> json) {
+    final id = _rankingString(json, ['id', 'boardId', '_id', 'slug']);
+    return RankingBoard(
+      id: id,
+      title:
+          _rankingString(json, ['title', 'name', 'displayName'], fallback: id),
+      years: _rankingInts(json, ['years', 'availableYears']),
+    );
+  }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'years': years,
-      };
+  Map<String, dynamic> toJson() => {'id': id, 'title': title, 'years': years};
 
-  RankingBoard copyWith({
-    String? id,
-    String? title,
-    List<int>? years,
-  }) =>
+  RankingBoard copyWith({String? id, String? title, List<int>? years}) =>
       RankingBoard(
         id: id ?? this.id,
         title: title ?? this.title,
@@ -339,9 +312,7 @@ class RankingBoard {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is RankingBoard &&
-        other.id == id &&
-        other.title == title;
+    return other is RankingBoard && other.id == id && other.title == title;
   }
 
   @override
@@ -364,15 +335,18 @@ class RankingBoardDetail {
     required this.entries,
   });
 
-  factory RankingBoardDetail.fromJson(Map<String, dynamic> json) =>
-      RankingBoardDetail(
-        id: json['id'] as String,
-        title: json['title'] as String,
-        year: json['year'] as int,
-        entries: (json['entries'] as List<dynamic>? ?? [])
-            .map((e) => RankingEntry.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
+  factory RankingBoardDetail.fromJson(Map<String, dynamic> json) {
+    final id = _rankingString(json, ['id', 'boardId', '_id', 'slug']);
+    return RankingBoardDetail(
+      id: id,
+      title:
+          _rankingString(json, ['title', 'name', 'displayName'], fallback: id),
+      year: _rankingInt(json, ['year', 'selectedYear']),
+      entries: _rankingObjects(json, ['entries', 'items', 'rankings'])
+          .map(RankingEntry.fromJson)
+          .toList(),
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -397,9 +371,7 @@ class RankingBoardDetail {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is RankingBoardDetail &&
-        other.id == id &&
-        other.year == year;
+    return other is RankingBoardDetail && other.id == id && other.year == year;
   }
 
   @override
@@ -427,14 +399,33 @@ class RankingEntry {
     this.festivalId,
   });
 
-  factory RankingEntry.fromJson(Map<String, dynamic> json) => RankingEntry(
-        rank: json['rank'] as int,
-        name: json['name'] as String,
-        delta: json['delta'] as int?,
-        djId: json['djId'] as String?,
-        djAvatarUrl: json['djAvatarUrl'] as String?,
-        festivalId: json['festivalId'] as String?,
-      );
+  factory RankingEntry.fromJson(Map<String, dynamic> json) {
+    final dj = json['dj'];
+    final festival = json['festival'];
+    return RankingEntry(
+      rank: _rankingInt(json, ['rank', 'position', 'index']),
+      name: _rankingString(json, ['name', 'title', 'displayName']),
+      delta: _rankingOptionalInt(json, ['delta', 'rankDelta', 'change']),
+      djId: _rankingOptionalString(json, ['djId', 'djID']) ??
+          (dj is Map<String, dynamic>
+              ? _rankingOptionalString(dj, ['id', 'djId', '_id'])
+              : null),
+      djAvatarUrl: _rankingOptionalString(
+            json,
+            ['djAvatarUrl', 'djAvatarURL', 'avatarUrl', 'avatarURL'],
+          ) ??
+          (dj is Map<String, dynamic>
+              ? _rankingOptionalString(
+                  dj,
+                  ['avatarSmallUrl', 'avatarUrl', 'avatarURL'],
+                )
+              : null),
+      festivalId: _rankingOptionalString(json, ['festivalId', 'festivalID']) ??
+          (festival is Map<String, dynamic>
+              ? _rankingOptionalString(festival, ['id', 'festivalId', '_id'])
+              : null),
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'rank': rank,
@@ -465,15 +456,88 @@ class RankingEntry {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is RankingEntry &&
-        other.rank == rank &&
-        other.name == name;
+    return other is RankingEntry && other.rank == rank && other.name == name;
   }
 
   @override
   int get hashCode => Object.hash(rank, name);
 
   @override
-  String toString() =>
-      'RankingEntry(rank: $rank, name: $name, djId: $djId)';
+  String toString() => 'RankingEntry(rank: $rank, name: $name, djId: $djId)';
+}
+
+String _rankingString(
+  Map<String, dynamic> json,
+  List<String> keys, {
+  String fallback = '',
+}) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value == null) continue;
+    if (value is String) return value;
+    return value.toString();
+  }
+  return fallback;
+}
+
+String? _rankingOptionalString(Map<String, dynamic> json, List<String> keys) {
+  final value = _rankingString(json, keys);
+  return value.isEmpty ? null : value;
+}
+
+int _rankingInt(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+  }
+  return 0;
+}
+
+int? _rankingOptionalInt(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+  }
+  return null;
+}
+
+List<int> _rankingInts(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is List<dynamic>) {
+      return value
+          .map((e) {
+            if (e is int) return e;
+            if (e is num) return e.toInt();
+            if (e is String) return int.tryParse(e);
+            return null;
+          })
+          .whereType<int>()
+          .toList();
+    }
+  }
+  return const [];
+}
+
+List<Map<String, dynamic>> _rankingObjects(
+  Map<String, dynamic> json,
+  List<String> keys,
+) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is List<dynamic>) {
+      return value.whereType<Map<String, dynamic>>().toList();
+    }
+    if (value is Map<String, dynamic>) {
+      final nested = value['items'];
+      if (nested is List<dynamic>) {
+        return nested.whereType<Map<String, dynamic>>().toList();
+      }
+    }
+  }
+  return const [];
 }

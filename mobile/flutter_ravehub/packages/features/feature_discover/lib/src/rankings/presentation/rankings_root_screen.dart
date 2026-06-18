@@ -7,11 +7,33 @@ import 'package:raver_models/raver_models.dart';
 
 import 'ranking_view_model.dart';
 
-class RankingsRootScreen extends ConsumerWidget {
+class RankingsRootScreen extends ConsumerStatefulWidget {
   const RankingsRootScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RankingsRootScreen> createState() => _RankingsRootScreenState();
+}
+
+class _RankingsRootScreenState extends ConsumerState<RankingsRootScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: RaverMotion.normal,
+      curve: RaverMotion.curve,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(rankingsProvider);
 
     if (state.isLoading && state.boards.isEmpty) {
@@ -33,18 +55,23 @@ class RankingsRootScreen extends ConsumerWidget {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () => ref.read(rankingsProvider.notifier).loadRankings(),
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: state.boards.length,
-        itemBuilder: (context, index) {
-          final board = state.boards[index];
-          return _RankingBoardTile(
-            board: board,
-            onTap: () => context.push('/rankings/${board.id}'),
-          );
-        },
+    return RaverTabReselectionListener(
+      tabIndex: 0,
+      onReselected: _scrollToTop,
+      child: RefreshIndicator(
+        onRefresh: () => ref.read(rankingsProvider.notifier).loadRankings(),
+        child: ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemCount: state.boards.length,
+          itemBuilder: (context, index) {
+            final board = state.boards[index];
+            return _RankingBoardTile(
+              board: board,
+              onTap: () => context.push('/rankings/${board.id}'),
+            );
+          },
+        ),
       ),
     );
   }

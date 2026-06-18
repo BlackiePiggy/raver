@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:raver_platform/raver_platform.dart';
 
 import 'version_check_service.dart';
 
@@ -34,8 +34,7 @@ class UpdateDialog extends StatelessWidget {
     final info = await service.checkVersion();
     if (info == null || !context.mounted) return;
 
-    // TODO: replace with runtime version from package_info_plus
-    const currentVersion = '1.0.0';
+    final currentVersion = (await AppInfoService.getVersionInfo()).version;
 
     final isForced = VersionCheckService.isOlderThan(
       currentVersion,
@@ -81,9 +80,16 @@ class UpdateDialog extends StatelessWidget {
               child: const Text('Later'),
             ),
           FilledButton(
-            onPressed: () {
-              if (versionInfo.updateUrl != null) {
-                launchUrl(Uri.parse(versionInfo.updateUrl!));
+            onPressed: () async {
+              final url = versionInfo.updateUrl;
+              if (url == null) return;
+              try {
+                await UrlLauncherService.openExternalUrl(url);
+              } catch (_) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Unable to open update link.')),
+                );
               }
             },
             child: const Text('Update Now'),

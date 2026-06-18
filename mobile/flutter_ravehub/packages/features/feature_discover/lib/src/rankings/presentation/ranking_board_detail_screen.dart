@@ -5,30 +5,73 @@ import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_models/raver_models.dart';
+import 'package:raver_platform/raver_platform.dart';
 
+import '../data/ranking_api.dart';
 import 'ranking_view_model.dart';
 
 class RankingBoardDetailScreen extends ConsumerWidget {
-  const RankingBoardDetailScreen({super.key, required this.boardId});
+  const RankingBoardDetailScreen({super.key, required this.boardId, this.year});
 
   final String boardId;
+  final int? year;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(rankingDetailProvider(boardId));
+    final request = RankingDetailRequest(boardId: boardId, year: year);
+    final state = ref.watch(rankingDetailProvider(request));
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
           state.detail?.title ?? lt('排行榜', 'Rankings', 'ランキング'),
         ),
+        actions: [
+          IconButton(
+            tooltip: lt('分享', 'Share', '共有'),
+            icon: const Icon(Icons.share_outlined),
+            onPressed: state.detail == null
+                ? null
+                : () => _shareRankingBoard(context, ref, state.detail!),
+          ),
+        ],
       ),
-      body: _buildBody(context, ref, state),
+      body: _buildBody(context, ref, state, request),
     );
   }
 
+  Future<void> _shareRankingBoard(
+    BuildContext context,
+    WidgetRef ref,
+    RankingBoardDetail detail,
+  ) async {
+    final fallbackUrl =
+        'https://ravehub.top/ranking-board/${detail.id}?year=${detail.year}';
+    try {
+      final payload = await ref
+          .read(rankingApiProvider)
+          .resolveShareLink(detail: detail, channel: 'system_share');
+      final shareUrl = payload.shortUrl.isNotEmpty
+          ? payload.shortUrl
+          : (payload.url.isNotEmpty ? payload.url : fallbackUrl);
+      await ShareService.shareUrl(shareUrl, subject: detail.title);
+    } catch (e) {
+      await ShareService.shareUrl(fallbackUrl, subject: detail.title);
+      if (!context.mounted) return;
+      ToastBanner.show(
+        context,
+        message: lt('已使用备用链接分享', 'Shared fallback link', '予備リンクを共有しました'),
+        type: ToastType.info,
+      );
+    }
+  }
+
   Widget _buildBody(
-      BuildContext context, WidgetRef ref, RankingDetailState state) {
+    BuildContext context,
+    WidgetRef ref,
+    RankingDetailState state,
+    RankingDetailRequest request,
+  ) {
     if (state.isLoading) {
       return const Center(child: CircularProgressIndicator.adaptive());
     }
@@ -38,7 +81,7 @@ class RankingBoardDetailScreen extends ConsumerWidget {
         title: lt('加载失败', 'Failed to load', 'ロードに失敗しました'),
         description: state.error,
         onRetry: () =>
-            ref.read(rankingDetailProvider(boardId).notifier).retry(),
+            ref.read(rankingDetailProvider(request).notifier).retry(),
       );
     }
 
@@ -74,7 +117,11 @@ class RankingBoardDetailScreen extends ConsumerWidget {
             itemCount: detail.entries.length,
             itemBuilder: (context, index) {
               final entry = detail.entries[index];
-              return _RankingEntryTile(entry: entry);
+              return _RankingEntryTile(
+                boardId: detail.id,
+                year: detail.year,
+                entry: entry,
+              );
             },
           ),
         ),
@@ -84,69 +131,85 @@ class RankingBoardDetailScreen extends ConsumerWidget {
 }
 
 class _RankingEntryTile extends StatelessWidget {
-  const _RankingEntryTile({required this.entry});
+  const _RankingEntryTile({
+    required this.boardId,
+    required this.year,
+    required this.entry,
+  });
+
+  final String boardId;
+  final int year;
   final RankingEntry entry;
 
   @override
   Widget build(BuildContext context) {
     final isTopThree = entry.rank <= 3;
 
+    final entryId = Uri.encodeComponent(entry.djId ?? '${entry.rank}');
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
-      child: GlassCard(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        borderRadius: 14,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 36,
-              child: isTopThree
-                  ? Icon(
-                      Icons.emoji_events_rounded,
-                      color: _medalColor(entry.rank),
-                      size: 24,
-                    )
-                  : Text(
-                      '#${entry.rank}',
-                      style: RaverTypography.label(),
-                      textAlign: TextAlign.center,
+      child: InkWell(
+        onTap: () =>
+            context.push('/rankings/$boardId/entries/$entryId?year=$year'),
+        borderRadius: BorderRadius.circular(14),
+        child: GlassCard(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          borderRadius: 14,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 36,
+                child: isTopThree
+                    ? Icon(
+                        Icons.emoji_events_rounded,
+                        color: _medalColor(entry.rank),
+                        size: 24,
+                      )
+                    : Text(
+                        '#${entry.rank}',
+                        style: RaverTypography.label(),
+                        textAlign: TextAlign.center,
+                      ),
+              ),
+              const SizedBox(width: 12),
+              if (entry.djAvatarUrl != null)
+                ClipOval(
+                  child: CachedNetworkImage(
+                    imageUrl: entry.djAvatarUrl!,
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => const SkeletonShimmer(
+                      child: SkeletonCircle(size: 40),
                     ),
-            ),
-            const SizedBox(width: 12),
-            if (entry.djAvatarUrl != null)
-              ClipOval(
-                child: CachedNetworkImage(
-                  imageUrl: entry.djAvatarUrl!,
-                  width: 40,
-                  height: 40,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => const SkeletonShimmer(
-                    child: SkeletonCircle(size: 40),
-                  ),
-                  errorWidget: (_, __, ___) => CircleAvatar(
-                    radius: 20,
-                    child: Text(
-                      entry.name.isNotEmpty ? entry.name[0] : '?',
+                    errorWidget: (_, __, ___) => CircleAvatar(
+                      radius: 20,
+                      child: Text(
+                        entry.name.isNotEmpty ? entry.name[0] : '?',
+                      ),
                     ),
                   ),
+                )
+              else
+                CircleAvatar(
+                  radius: 20,
+                  child: Text(entry.name.isNotEmpty ? entry.name[0] : '?'),
                 ),
-              )
-            else
-              CircleAvatar(
-                radius: 20,
-                child: Text(entry.name.isNotEmpty ? entry.name[0] : '?'),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  entry.name,
+                  style: RaverTypography.title(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                entry.name,
-                style: RaverTypography.title(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (entry.delta != null) _DeltaBadge(delta: entry.delta!),
-          ],
+              if (entry.delta != null) _DeltaBadge(delta: entry.delta!),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right_rounded, size: 20),
+            ],
+          ),
         ),
       ),
     );

@@ -35,7 +35,11 @@ class ComposePostViewModel extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   bool get canSubmit =>
-      _text.trim().isNotEmpty && _phase != ComposePostPhase.uploading;
+      (_text.trim().isNotEmpty ||
+          _imagePaths.isNotEmpty ||
+          _videoPath != null) &&
+      _text.length <= maxTextLength &&
+      _phase != ComposePostPhase.uploading;
 
   int get maxTextLength => 500;
   int get maxImages => 9;
@@ -99,10 +103,19 @@ class ComposePostViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final mediaUrls = <String>[];
+      for (final path in _imagePaths) {
+        final uploaded = await _repository.uploadPostImage(path: path);
+        if (uploaded.url.isNotEmpty) mediaUrls.add(uploaded.url);
+      }
+      final videoPath = _videoPath;
+      if (videoPath != null) {
+        final uploaded = await _repository.uploadPostVideo(path: videoPath);
+        if (uploaded.url.isNotEmpty) mediaUrls.add(uploaded.url);
+      }
       await _repository.createPost(
         text: _text.trim(),
-        imagePaths: _imagePaths.isNotEmpty ? _imagePaths : null,
-        videoPath: _videoPath,
+        mediaUrls: mediaUrls,
         eventId: _eventId,
         location: _location,
       );

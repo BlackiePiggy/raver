@@ -85,13 +85,11 @@ class _SavesScreenState extends State<SavesScreen> {
               onEmpty: () => EmptyStateView(
                 icon: Icons.bookmark_outline,
                 title: lt('暂无收藏', 'No Saves', 'お気に入りなし'),
-                subtitle: lt('收藏的内容将显示在这里',
-                    'Saved content will appear here',
+                subtitle: lt('收藏的内容将显示在这里', 'Saved content will appear here',
                     '保存したコンテンツがここに表示されます'),
               ),
               onFailure: (error) => ErrorStateView(
-                title:
-                    lt('加载失败', 'Failed to Load', '読み込みに失敗しました'),
+                title: lt('加载失败', 'Failed to Load', '読み込みに失敗しました'),
                 error: error,
                 onRetry: _viewModel.load,
                 retryLabel: lt('重试', 'Retry', '再試行'),
@@ -111,8 +109,7 @@ class _SavesScreenState extends State<SavesScreen> {
       child: ListView.separated(
         controller: _scrollController,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount:
-            _viewModel.saves.length + (_viewModel.canLoadMore ? 1 : 0),
+        itemCount: _viewModel.saves.length + (_viewModel.canLoadMore ? 1 : 0),
         separatorBuilder: (_, __) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           if (index >= _viewModel.saves.length) {
@@ -131,6 +128,7 @@ class _SavesScreenState extends State<SavesScreen> {
               content: post.content,
               createdAt: post.createdAt,
               images: post.images ?? [],
+              videos: post.videos ?? [],
               likeCount: post.likeCount,
               commentCount: post.commentCount,
               shareCount: post.shareCount,

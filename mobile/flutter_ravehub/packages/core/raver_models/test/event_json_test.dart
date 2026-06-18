@@ -60,6 +60,45 @@ void main() {
         expect(event.schedule!.timezoneName, equals('EST'));
       });
 
+      test('parses iOS/live snake case date and timezone aliases', () {
+        final json = _minimalEventJson()
+          ..['event_type'] = 'warehouse'
+          ..['start_date'] = '2026-07-01T20:00:00+08:00'
+          ..['end_date'] = '2026-07-02T02:00:00+08:00'
+          ..remove('eventType')
+          ..remove('startDate')
+          ..remove('endDate')
+          ..['schedule'] = {
+            'mode': 'single',
+            'timezone_id': 'Asia/Shanghai',
+            'timezone_name': 'CST',
+          };
+
+        final event = WebEvent.fromJson(json);
+
+        expect(event.eventType, equals('warehouse'));
+        expect(event.startDate, equals('2026-07-01T20:00:00+08:00'));
+        expect(event.endDate, equals('2026-07-02T02:00:00+08:00'));
+        expect(event.schedule!.timezoneId, equals('Asia/Shanghai'));
+        expect(event.schedule!.timezoneName, equals('CST'));
+      });
+
+      test('parses iOS/live engagement count aliases', () {
+        final json = _minimalEventJson()
+          ..['favorite_count'] = '42'
+          ..['checkin_count'] = '7'
+          ..['is_favorited'] = true
+          ..remove('favoriteCount')
+          ..remove('checkinCount')
+          ..remove('isFavorited');
+
+        final event = WebEvent.fromJson(json);
+
+        expect(event.favoriteCount, equals(42));
+        expect(event.checkinCount, equals(7));
+        expect(event.isFavorited, isTrue);
+      });
+
       test('parses nested WebEventManualLocation', () {
         final json = _minimalEventJson()
           ..['location'] = {
@@ -138,6 +177,33 @@ void main() {
         expect(artist2.members![1].djId, equals('dj-ferry'));
       });
 
+      test('parses iOS/live lineup artist aliases', () {
+        final json = _minimalEventJson()
+          ..['lineup_artists'] = [
+            {
+              'artist_id': 'artist-001',
+              'name': 'Charlotte & Enrico',
+              'dj_id': 'dj-charlotte-enrico',
+              'avatar_url': 'https://cdn.example.com/b2b.jpg',
+              'is_b2b': true,
+              'b2b_members': [
+                {'artist_name': 'Charlotte de Witte', 'dj_id': 'dj-charlotte'},
+                {'artist_name': 'Enrico Sangiuliano', 'dj_id': 'dj-enrico'},
+              ],
+            },
+          ];
+
+        final event = WebEvent.fromJson(json);
+        final artist = event.lineupArtists!.single;
+
+        expect(artist.id, equals('artist-001'));
+        expect(artist.djId, equals('dj-charlotte-enrico'));
+        expect(artist.avatarUrl, equals('https://cdn.example.com/b2b.jpg'));
+        expect(artist.isB2B, isTrue);
+        expect(artist.members!.first.name, equals('Charlotte de Witte'));
+        expect(artist.members!.last.djId, equals('dj-enrico'));
+      });
+
       test('parses lineupSlots list', () {
         final json = _minimalEventJson()
           ..['lineupSlots'] = [
@@ -157,6 +223,30 @@ void main() {
         expect(event.lineupSlots!.length, equals(1));
         expect(event.lineupSlots![0].stageName, equals('Main Stage'));
         expect(event.lineupSlots![0].artistName, equals('Deadmau5'));
+      });
+
+      test('parses iOS/live lineup slot aliases', () {
+        final json = _minimalEventJson()
+          ..['lineup_slots'] = [
+            {
+              'slot_id': 'slot-001',
+              'stage_name': 'Warehouse',
+              'start_time': '2026-07-01T20:00:00+08:00',
+              'end_time': '2026-07-01T21:30:00+08:00',
+              'artist_name': 'HAAi',
+              'dj_id': 'dj-haai',
+            },
+          ];
+
+        final event = WebEvent.fromJson(json);
+        final slot = event.lineupSlots!.single;
+
+        expect(slot.id, equals('slot-001'));
+        expect(slot.stageName, equals('Warehouse'));
+        expect(slot.startTime, equals('2026-07-01T20:00:00+08:00'));
+        expect(slot.endTime, equals('2026-07-01T21:30:00+08:00'));
+        expect(slot.artistName, equals('HAAi'));
+        expect(slot.djId, equals('dj-haai'));
       });
 
       test('parses ticketTiers list', () {
@@ -328,6 +418,17 @@ void main() {
       final json = <String, dynamic>{'isFavorited': false};
       final status = EventFavoriteStatus.fromJson(json);
       expect(status.isFavorited, isFalse);
+    });
+
+    test('fromJson parses live favorite aliases', () {
+      expect(
+        EventFavoriteStatus.fromJson({'is_favorited': true}).isFavorited,
+        isTrue,
+      );
+      expect(
+        EventFavoriteStatus.fromJson({'favorited': true}).isFavorited,
+        isTrue,
+      );
     });
   });
 }

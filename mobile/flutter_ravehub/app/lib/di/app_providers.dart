@@ -39,6 +39,7 @@ final dioProvider = Provider<Dio>((ref) {
     tokenStore: tokenStore,
     refreshGate: refreshGate,
     languageProvider: () => appState.preferredLanguage.name,
+    onSessionExpired: appState.expireSession,
   );
 }, name: 'dio');
 
@@ -61,6 +62,6 @@ final appStateProvider = ChangeNotifierProvider<AppStateNotifier>(
 /// The application's [GoRouter] instance with auth guards and deep-link
 /// support.
 final routerProvider = Provider<GoRouter>(
-  (ref) => createRouter(ref),
+  (ref) => createRouter(ref, ref.watch(appStateProvider)),
   name: 'router',
 );

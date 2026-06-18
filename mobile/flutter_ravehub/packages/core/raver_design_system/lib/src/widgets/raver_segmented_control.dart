@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:raver_platform/raver_platform.dart';
 
 import '../theme/raver_motion.dart';
 import '../theme/raver_theme.dart';
@@ -37,6 +40,13 @@ class RaverSegmentedControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.raver;
+
+    void handleSelection(int index) {
+      if (index != selectedIndex) {
+        unawaited(HapticService.selectionClick());
+      }
+      onChanged(index);
+    }
 
     return Container(
       height: height,
@@ -79,7 +89,7 @@ class RaverSegmentedControl extends StatelessWidget {
                   return Expanded(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: () => onChanged(index),
+                      onTap: () => handleSelection(index),
                       child: Center(
                         child: AnimatedDefaultTextStyle(
                           duration: RaverMotion.fast,

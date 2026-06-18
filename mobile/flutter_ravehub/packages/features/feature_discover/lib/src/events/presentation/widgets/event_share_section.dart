@@ -9,10 +9,12 @@ class EventShareSection extends StatelessWidget {
     super.key,
     required this.eventId,
     required this.eventName,
+    this.onShare,
   });
 
   final String eventId;
   final String eventName;
+  final VoidCallback? onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -21,13 +23,14 @@ class EventShareSection extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: GestureDetector(
-        onTap: () {
-          final url = 'https://ravehub.top/events/$eventId';
-          ShareService.shareUrl(
-            url,
-            subject: eventName,
-          );
-        },
+        onTap: onShare ??
+            () {
+              final url = 'https://ravehub.top/events/$eventId';
+              ShareService.shareUrl(
+                url,
+                subject: eventName,
+              );
+            },
         child: Container(
           width: double.infinity,
           height: 48,

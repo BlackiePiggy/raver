@@ -20,6 +20,7 @@ class InboxHomeScreen extends StatefulWidget {
 
 class _InboxHomeScreenState extends State<InboxHomeScreen> {
   late final InboxViewModel _viewModel;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -28,113 +29,137 @@ class _InboxHomeScreenState extends State<InboxHomeScreen> {
       repository: InboxServiceLocator.notificationRepository,
     );
     _viewModel.addListener(_rebuild);
-    _viewModel.loadUnreadCounts();
+    _loadUnreadCounts();
   }
 
   void _rebuild() {
     if (mounted) setState(() {});
   }
 
+  Future<void> _loadUnreadCounts() async {
+    await _viewModel.loadUnreadCounts();
+    final counts = _viewModel.unreadCount;
+    if (mounted && counts != null) {
+      InboxServiceLocator.syncUnreadCounts(counts);
+    }
+  }
+
   @override
   void dispose() {
     _viewModel.removeListener(_rebuild);
+    _scrollController.dispose();
     _viewModel.dispose();
     super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: RaverMotion.normal,
+      curve: RaverMotion.curve,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = context.raver;
 
-    return Scaffold(
-      backgroundColor: theme.background,
-      appBar: AppBar(
+    return RaverTabReselectionListener(
+      tabIndex: 2,
+      onReselected: _scrollToTop,
+      child: Scaffold(
         backgroundColor: theme.background,
-        title: Text(
-          lt('通知中心', 'Inbox', '通知センター'),
-          style: RaverTypography.title(color: theme.primaryText),
+        appBar: AppBar(
+          backgroundColor: theme.background,
+          title: Text(
+            lt('通知中心', 'Inbox', '通知センター'),
+            style: RaverTypography.title(color: theme.primaryText),
+          ),
         ),
-      ),
-      body: LoadPhaseBuilder<NotificationUnreadCount>(
-        phase: _viewModel.unreadPhase,
-        onLoading: () => const _InboxHomeSkeleton(),
-        onFailure: (error) => ErrorStateView(
-          title: lt('加载失败', 'Failed to Load', '読み込みに失敗しました'),
-          error: error,
-          onRetry: _viewModel.loadUnreadCounts,
-          retryLabel: lt('重试', 'Retry', '再試行'),
-        ),
-        onSuccess: (counts) => RefreshIndicator(
-          color: theme.accent,
-          onRefresh: _viewModel.loadUnreadCounts,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _InboxCategoryCard(
-                icon: Icons.notifications_outlined,
-                title: lt('社区互动', 'Community', 'コミュニティ'),
-                subtitle: lt(
-                  '关注/点赞/评论/小队邀请',
-                  'Follows/Likes/Comments/Invites',
-                  'フォロー/いいね/コメント/招待',
+        body: LoadPhaseBuilder<NotificationUnreadCount>(
+          phase: _viewModel.unreadPhase,
+          onLoading: () => const _InboxHomeSkeleton(),
+          onFailure: (error) => ErrorStateView(
+            title: lt('加载失败', 'Failed to Load', '読み込みに失敗しました'),
+            error: error,
+            onRetry: _loadUnreadCounts,
+            retryLabel: lt('重试', 'Retry', '再試行'),
+          ),
+          onSuccess: (counts) => RefreshIndicator(
+            color: theme.accent,
+            onRefresh: _loadUnreadCounts,
+            child: ListView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              children: [
+                _InboxCategoryCard(
+                  icon: Icons.notifications_outlined,
+                  title: lt('社区互动', 'Community', 'コミュニティ'),
+                  subtitle: lt(
+                    '关注/点赞/评论/小队邀请',
+                    'Follows/Likes/Comments/Invites',
+                    'フォロー/いいね/コメント/招待',
+                  ),
+                  unreadCount: counts.community,
+                  color: const Color(0xFFF24D61),
+                  onTap: () => context.push('/inbox/alerts/community'),
                 ),
-                unreadCount: counts.community,
-                color: const Color(0xFFF24D61),
-                onTap: () => context.push('/inbox/alerts/community'),
-              ),
-              const SizedBox(height: 12),
-              _InboxCategoryCard(
-                icon: Icons.event,
-                title: lt('关注活动更新', 'Followed Events', 'フォローイベント'),
-                subtitle: lt(
-                  '您关注的活动有变更',
-                  'Updates from events you follow',
-                  'フォロー中のイベントの更新',
+                const SizedBox(height: 12),
+                _InboxCategoryCard(
+                  icon: Icons.event,
+                  title: lt('关注活动更新', 'Followed Events', 'フォローイベント'),
+                  subtitle: lt(
+                    '您关注的活动有变更',
+                    'Updates from events you follow',
+                    'フォロー中のイベントの更新',
+                  ),
+                  unreadCount: counts.followedEvents,
+                  color: const Color(0xFFF88A35),
+                  onTap: () => context.push('/inbox/followed-events'),
                 ),
-                unreadCount: counts.followedEvents,
-                color: const Color(0xFFF88A35),
-                onTap: () => context.push('/inbox/followed-events'),
-              ),
-              const SizedBox(height: 12),
-              _InboxCategoryCard(
-                icon: Icons.headset,
-                title: lt('关注 DJ 更新', 'Followed DJs', 'フォロー DJ'),
-                subtitle: lt(
-                  '您关注的 DJ 有变更',
-                  'Updates from DJs you follow',
-                  'フォロー中の DJ の更新',
+                const SizedBox(height: 12),
+                _InboxCategoryCard(
+                  icon: Icons.headset,
+                  title: lt('关注 DJ 更新', 'Followed DJs', 'フォロー DJ'),
+                  subtitle: lt(
+                    '您关注的 DJ 有变更',
+                    'Updates from DJs you follow',
+                    'フォロー中の DJ の更新',
+                  ),
+                  unreadCount: counts.followedDJs,
+                  color: const Color(0xFF70C754),
+                  onTap: () => context.push('/inbox/followed-djs'),
                 ),
-                unreadCount: counts.followedDJs,
-                color: const Color(0xFF70C754),
-                onTap: () => context.push('/inbox/followed-djs'),
-              ),
-              const SizedBox(height: 12),
-              _InboxCategoryCard(
-                icon: Icons.storefront,
-                title: lt('关注厂牌更新', 'Followed Brands', 'フォローブランド'),
-                subtitle: lt(
-                  '您关注的厂牌有变更',
-                  'Updates from brands you follow',
-                  'フォロー中のブランドの更新',
+                const SizedBox(height: 12),
+                _InboxCategoryCard(
+                  icon: Icons.storefront,
+                  title: lt('关注厂牌更新', 'Followed Brands', 'フォローブランド'),
+                  subtitle: lt(
+                    '您关注的厂牌有变更',
+                    'Updates from brands you follow',
+                    'フォロー中のブランドの更新',
+                  ),
+                  unreadCount: counts.followedBrands,
+                  color: const Color(0xFFC278F2),
+                  onTap: () => context.push('/inbox/followed-brands'),
                 ),
-                unreadCount: counts.followedBrands,
-                color: const Color(0xFFC278F2),
-                onTap: () => context.push('/inbox/followed-brands'),
-              ),
-              const SizedBox(height: 12),
-              _InboxCategoryCard(
-                icon: Icons.rate_review_outlined,
-                title: lt('内容审核状态', 'Content Reviews', 'コンテンツ審査'),
-                subtitle: lt(
-                  '提交内容的审核进度',
-                  'Review status of your submissions',
-                  '投稿内容の審査状況',
+                const SizedBox(height: 12),
+                _InboxCategoryCard(
+                  icon: Icons.rate_review_outlined,
+                  title: lt('内容审核状态', 'Content Reviews', 'コンテンツ審査'),
+                  subtitle: lt(
+                    '提交内容的审核进度',
+                    'Review status of your submissions',
+                    '投稿内容の審査状況',
+                  ),
+                  unreadCount: 0, // Content reviews don't have unread in model
+                  color: const Color(0xFF4DABF7),
+                  onTap: () => context.push('/inbox/content-reviews'),
                 ),
-                unreadCount: 0, // Content reviews don't have unread in model
-                color: const Color(0xFF4DABF7),
-                onTap: () => context.push('/inbox/content-reviews'),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

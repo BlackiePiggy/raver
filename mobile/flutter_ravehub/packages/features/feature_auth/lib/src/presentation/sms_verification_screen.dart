@@ -7,8 +7,13 @@ import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 
+import '../data/auth_error_message.dart';
+import '../data/auth_service_locator.dart';
+
 /// The number of digits in a verification code.
 const _codeLength = 6;
+
+enum VerificationTargetType { email, sms }
 
 /// A dedicated SMS / email verification code input screen.
 ///
@@ -22,11 +27,22 @@ class SmsVerificationScreen extends ConsumerStatefulWidget {
   const SmsVerificationScreen({
     required this.destination,
     super.key,
+    this.type,
+    this.email,
+    this.phone,
+    this.countryCode = '+86',
+    this.returnTo,
     this.onVerified,
   });
 
   /// The phone number or email the code was sent to (for display).
   final String destination;
+
+  final VerificationTargetType? type;
+  final String? email;
+  final String? phone;
+  final String countryCode;
+  final String? returnTo;
 
   /// Called when the user submits a complete 6-digit code.
   /// If null, the screen navigates back with the code as result.
@@ -38,10 +54,14 @@ class SmsVerificationScreen extends ConsumerStatefulWidget {
 }
 
 class _SmsVerificationScreenState extends ConsumerState<SmsVerificationScreen> {
-  final List<TextEditingController> _controllers =
-      List.generate(_codeLength, (_) => TextEditingController());
-  final List<FocusNode> _focusNodes =
-      List.generate(_codeLength, (_) => FocusNode());
+  final List<TextEditingController> _controllers = List.generate(
+    _codeLength,
+    (_) => TextEditingController(),
+  );
+  final List<FocusNode> _focusNodes = List.generate(
+    _codeLength,
+    (_) => FocusNode(),
+  );
 
   bool _isVerifying = false;
   String? _errorMessage;
@@ -55,7 +75,7 @@ class _SmsVerificationScreenState extends ConsumerState<SmsVerificationScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusNodes[0].requestFocus();
     });
-    _startCooldown();
+    _startCooldown(60);
   }
 
   @override
@@ -74,8 +94,8 @@ class _SmsVerificationScreenState extends ConsumerState<SmsVerificationScreen> {
   // Cooldown
   // ---------------------------------------------------------------------------
 
-  void _startCooldown() {
-    _resendCooldown = 60;
+  void _startCooldown(int seconds) {
+    _resendCooldown = seconds.clamp(1, 120);
     _cooldownTimer?.cancel();
     _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
@@ -90,8 +110,28 @@ class _SmsVerificationScreenState extends ConsumerState<SmsVerificationScreen> {
 
   Future<void> _resendCode() async {
     if (_resendCooldown > 0) return;
-    // TODO: call auth API to resend code
-    _startCooldown();
+    setState(() => _errorMessage = null);
+    try {
+      late final int cooldownSeconds;
+      switch (widget.type) {
+        case VerificationTargetType.email:
+          final email = widget.email ?? widget.destination;
+          cooldownSeconds =
+              await AuthServiceLocator.instance.api.sendEmailCode(email: email);
+        case VerificationTargetType.sms:
+          final phone = widget.phone ?? widget.destination;
+          cooldownSeconds = await AuthServiceLocator.instance.api.sendSmsCode(
+            phone: phone,
+            countryCode: widget.countryCode,
+          );
+        case null:
+          cooldownSeconds = 60;
+      }
+      _startCooldown(cooldownSeconds);
+    } on Exception catch (error) {
+      if (!mounted) return;
+      setState(() => _errorMessage = _errorText(error));
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -136,17 +176,13 @@ class _SmsVerificationScreenState extends ConsumerState<SmsVerificationScreen> {
       if (widget.onVerified != null) {
         widget.onVerified!(code);
       } else {
-        // TODO: verify code via auth API
-        await Future<void>.delayed(const Duration(seconds: 1));
-        if (mounted) {
-          context.pop(code);
-        }
+        await _verifyCodeOrReturn(code);
       }
     } on Exception catch (e) {
       if (mounted) {
         setState(() {
           _isVerifying = false;
-          _errorMessage = e.toString();
+          _errorMessage = _errorText(e);
           // Clear all fields for retry
           for (final c in _controllers) {
             c.clear();
@@ -155,6 +191,47 @@ class _SmsVerificationScreenState extends ConsumerState<SmsVerificationScreen> {
         });
       }
     }
+  }
+
+  Future<void> _verifyCodeOrReturn(String code) async {
+    final api = AuthServiceLocator.instance.api;
+    Map<String, dynamic>? result;
+
+    switch (widget.type) {
+      case VerificationTargetType.email:
+        final email = widget.email ?? widget.destination;
+        result = await api.loginWithEmail(email: email, code: code);
+      case VerificationTargetType.sms:
+        final phone = widget.phone ?? widget.destination;
+        result = await api.loginWithSms(
+          phone: phone,
+          countryCode: widget.countryCode,
+          code: code,
+        );
+      case null:
+        if (mounted) context.pop(code);
+        return;
+    }
+
+    await _persistLoginResult(result);
+    if (!mounted) return;
+    context.go(widget.returnTo ?? '/');
+  }
+
+  Future<void> _persistLoginResult(Map<String, dynamic> result) async {
+    final accessToken = result['accessToken'] as String;
+    final refreshToken = result['refreshToken'] as String;
+    final expiresIn = result['expiresIn'] as int? ?? 3600;
+    await AuthServiceLocator.instance.tokenStore.saveTokens(
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      expiresIn: expiresIn,
+    );
+    await AuthServiceLocator.instance.authenticatedSessionHandler?.call(result);
+  }
+
+  String _errorText(Object error) {
+    return authUserFacingError(error);
   }
 
   // ---------------------------------------------------------------------------
@@ -220,8 +297,7 @@ class _SmsVerificationScreenState extends ConsumerState<SmsVerificationScreen> {
 
                         // --- Title ---
                         Text(
-                          lt('输入验证码', 'Enter Verification Code',
-                              '認証コードを入力'),
+                          lt('输入验证码', 'Enter Verification Code', '認証コードを入力'),
                           style: RaverTypography.headline(
                             size: 26,
                             color: Colors.white,
@@ -261,8 +337,9 @@ class _SmsVerificationScreenState extends ConsumerState<SmsVerificationScreen> {
                               height: 24,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(accent),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  accent,
+                                ),
                               ),
                             ),
                           ),
@@ -281,8 +358,7 @@ class _SmsVerificationScreenState extends ConsumerState<SmsVerificationScreen> {
                                       'Resend Code (${_resendCooldown}s)',
                                       '再送信 (${_resendCooldown}s)',
                                     )
-                                  : lt('重新发送验证码', 'Resend Code',
-                                      'コードを再送信'),
+                                  : lt('重新发送验证码', 'Resend Code', 'コードを再送信'),
                               style: RaverTypography.label(
                                 size: 14,
                                 color: _resendCooldown > 0
@@ -347,9 +423,7 @@ class _SmsVerificationScreenState extends ConsumerState<SmsVerificationScreen> {
                 duration: RaverMotion.fast,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(
-                    alpha: hasValue ? 0.12 : 0.06,
-                  ),
+                  color: Colors.white.withValues(alpha: hasValue ? 0.12 : 0.06),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isFocused

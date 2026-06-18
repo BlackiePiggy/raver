@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,7 @@ import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 
 import 'view_models/login_view_model.dart';
+import 'widgets/auth_legal_agreement_text.dart';
 
 /// A list of common country codes for the phone-number picker.
 const _countryCodes = <(String, String)>[
@@ -28,7 +31,10 @@ const _countryCodes = <(String, String)>[
 /// and the RaveHub purple accent theme.
 class LoginScreen extends ConsumerStatefulWidget {
   /// Creates the [LoginScreen].
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.returnTo});
+
+  /// Optional path to navigate to after successful login.
+  final String? returnTo;
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -44,6 +50,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   late final AnimationController _fadeController;
   late final Animation<double> _fadeAnimation;
+  bool _showManualLogin = false;
 
   @override
   void initState() {
@@ -84,23 +91,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     return InputDecoration(
       labelText: label,
       hintText: hintText,
-      labelStyle: RaverTypography.body(
-        size: 14,
-        color: Colors.white60,
-      ),
-      hintStyle: RaverTypography.body(
-        size: 14,
-        color: Colors.white30,
-      ),
+      labelStyle: RaverTypography.body(size: 14, color: Colors.white60),
+      hintStyle: RaverTypography.body(size: 14, color: Colors.white30),
       prefixIcon: prefixIcon,
       suffixIcon: suffixIcon,
       filled: true,
       fillColor: Colors.white.withValues(alpha: 0.14),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(
-          color: Colors.white.withValues(alpha: 0.12),
-        ),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -122,8 +121,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final notifier = ref.read(loginProvider.notifier);
     final success = await notifier.login();
     if (success && mounted) {
-      context.go('/');
+      context.go(widget.returnTo ?? '/');
     }
+  }
+
+  void _toggleManualLogin(LoginState state, LoginNotifier notifier) {
+    if (!state.agreedToTerms) {
+      notifier.setError(
+        lt(
+          '请先勾选并同意用户服务条款、用户协议和隐私政策。',
+          'Please agree to the user terms, user agreement, and privacy policy first.',
+          '先に利用規約、ユーザー契約、プライバシーポリシーに同意してください。',
+        ),
+      );
+      return;
+    }
+    setState(() => _showManualLogin = !_showManualLogin);
   }
 
   // ---------------------------------------------------------------------------
@@ -135,205 +148,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final state = ref.watch(loginProvider);
     final notifier = ref.read(loginProvider.notifier);
     final accent = RaverColors.accent(Brightness.dark);
-    final topPadding = MediaQuery.of(context).padding.top;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // --- Dark gradient background (video substitute) ---
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF1A0A2E), // Deep purple-black
-                  Color(0xFF0D0D1A), // Near-black
-                  Color(0xFF08080A), // True dark
-                ],
-                stops: [0.0, 0.5, 1.0],
-              ),
-            ),
-          ),
-
-          // --- Decorative glow orbs ---
-          Positioned(
-            top: -80,
-            right: -60,
-            child: Container(
-              width: 240,
-              height: 240,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    accent.withValues(alpha: 0.25),
-                    accent.withValues(alpha: 0.0),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 100,
-            left: -80,
-            child: Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    const Color(0xFF6B42DB).withValues(alpha: 0.18),
-                    const Color(0xFF6B42DB).withValues(alpha: 0.0),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // --- Scrollable content ---
+          _buildIosLoginBackdrop(),
           SafeArea(
             child: FadeTransition(
               opacity: _fadeAnimation,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 28),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(height: topPadding > 44 ? 32 : 48),
-
-                    // --- Logo / brand ---
-                    _buildBrandHeader(accent),
-
-                    const SizedBox(height: 36),
-
-                    // --- Error message ---
-                    if (state.errorMessage != null) ...[
-                      _buildErrorBanner(state.errorMessage!),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // --- Tab toggle: Email / SMS ---
-                    if (!state.showPasswordLogin) ...[
-                      _buildMethodTabs(state, notifier, accent),
-                      const SizedBox(height: 24),
-
-                      // --- Email login form ---
-                      if (state.method == LoginMethod.email)
-                        _buildEmailForm(state, notifier, accent),
-
-                      // --- SMS login form ---
-                      if (state.method == LoginMethod.sms)
-                        _buildSmsForm(state, notifier, accent),
-
-                      const SizedBox(height: 24),
-
-                      // --- Login button ---
-                      PrimaryButton(
-                        label: lt('登录', 'Log In', 'ログイン'),
-                        onPressed: state.canLogin ? _onLogin : null,
-                        isLoading: state.isLoading &&
-                            state.method != LoginMethod.password,
-                        isExpanded: true,
-                        height: 54,
-                        borderRadius: 30,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
                       ),
-
-                      const SizedBox(height: 20),
-
-                      // --- Divider with "or" ---
-                      _buildOrDivider(),
-
-                      const SizedBox(height: 16),
-
-                      // --- Login with password toggle ---
-                      Center(
-                        child: TextButton(
-                          onPressed: notifier.togglePasswordLogin,
-                          child: Text(
-                            lt('使用密码登录', 'Login with Password',
-                                'パスワードでログイン'),
-                            style: RaverTypography.label(
-                              size: 14,
-                              color: accent,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    // --- Password login section ---
-                    if (state.showPasswordLogin) ...[
-                      _buildPasswordForm(state, notifier, accent),
-                      const SizedBox(height: 24),
-                      PrimaryButton(
-                        label: lt('登录', 'Log In', 'ログイン'),
-                        onPressed: state.canLogin ? _onLogin : null,
-                        isLoading: state.isLoading &&
-                            state.method == LoginMethod.password,
-                        isExpanded: true,
-                        height: 54,
-                        borderRadius: 30,
-                      ),
-                      const SizedBox(height: 16),
-                      Center(
-                        child: TextButton(
-                          onPressed: notifier.togglePasswordLogin,
-                          child: Text(
-                            lt('使用验证码登录',
-                                'Login with Verification Code',
-                                '認証コードでログイン'),
-                            style: RaverTypography.label(
-                              size: 14,
-                              color: accent,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 20),
-
-                    // --- Terms agreement ---
-                    _buildTermsCheckbox(state, notifier, accent),
-
-                    const SizedBox(height: 24),
-
-                    // --- Register link ---
-                    Center(
-                      child: TextButton(
-                        onPressed: () => context.push('/register'),
-                        child: Text.rich(
-                          TextSpan(
-                            text: lt('没有账号？', "Don't have an account? ",
-                                'アカウントをお持ちでない方 '),
-                            style: RaverTypography.body(
-                              size: 14,
-                              color: Colors.white54,
-                            ),
-                            children: [
-                              TextSpan(
-                                text: lt('注册', 'Register', '新規登録'),
-                                style: RaverTypography.label(
-                                  size: 14,
-                                  color: accent,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      child: Column(
+                        children: [
+                          _buildTopActions(state),
+                          const SizedBox(height: 24),
+                          _buildIosLoginBody(state, notifier, accent),
+                        ],
                       ),
                     ),
-
-                    const SizedBox(height: 32),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
           ),
+          if (state.errorMessage != null)
+            _buildFloatingNotice(state.errorMessage!, notifier),
         ],
       ),
     );
@@ -343,71 +190,44 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   // Sub-widgets
   // ---------------------------------------------------------------------------
 
-  Widget _buildBrandHeader(Color accent) {
-    return Column(
-      children: [
-        // Glow icon
-        Container(
-          width: 72,
-          height: 72,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              colors: [
-                accent.withValues(alpha: 0.35),
-                accent.withValues(alpha: 0.0),
-              ],
-              radius: 0.8,
-            ),
-          ),
-          child: Center(
-            child: Icon(
-              Icons.music_note_rounded,
-              size: 36,
-              color: accent,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          RaverTypography.appName,
-          style: RaverTypography.brandFont(
-            size: 36,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          lt('电子音乐社交平台', 'EDM Social Platform', 'EDMソーシャルプラットフォーム'),
-          style: RaverTypography.caption(
-            size: 13,
-            color: Colors.white38,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildErrorBanner(String message) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFD93636).withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: const Color(0xFFD93636).withValues(alpha: 0.3),
+  Widget _buildIosLoginBackdrop() {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF13091F), Color(0xFF090912), Color(0xFF020204)],
+          stops: [0, 0.48, 1],
         ),
       ),
-      child: Row(
+      child: Stack(
+        fit: StackFit.expand,
         children: [
-          const Icon(Icons.error_outline, color: Color(0xFFD93636), size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              style: RaverTypography.caption(
-                size: 13,
-                color: const Color(0xFFFF6B6B),
+          CustomPaint(painter: _ConcertBackdropPainter()),
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(0.15, -0.2),
+                  radius: 0.9,
+                  colors: [
+                    const Color(0xFF44D9D1).withValues(alpha: 0.18),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0x8A000000),
+                  Color(0x6B000000),
+                  Color(0x8F000000),
+                ],
               ),
             ),
           ),
@@ -416,13 +236,316 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
+  Widget _buildTopActions(LoginState state) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: state.isLoading ? null : () => context.go('/discover'),
+            icon: const Icon(Icons.close_rounded),
+            color: Colors.white.withValues(alpha: 0.9),
+            iconSize: 22,
+            visualDensity: VisualDensity.compact,
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: state.isLoading ? null : () => context.go('/discover'),
+            child: Text(
+              lt('先看看', 'Preview', '先に見る'),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIosLoginBody(
+    LoginState state,
+    LoginNotifier notifier,
+    Color accent,
+  ) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 430),
+        child: Column(
+          children: [
+            const SizedBox(height: 18),
+            _buildBrandHeader(),
+            const SizedBox(height: 28),
+            _buildTermsCheckbox(state, notifier, accent),
+            const SizedBox(height: 12),
+            _buildManualToggleButton(state, notifier),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed:
+                  state.isLoading ? null : () => context.push('/register'),
+              child: Text(
+                lt('注册新账号', 'Create New Account', '新規登録'),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 260),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return SizeTransition(
+                  sizeFactor: animation,
+                  axisAlignment: -1,
+                  child: FadeTransition(opacity: animation, child: child),
+                );
+              },
+              child: _showManualLogin
+                  ? Padding(
+                      key: const ValueKey('manual-login-panel'),
+                      padding: const EdgeInsets.only(top: 4),
+                      child: _buildManualLoginPanel(state, notifier, accent),
+                    )
+                  : const SizedBox(key: ValueKey('manual-login-empty')),
+            ),
+            const SizedBox(height: 22),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildManualToggleButton(LoginState state, LoginNotifier notifier) {
+    return SizedBox(
+      height: 54,
+      width: double.infinity,
+      child: TextButton(
+        onPressed:
+            state.isLoading ? null : () => _toggleManualLogin(state, notifier),
+        style: TextButton.styleFrom(
+          backgroundColor: Colors.black.withValues(alpha: 0.44),
+          foregroundColor: Colors.white.withValues(alpha: 0.96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(30),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.20)),
+          ),
+        ),
+        child: state.isLoading
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Text(
+                lt('邮箱或账号登录', 'Email or Account Sign In', 'メールまたはアカウントでログイン'),
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildManualLoginPanel(
+    LoginState state,
+    LoginNotifier notifier,
+    Color accent,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.26),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+      ),
+      child: Column(
+        children: [
+          _buildMethodTabs(state, notifier, accent),
+          const SizedBox(height: 10),
+          if (state.method == LoginMethod.email)
+            _buildEmailForm(state, notifier, accent),
+          if (state.method == LoginMethod.sms)
+            _buildSmsForm(state, notifier, accent),
+          if (state.method == LoginMethod.password)
+            _buildPasswordForm(state, notifier, accent),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 46,
+            width: double.infinity,
+            child: TextButton(
+              onPressed: state.canLogin ? _onLogin : null,
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.white.withValues(alpha: 0.20),
+                disabledBackgroundColor: Colors.white.withValues(alpha: 0.12),
+                foregroundColor: Colors.white,
+                disabledForegroundColor: Colors.white.withValues(alpha: 0.34),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: state.isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(
+                      _manualSubmitTitle(state.method),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          TextButton(
+            onPressed: state.isLoading ? null : () => context.push('/register'),
+            child: Text(
+              lt('还没有账号？注册', 'No account yet? Register', 'アカウントをお持ちでない方は登録'),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.86),
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _manualSubmitTitle(LoginMethod method) {
+    return switch (method) {
+      LoginMethod.email => lt('邮箱验证码登录', 'Email Code Sign In', 'メール認証でログイン'),
+      LoginMethod.sms => lt('验证码登录', 'SMS Sign In', 'SMSでログイン'),
+      LoginMethod.password => lt('账号登录', 'Sign In', 'アカウントでログイン'),
+    };
+  }
+
+  Widget _buildFloatingNotice(String message, LoginNotifier notifier) {
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(24, 58, 24, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.76),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.28),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: Color(0xFFFFC26B),
+                size: 17,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.94),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: notifier.clearError,
+                icon: Icon(
+                  Icons.close_rounded,
+                  color: Colors.white.withValues(alpha: 0.72),
+                  size: 16,
+                ),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBrandHeader() {
+    return LayoutBuilder(
+      builder: (context, _) {
+        final screenWidth = MediaQuery.sizeOf(context).width;
+        final logoWidth = math.max(180.0, screenWidth * (2 / 3));
+
+        return Image.asset(
+          'assets/login-center-brand.png',
+          key: const ValueKey('login_center_brand_asset'),
+          package: 'feature_auth',
+          width: logoWidth,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => _buildFallbackBrandHeader(),
+        );
+      },
+    );
+  }
+
+  Widget _buildFallbackBrandHeader() {
+    return Column(
+      children: [
+        Container(
+          width: 102,
+          height: 102,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: 0.95),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              'RH',
+              style: TextStyle(
+                color: Colors.black.withValues(alpha: 0.42),
+                fontSize: 40,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          RaverTypography.appName,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildMethodTabs(
     LoginState state,
     LoginNotifier notifier,
     Color accent,
   ) {
-    final isEmail = state.method == LoginMethod.email;
-
     return Container(
       height: 42,
       decoration: BoxDecoration(
@@ -433,16 +556,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         children: [
           Expanded(
             child: _TabItem(
-              label: lt('邮箱登录', 'Email Login', 'メールログイン'),
-              isSelected: isEmail,
+              label: lt('邮箱', 'Email', 'メール'),
+              isSelected: state.method == LoginMethod.email,
               accent: accent,
               onTap: () => notifier.setMethod(LoginMethod.email),
             ),
           ),
           Expanded(
             child: _TabItem(
-              label: lt('短信登录', 'SMS Login', 'SMSログイン'),
-              isSelected: !isEmail,
+              label: lt('账号', 'Account', 'アカウント'),
+              isSelected: state.method == LoginMethod.password,
+              accent: accent,
+              onTap: () => notifier.setMethod(LoginMethod.password),
+            ),
+          ),
+          Expanded(
+            child: _TabItem(
+              label: lt('短信', 'SMS', 'SMS'),
+              isSelected: state.method == LoginMethod.sms,
               accent: accent,
               onTap: () => notifier.setMethod(LoginMethod.sms),
             ),
@@ -459,7 +590,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   ) {
     return Column(
       children: [
-        // Email field
         TextField(
           controller: _emailController,
           onChanged: notifier.setEmail,
@@ -469,48 +599,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           decoration: _inputDecoration(
             label: lt('邮箱地址', 'Email Address', 'メールアドレス'),
             accent: accent,
-            prefixIcon: Icon(Icons.email_outlined, color: Colors.white38, size: 20),
+            prefixIcon: Icon(
+              Icons.email_outlined,
+              color: Colors.white38,
+              size: 20,
+            ),
           ),
         ),
         const SizedBox(height: 14),
-
-        // Send Code button
-        _buildSendCodeButton(state, notifier, accent),
-
-        const SizedBox(height: 14),
-
-        // Verification code field
-        TextField(
-          controller: _codeController,
-          onChanged: notifier.setVerificationCode,
-          keyboardType: TextInputType.number,
-          maxLength: 6,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: RaverTypography.body(size: 15, color: Colors.white),
-          cursorColor: accent,
-          decoration: _inputDecoration(
-            label: lt('验证码', 'Verification Code', '認証コード'),
-            accent: accent,
-            hintText: '000000',
-            prefixIcon: Icon(Icons.lock_outline, color: Colors.white38, size: 20),
-          ).copyWith(counterText: ''),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _buildCodeField(notifier, accent)),
+            const SizedBox(width: 10),
+            _buildInlineSendCodeButton(state, notifier),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildSmsForm(
-    LoginState state,
-    LoginNotifier notifier,
-    Color accent,
-  ) {
+  Widget _buildSmsForm(LoginState state, LoginNotifier notifier, Color accent) {
     return Column(
       children: [
-        // Phone number with country code
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Country code picker
             GestureDetector(
               onTap: () => _showCountryCodePicker(notifier, accent),
               child: Container(
@@ -544,7 +658,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               ),
             ),
             const SizedBox(width: 10),
-            // Phone number field
             Expanded(
               child: TextField(
                 controller: _phoneController,
@@ -567,79 +680,77 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ],
         ),
         const SizedBox(height: 14),
-
-        // Send Code button
-        _buildSendCodeButton(state, notifier, accent),
-
-        const SizedBox(height: 14),
-
-        // Verification code field
-        TextField(
-          controller: _codeController,
-          onChanged: notifier.setVerificationCode,
-          keyboardType: TextInputType.number,
-          maxLength: 6,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: RaverTypography.body(size: 15, color: Colors.white),
-          cursorColor: accent,
-          decoration: _inputDecoration(
-            label: lt('验证码', 'Verification Code', '認証コード'),
-            accent: accent,
-            hintText: '000000',
-            prefixIcon: Icon(Icons.lock_outline, color: Colors.white38, size: 20),
-          ).copyWith(counterText: ''),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _buildCodeField(notifier, accent)),
+            const SizedBox(width: 10),
+            _buildInlineSendCodeButton(state, notifier),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildSendCodeButton(
-    LoginState state,
-    LoginNotifier notifier,
-    Color accent,
-  ) {
+  Widget _buildCodeField(LoginNotifier notifier, Color accent) {
+    return TextField(
+      controller: _codeController,
+      onChanged: notifier.setVerificationCode,
+      keyboardType: TextInputType.number,
+      maxLength: 6,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      style: RaverTypography.body(size: 15, color: Colors.white),
+      cursorColor: accent,
+      decoration: _inputDecoration(
+        label: lt('验证码', 'Verification Code', '認証コード'),
+        accent: accent,
+        hintText: '000000',
+        prefixIcon: Icon(Icons.lock_outline, color: Colors.white38, size: 20),
+      ).copyWith(counterText: ''),
+    );
+  }
+
+  Widget _buildInlineSendCodeButton(LoginState state, LoginNotifier notifier) {
     final enabled = state.canSendCode;
     final inCooldown = state.cooldownSeconds > 0;
 
     final label = inCooldown
-        ? lt('重新发送 (${state.cooldownSeconds}s)',
-            'Resend (${state.cooldownSeconds}s)',
-            '再送信 (${state.cooldownSeconds}s)')
+        ? lt(
+            '${state.cooldownSeconds}s',
+            '${state.cooldownSeconds}s',
+            '${state.cooldownSeconds}s',
+          )
         : state.codeSent
-            ? lt('重新发送', 'Resend Code', '再送信')
-            : lt('发送验证码', 'Send Code', 'コードを送信');
+            ? lt('重发', 'Resend', '再送信')
+            : lt('发送', 'Send', '送信');
 
     return SizedBox(
-      width: double.infinity,
-      height: 44,
-      child: OutlinedButton(
+      height: 50,
+      child: TextButton(
         onPressed: enabled ? () => notifier.sendCode() : null,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: accent,
-          side: BorderSide(
-            color: enabled
-                ? accent.withValues(alpha: 0.6)
-                : Colors.white.withValues(alpha: 0.12),
+        style: TextButton.styleFrom(
+          minimumSize: const Size(78, 50),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          backgroundColor: Colors.white.withValues(
+            alpha: enabled ? 0.22 : 0.10,
           ),
+          foregroundColor: Colors.white,
+          disabledForegroundColor: Colors.white.withValues(alpha: 0.30),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
-          disabledForegroundColor: Colors.white24,
         ),
         child: state.isLoading && !inCooldown
-            ? SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(accent),
-                ),
+            ? const SizedBox(
+                width: 17,
+                height: 17,
+                child: CircularProgressIndicator(strokeWidth: 2),
               )
             : Text(
                 label,
-                style: RaverTypography.label(
-                  size: 14,
-                  color: enabled ? accent : Colors.white24,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
       ),
@@ -660,8 +771,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           style: RaverTypography.body(size: 15, color: Colors.white),
           cursorColor: accent,
           decoration: _inputDecoration(
-            label: lt('用户名 / 邮箱', 'Username / Email',
-                'ユーザー名 / メール'),
+            label: lt('用户名 / 邮箱', 'Username / Email', 'ユーザー名 / メール'),
             accent: accent,
             prefixIcon: Icon(
               Icons.person_outline,
@@ -693,98 +803,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
-  Widget _buildOrDivider() {
-    return Row(
-      children: [
-        Expanded(
-          child: Container(
-            height: 1,
-            color: Colors.white.withValues(alpha: 0.1),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            lt('或', 'or', 'または'),
-            style: RaverTypography.caption(
-              size: 13,
-              color: Colors.white30,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Container(
-            height: 1,
-            color: Colors.white.withValues(alpha: 0.1),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildTermsCheckbox(
     LoginState state,
     LoginNotifier notifier,
     Color accent,
   ) {
-    return GestureDetector(
-      onTap: notifier.toggleTermsAgreement,
-      behavior: HitTestBehavior.opaque,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 22,
-            height: 22,
-            child: Checkbox(
-              value: state.agreedToTerms,
-              onChanged: (_) => notifier.toggleTermsAgreement(),
-              activeColor: accent,
-              checkColor: Colors.white,
-              side: BorderSide(
-                color: Colors.white.withValues(alpha: 0.3),
-                width: 1.5,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
-              ),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: notifier.toggleTermsAgreement,
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: Icon(
+              state.agreedToTerms ? Icons.check_circle : Icons.circle_outlined,
+              color: state.agreedToTerms
+                  ? Colors.white.withValues(alpha: 0.96)
+                  : Colors.white.withValues(alpha: 0.56),
+              size: 18,
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                text: lt('我已阅读并同意 ', 'I agree to the ', '同意する '),
-                style: RaverTypography.caption(
-                  size: 12,
-                  color: Colors.white38,
-                ),
-                children: [
-                  TextSpan(
-                    text: lt('用户协议', 'Terms of Service', '利用規約'),
-                    style: RaverTypography.caption(
-                      size: 12,
-                      color: accent,
-                    ),
-                  ),
-                  TextSpan(
-                    text: lt(' 和 ', ' and ', ' と '),
-                  ),
-                  TextSpan(
-                    text: lt('隐私政策', 'Privacy Policy', 'プライバシーポリシー'),
-                    style: RaverTypography.caption(
-                      size: 12,
-                      color: accent,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: AuthLegalAgreementText(accent: accent, compact: true),
+        ),
+      ],
     );
   }
 
@@ -880,9 +926,8 @@ class _TabItem extends StatelessWidget {
         height: 38,
         margin: const EdgeInsets.all(2),
         decoration: BoxDecoration(
-          color: isSelected
-              ? accent.withValues(alpha: 0.2)
-              : Colors.transparent,
+          color:
+              isSelected ? accent.withValues(alpha: 0.2) : Colors.transparent,
           borderRadius: BorderRadius.circular(19),
         ),
         child: Center(
@@ -899,4 +944,73 @@ class _TabItem extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ConcertBackdropPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bgPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF221039), Color(0xFF061721), Color(0xFF040407)],
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, bgPaint);
+
+    final beamPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 18;
+    final beams = [
+      (
+        const Color(0xFF8B5CF6),
+        Offset(size.width * 0.08, size.height * 0.22),
+        Offset(size.width * 0.62, size.height * 0.58),
+      ),
+      (
+        const Color(0xFF44D9D1),
+        Offset(size.width * 0.32, size.height * 0.14),
+        Offset(size.width * 0.75, size.height * 0.62),
+      ),
+      (
+        const Color(0xFFF88C3F),
+        Offset(size.width * 0.85, size.height * 0.18),
+        Offset(size.width * 0.34, size.height * 0.66),
+      ),
+    ];
+    for (final beam in beams) {
+      beamPaint.shader = LinearGradient(
+        colors: [
+          beam.$1.withValues(alpha: 0.0),
+          beam.$1.withValues(alpha: 0.18),
+          beam.$1.withValues(alpha: 0.0),
+        ],
+      ).createShader(Rect.fromPoints(beam.$2, beam.$3));
+      canvas.drawLine(beam.$2, beam.$3, beamPaint);
+    }
+
+    final crowdPaint = Paint()..color = Colors.black.withValues(alpha: 0.5);
+    final baseY = size.height * 0.78;
+    final path = Path()..moveTo(0, size.height);
+    for (var i = 0; i <= 42; i++) {
+      final x = size.width * i / 42;
+      final wave = math.sin(i * 1.7) * 18 + math.sin(i * 0.55) * 28;
+      path.lineTo(x, baseY + wave);
+    }
+    path
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.drawPath(path, crowdPaint);
+
+    final sparklePaint = Paint()..color = Colors.white.withValues(alpha: 0.18);
+    for (var i = 0; i < 80; i++) {
+      final x = (math.sin(i * 12.9898) * 43758.5453).abs() % size.width;
+      final y = (math.sin(i * 78.233) * 24634.6345).abs() % (size.height * 0.7);
+      final r = 0.8 + (i % 3) * 0.45;
+      canvas.drawCircle(Offset(x, y), r, sparklePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ConcertBackdropPainter oldDelegate) => false;
 }

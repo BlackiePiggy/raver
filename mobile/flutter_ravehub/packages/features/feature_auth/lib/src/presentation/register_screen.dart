@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 
+import '../data/registration_region_catalog.dart';
 import 'view_models/register_view_model.dart';
+import 'widgets/auth_legal_agreement_text.dart';
 
 /// Registration screen for creating a new RaveHub account.
 ///
@@ -32,6 +34,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
 
   late final AnimationController _fadeController;
   late final Animation<double> _fadeAnimation;
+  RegistrationRegionCatalog _regionCatalog = RegistrationRegionCatalog.fallback;
 
   @override
   void initState() {
@@ -45,6 +48,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
       curve: Curves.easeOut,
     );
     _fadeController.forward();
+    RegistrationRegionCatalog.load().then((catalog) {
+      if (!mounted) return;
+      setState(() => _regionCatalog = catalog);
+    });
   }
 
   @override
@@ -315,8 +322,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                             ),
                             cursorColor: accent,
                             decoration: _inputDecoration(
-                              label: lt('确认密码', 'Confirm Password',
-                                  'パスワード確認'),
+                              label: lt('确认密码', 'Confirm Password', 'パスワード確認'),
                               accent: accent,
                               prefixIcon: const Icon(
                                 Icons.lock_outline,
@@ -343,6 +349,20 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                             ),
                           ),
 
+                          const SizedBox(height: 18),
+
+                          // --- Regional compliance ---
+                          _buildRegionalComplianceFields(
+                            state,
+                            notifier,
+                            accent,
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          // --- Home city ---
+                          _buildHomeCityFields(state, notifier, accent),
+
                           const SizedBox(height: 24),
 
                           // --- Terms agreement ---
@@ -353,8 +373,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                           // --- Register button ---
                           PrimaryButton(
                             label: lt('注册', 'Register', '新規登録'),
-                            onPressed:
-                                state.canRegister ? _onRegister : null,
+                            onPressed: state.canRegister ? _onRegister : null,
                             isLoading: state.isLoading,
                             isExpanded: true,
                           ),
@@ -367,8 +386,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                               onPressed: () => context.pop(),
                               child: Text.rich(
                                 TextSpan(
-                                  text: lt('已有账号？',
-                                      'Already have an account? ',
+                                  text: lt('已有账号？', 'Already have an account? ',
                                       'すでにアカウントをお持ちの方 '),
                                   style: RaverTypography.body(
                                     size: 14,
@@ -457,7 +475,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
         ),
       );
     } else if (state.displayName.length >= 2) {
-      if (state.isDisplayNameAvailable) {
+      if (state.displayNameCheckFailed) {
+        suffix = const Padding(
+          padding: EdgeInsets.only(right: 12),
+          child: Icon(Icons.info_outline, color: Color(0xFFE0C82D), size: 20),
+        );
+        helper = lt(
+          '暂时无法检查名称，提交时将再次校验',
+          'Could not check now; registration will validate again',
+          '現在確認できません。登録時に再確認します',
+        );
+        helperColor = const Color(0xFFE0C82D);
+      } else if (state.isDisplayNameAvailable) {
         suffix = const Padding(
           padding: EdgeInsets.only(right: 12),
           child: Icon(Icons.check_circle, color: Color(0xFF1B9E5C), size: 20),
@@ -479,7 +508,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
       onChanged: notifier.setDisplayName,
       style: RaverTypography.body(size: 15, color: Colors.white),
       cursorColor: accent,
-      maxLength: 30,
+      maxLength: 24,
       decoration: _inputDecoration(
         label: lt('显示名称', 'Display Name', '表示名'),
         accent: accent,
@@ -495,69 +524,269 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     );
   }
 
+  Widget _buildRegionalComplianceFields(
+    RegisterState state,
+    RegisterNotifier notifier,
+    Color accent,
+  ) {
+    final years = List<int>.generate(
+      DateTime.now().year - 1900 + 1,
+      (index) => DateTime.now().year - index,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String>(
+          initialValue: state.regionCode,
+          dropdownColor: const Color(0xFF171721),
+          iconEnabledColor: Colors.white54,
+          style: RaverTypography.body(size: 15, color: Colors.white),
+          decoration: _inputDecoration(
+            label: lt('地区', 'Region', '地域'),
+            accent: accent,
+            prefixIcon: const Icon(
+              Icons.public,
+              color: Colors.white38,
+              size: 20,
+            ),
+          ),
+          items: [
+            DropdownMenuItem(
+              value: 'GLOBAL',
+              child: Text(lt('全球', 'Global', 'グローバル')),
+            ),
+            DropdownMenuItem(
+              value: 'JP',
+              child: Text(lt('日本', 'Japan', '日本')),
+            ),
+          ],
+          onChanged: (value) {
+            if (value != null) notifier.setRegionCode(value);
+          },
+        ),
+        if (state.requiresAgeDeclaration) ...[
+          const SizedBox(height: 12),
+          DropdownButtonFormField<int>(
+            initialValue: state.birthYear,
+            dropdownColor: const Color(0xFF171721),
+            iconEnabledColor: Colors.white54,
+            style: RaverTypography.body(size: 15, color: Colors.white),
+            decoration: _inputDecoration(
+              label: lt('出生年份', 'Birth Year', '生年'),
+              accent: accent,
+              prefixIcon: const Icon(
+                Icons.cake_outlined,
+                color: Colors.white38,
+                size: 20,
+              ),
+              helperText: state.isAgeDeclarationValid
+                  ? lt(
+                      '仅用于年龄分级和未成年人保护',
+                      'Used only for age rating and minor safety',
+                      '年齢区分と未成年者保護のみに使用します',
+                    )
+                  : lt(
+                      '未达到本地区最低年龄要求',
+                      'You do not meet the minimum age requirement',
+                      'この地域の最低年齢要件を満たしていません',
+                    ),
+              helperColor: state.isAgeDeclarationValid
+                  ? Colors.white30
+                  : const Color(0xFFD93636),
+            ),
+            items: [
+              for (final year in years)
+                DropdownMenuItem(value: year, child: Text('$year')),
+            ],
+            onChanged: (value) {
+              if (value != null) notifier.setBirthYear(value);
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildHomeCityFields(
+    RegisterState state,
+    RegisterNotifier notifier,
+    Color accent,
+  ) {
+    final languageCode = Localizations.localeOf(context).languageCode;
+    final selectedCountry = _regionCatalog.country(state.homeCountryCode);
+    final selectedRegion = _regionCatalog.region(
+      countryCode: selectedCountry.code,
+      regionCode: state.homeRegionCode,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          lt('常驻城市', 'Home City', '居住都市'),
+          style: RaverTypography.label(size: 13, color: Colors.white70),
+        ),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String>(
+          initialValue: selectedCountry.code,
+          dropdownColor: const Color(0xFF171721),
+          iconEnabledColor: Colors.white54,
+          style: RaverTypography.body(size: 15, color: Colors.white),
+          decoration: _inputDecoration(
+            label: lt('国家/地区', 'Country/Region', '国/地域'),
+            accent: accent,
+            prefixIcon: const Icon(
+              Icons.public,
+              color: Colors.white38,
+              size: 20,
+            ),
+          ),
+          items: [
+            for (final country in _regionCatalog.countries)
+              DropdownMenuItem(
+                value: country.code,
+                child: Text(country.displayName(languageCode)),
+              ),
+          ],
+          onChanged: (value) {
+            if (value == null) return;
+            final country = _regionCatalog.country(value);
+            final region = country.children.first;
+            final city = region.children.first;
+            notifier.setHomeCountry(
+              countryCode: country.code,
+              regionCode: region.code,
+              cityCode: city.code,
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                key: ValueKey('home-region-${selectedCountry.code}'),
+                initialValue: selectedRegion.code,
+                dropdownColor: const Color(0xFF171721),
+                iconEnabledColor: Colors.white54,
+                style: RaverTypography.body(size: 15, color: Colors.white),
+                decoration: _inputDecoration(
+                  label: selectedCountry.regionLabel.isEmpty
+                      ? lt('地区', 'Region', '地域')
+                      : selectedCountry.regionLabel,
+                  accent: accent,
+                  prefixIcon: const Icon(
+                    Icons.map_outlined,
+                    color: Colors.white38,
+                    size: 20,
+                  ),
+                ),
+                items: [
+                  for (final region in selectedCountry.children)
+                    DropdownMenuItem(
+                      value: region.code,
+                      child: Text(region.displayName(languageCode)),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  final region = selectedCountry.children.firstWhere(
+                    (item) => item.code == value,
+                    orElse: () => selectedCountry.children.first,
+                  );
+                  notifier.setHomeRegion(
+                    regionCode: region.code,
+                    cityCode: region.children.first.code,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                key: ValueKey(
+                  'home-city-${selectedCountry.code}-${selectedRegion.code}',
+                ),
+                initialValue: _regionCatalog
+                    .city(
+                      countryCode: selectedCountry.code,
+                      regionCode: selectedRegion.code,
+                      cityCode: state.homeCityCode,
+                    )
+                    .code,
+                dropdownColor: const Color(0xFF171721),
+                iconEnabledColor: Colors.white54,
+                style: RaverTypography.body(size: 15, color: Colors.white),
+                decoration: _inputDecoration(
+                  label: selectedCountry.cityLabel.isEmpty
+                      ? lt('城市', 'City', '市区町村')
+                      : selectedCountry.cityLabel,
+                  accent: accent,
+                  prefixIcon: const Icon(
+                    Icons.location_on_outlined,
+                    color: Colors.white38,
+                    size: 20,
+                  ),
+                ),
+                items: [
+                  for (final city in selectedRegion.children)
+                    DropdownMenuItem(value: city.code, child: Text(city.name)),
+                ],
+                onChanged: (value) {
+                  if (value != null) notifier.setHomeCity(value);
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          lt(
+            '会用于后续优先推荐你附近和同地区的活动。',
+            'Used later to prioritize nearby and regional events.',
+            '今後、近隣や同じ地域のイベント推薦に使われます。',
+          ),
+          style: RaverTypography.caption(size: 12, color: Colors.white38),
+        ),
+      ],
+    );
+  }
+
   Widget _buildTermsCheckbox(
     RegisterState state,
     RegisterNotifier notifier,
     Color accent,
   ) {
-    return GestureDetector(
-      onTap: notifier.toggleTermsAgreement,
-      behavior: HitTestBehavior.opaque,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 22,
-            height: 22,
-            child: Checkbox(
-              value: state.agreedToTerms,
-              onChanged: (_) => notifier.toggleTermsAgreement(),
-              activeColor: accent,
-              checkColor: Colors.white,
-              side: BorderSide(
-                color: Colors.white.withValues(alpha: 0.3),
-                width: 1.5,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
-              ),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 22,
+          height: 22,
+          child: Checkbox(
+            value: state.agreedToTerms,
+            onChanged: (_) => notifier.toggleTermsAgreement(),
+            activeColor: accent,
+            checkColor: Colors.white,
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.3),
+              width: 1.5,
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                text: lt('我已阅读并同意 ', 'I agree to the ', '同意する '),
-                style: RaverTypography.caption(
-                  size: 12,
-                  color: Colors.white38,
-                ),
-                children: [
-                  TextSpan(
-                    text: lt('用户协议', 'Terms of Service', '利用規約'),
-                    style: RaverTypography.caption(
-                      size: 12,
-                      color: accent,
-                    ),
-                  ),
-                  TextSpan(
-                    text: lt(' 和 ', ' and ', ' と '),
-                  ),
-                  TextSpan(
-                    text: lt('隐私政策', 'Privacy Policy', 'プライバシーポリシー'),
-                    style: RaverTypography.caption(
-                      size: 12,
-                      color: accent,
-                    ),
-                  ),
-                ],
-              ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
             ),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
           ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: AuthLegalAgreementText(
+            accent: accent,
+          ),
+        ),
+      ],
     );
   }
 }

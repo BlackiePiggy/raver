@@ -1,17 +1,26 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_models/raver_models.dart';
 import 'package:raver_platform/raver_platform.dart';
 
+typedef EventRouteLauncher = Future<void> Function({
+  required WebEventManualLocation location,
+  required String destinationQuery,
+});
+
 /// Route section: shows venue address and a "Navigate" button.
 class EventRouteSection extends StatelessWidget {
   const EventRouteSection({
     super.key,
     required this.event,
+    this.routeLauncher,
   });
 
   final WebEvent event;
+  final EventRouteLauncher? routeLauncher;
 
   @override
   Widget build(BuildContext context) {
@@ -22,8 +31,7 @@ class EventRouteSection extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final hasCoords =
-        location.latitude != null && location.longitude != null;
+    final hasCoords = location.latitude != null && location.longitude != null;
 
     final addressParts = [
       location.name,
@@ -31,6 +39,9 @@ class EventRouteSection extends StatelessWidget {
       location.city,
       location.country,
     ].where((s) => s.isNotEmpty).toList();
+    final destinationQuery =
+        addressParts.isNotEmpty ? addressParts.join(', ') : event.name;
+    final canNavigate = hasCoords || destinationQuery.trim().isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -73,15 +84,11 @@ class EventRouteSection extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (hasCoords) ...[
+                if (canNavigate) ...[
                   const SizedBox(height: 12),
                   GestureDetector(
                     onTap: () {
-                      MapLauncher.openInMaps(
-                        latitude: location.latitude!,
-                        longitude: location.longitude!,
-                        label: location.name,
-                      );
+                      unawaited(_openRoute(location, destinationQuery));
                     },
                     child: Container(
                       width: double.infinity,
@@ -118,5 +125,30 @@ class EventRouteSection extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _openRoute(
+    WebEventManualLocation location,
+    String destinationQuery,
+  ) async {
+    final customLauncher = routeLauncher;
+    if (customLauncher != null) {
+      await customLauncher(
+        location: location,
+        destinationQuery: destinationQuery,
+      );
+      return;
+    }
+
+    if (location.latitude != null && location.longitude != null) {
+      await MapLauncher.openInMaps(
+        latitude: location.latitude!,
+        longitude: location.longitude!,
+        label: location.name.isNotEmpty ? location.name : destinationQuery,
+      );
+      return;
+    }
+
+    await MapLauncher.openRoute(destinationQuery: destinationQuery);
   }
 }

@@ -11,7 +11,6 @@ import '../labels/presentation/labels_root_screen.dart';
 import '../rankings/presentation/rankings_root_screen.dart';
 import '../sets/presentation/sets_list_screen.dart';
 import '../genres_sunburst/presentation/genres_root_screen.dart';
-import '../search/presentation/search_overlay_screen.dart';
 
 class DiscoverHomeScreen extends StatefulWidget {
   const DiscoverHomeScreen({super.key});
@@ -22,16 +21,28 @@ class DiscoverHomeScreen extends StatefulWidget {
 
 class _DiscoverHomeScreenState extends State<DiscoverHomeScreen> {
   static List<String> get _tabTitles => [
-        lt('推荐', 'Recommend', 'おすすめ'),
+        lt('推荐', 'Picks', 'おすすめ'),
         lt('活动', 'Events', 'イベント'),
         lt('资讯', 'News', 'ニュース'),
-        lt('主办方', 'Organizers', '主催者'),
-        'DJs',
+        lt('主办方', 'Organizers', '主催'),
+        'DJ',
         lt('厂牌', 'Labels', 'レーベル'),
         lt('榜单', 'Rankings', 'ランキング'),
         'Sets',
-        lt('风格', 'Genres', 'ジャンル'),
+        lt('流派', 'Genres', 'ジャンル'),
       ];
+
+  static const _tabColors = [
+    Color(0xFF45D9D1),
+    Color(0xFFF78A36),
+    Color(0xFFFA9E38),
+    Color(0xFFE36394),
+    Color(0xFF70C755),
+    Color(0xFF6B91F5),
+    Color(0xFFC278F2),
+    Color(0xFF4DAAF8),
+    Color(0xFF3DCAA9),
+  ];
 
   static const _pages = <Widget>[
     RecommendScreen(),
@@ -45,50 +56,21 @@ class _DiscoverHomeScreenState extends State<DiscoverHomeScreen> {
     GenresRootScreen(),
   ];
 
-  void _openSearch(BuildContext context) {
-    showGeneralDialog(
-      context: context,
-      barrierColor: Colors.transparent,
-      pageBuilder: (_, __, ___) => SearchOverlayScreen(
-        onDismiss: () => Navigator.of(context).pop(),
-      ),
-      transitionDuration: const Duration(milliseconds: 200),
-      transitionBuilder: (_, animation, __, child) {
-        return FadeTransition(
-          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.96, end: 1).animate(
-              CurvedAnimation(parent: animation, curve: Curves.easeOut),
-            ),
-            child: child,
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = context.raver;
 
     return Scaffold(
       backgroundColor: theme.background,
-      appBar: AppBar(
-        backgroundColor: theme.background,
-        title: Text(
-          lt('发现', 'Discover', '発見'),
-          style: RaverTypography.title(color: theme.primaryText),
+      body: SafeArea(
+        bottom: false,
+        child: RaverScrollableTabPager(
+          tabs: _tabTitles,
+          pages: _pages,
+          indicatorColors: _tabColors,
+          showsDivider: false,
+          tabSpacing: 24,
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.search, color: theme.primaryText),
-            onPressed: () => _openSearch(context),
-          ),
-        ],
-      ),
-      body: RaverScrollableTabPager(
-        tabs: _tabTitles,
-        pages: _pages,
       ),
     );
   }

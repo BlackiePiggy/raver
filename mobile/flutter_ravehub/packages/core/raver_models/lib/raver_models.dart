@@ -9,6 +9,7 @@ export 'src/dj_set.dart';
 export 'src/enforcement.dart';
 export 'src/event.dart';
 export 'src/genre.dart';
+export 'src/live_api_payload.dart';
 export 'src/news.dart';
 export 'src/notification.dart';
 export 'src/pagination.dart';

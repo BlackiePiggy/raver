@@ -5,6 +5,7 @@ import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_models/raver_models.dart';
 
 import '../_shared/profile_service_locator.dart';
+import '../_shared/refreshable_empty_state.dart';
 import 'view_models/follow_list_view_model.dart';
 
 /// Screen showing a follow list (followers or following).
@@ -28,16 +29,18 @@ class _FollowListScreenState extends State<FollowListScreen>
   late FollowListViewModel _currentViewModel;
   late FollowListViewModel _followingViewModel;
   late FollowListViewModel _followersViewModel;
+  late FollowListViewModel _friendsViewModel;
   final ScrollController _scrollController = ScrollController();
 
   String get _effectiveUserId => widget.userId ?? 'me';
+  bool get _isOwnProfile => widget.userId == null;
 
   @override
   void initState() {
     super.initState();
-    final initialIndex = widget.listType == 'followers' ? 1 : 0;
+    final initialIndex = _initialIndexFor(widget.listType);
     _tabController = TabController(
-      length: 2,
+      length: 3,
       vsync: this,
       initialIndex: initialIndex,
     );
@@ -52,16 +55,45 @@ class _FollowListScreenState extends State<FollowListScreen>
       userId: _effectiveUserId,
       listType: 'followers',
     );
+    _friendsViewModel = FollowListViewModel(
+      api: ProfileServiceLocator.followApi,
+      userId: _effectiveUserId,
+      listType: 'friends',
+    );
 
-    _currentViewModel =
-        initialIndex == 0 ? _followingViewModel : _followersViewModel;
+    _currentViewModel = _viewModelForIndex(initialIndex);
 
     _followingViewModel.addListener(_rebuild);
     _followersViewModel.addListener(_rebuild);
+    _friendsViewModel.addListener(_rebuild);
     _tabController.addListener(_onTabChanged);
     _scrollController.addListener(_onScroll);
 
     _currentViewModel.load();
+  }
+
+  int _initialIndexFor(String listType) {
+    switch (listType) {
+      case 'followers':
+        return 1;
+      case 'friends':
+        return 2;
+      case 'following':
+      default:
+        return 0;
+    }
+  }
+
+  FollowListViewModel _viewModelForIndex(int index) {
+    switch (index) {
+      case 1:
+        return _followersViewModel;
+      case 2:
+        return _friendsViewModel;
+      case 0:
+      default:
+        return _followingViewModel;
+    }
   }
 
   void _rebuild() {
@@ -69,9 +101,7 @@ class _FollowListScreenState extends State<FollowListScreen>
   }
 
   void _onTabChanged() {
-    final isFollowers = _tabController.index == 1;
-    _currentViewModel =
-        isFollowers ? _followersViewModel : _followingViewModel;
+    _currentViewModel = _viewModelForIndex(_tabController.index);
 
     if (_currentViewModel.users.isEmpty &&
         _currentViewModel.phase is LoadPhaseLoading) {
@@ -91,11 +121,25 @@ class _FollowListScreenState extends State<FollowListScreen>
   void dispose() {
     _followingViewModel.removeListener(_rebuild);
     _followersViewModel.removeListener(_rebuild);
+    _friendsViewModel.removeListener(_rebuild);
     _tabController.dispose();
     _scrollController.dispose();
     _followingViewModel.dispose();
     _followersViewModel.dispose();
+    _friendsViewModel.dispose();
     super.dispose();
+  }
+
+  String _titleForType(String listType) {
+    switch (listType) {
+      case 'followers':
+        return lt('粉丝', 'Followers', 'フォロワー');
+      case 'friends':
+        return lt('好友', 'Friends', '友達');
+      case 'following':
+      default:
+        return lt('关注', 'Following', 'フォロー中');
+    }
   }
 
   @override
@@ -105,9 +149,7 @@ class _FollowListScreenState extends State<FollowListScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.listType == 'followers'
-              ? lt('粉丝', 'Followers', 'フォロワー')
-              : lt('关注', 'Following', 'フォロー中'),
+          _titleForType(widget.listType),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -121,6 +163,7 @@ class _FollowListScreenState extends State<FollowListScreen>
               segments: [
                 lt('关注', 'Following', 'フォロー中'),
                 lt('粉丝', 'Followers', 'フォロワー'),
+                lt('好友', 'Friends', '友達'),
               ],
               selectedIndex: _tabController.index,
               onChanged: (index) => _tabController.animateTo(index),
@@ -133,23 +176,23 @@ class _FollowListScreenState extends State<FollowListScreen>
         children: [
           _buildUserList(_followingViewModel, theme),
           _buildUserList(_followersViewModel, theme),
+          _buildUserList(_friendsViewModel, theme),
         ],
       ),
     );
   }
 
-  Widget _buildUserList(
-      FollowListViewModel viewModel, RaverThemeData theme) {
+  Widget _buildUserList(FollowListViewModel viewModel, RaverThemeData theme) {
     return LoadPhaseBuilder<List<UserSummary>>(
       phase: viewModel.phase,
       onLoading: () =>
           const Center(child: CircularProgressIndicator.adaptive()),
-      onEmpty: () => EmptyStateView(
-        icon: Icons.people_outline,
-        title: viewModel.listType == 'followers'
-            ? lt('暂无粉丝', 'No Followers', 'フォロワーなし')
-            : lt('暂无关注', 'Not Following Anyone',
-                'フォロー中のユーザーなし'),
+      onEmpty: () => RefreshableEmptyState(
+        onRefresh: viewModel.refresh,
+        child: EmptyStateView(
+          icon: Icons.people_outline,
+          title: _emptyTitleForType(viewModel.listType),
+        ),
       ),
       onFailure: (error) => ErrorStateView(
         title: lt('加载失败', 'Failed to Load', '読み込みに失敗しました'),
@@ -161,9 +204,9 @@ class _FollowListScreenState extends State<FollowListScreen>
         color: theme.accent,
         onRefresh: viewModel.refresh,
         child: ListView.separated(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
-          itemCount:
-              viewModel.users.length + (viewModel.canLoadMore ? 1 : 0),
+          itemCount: viewModel.users.length + (viewModel.canLoadMore ? 1 : 0),
           separatorBuilder: (_, __) => const SizedBox(height: 8),
           itemBuilder: (context, index) {
             if (index >= viewModel.users.length) {
@@ -183,6 +226,20 @@ class _FollowListScreenState extends State<FollowListScreen>
         ),
       ),
     );
+  }
+
+  String _emptyTitleForType(String listType) {
+    switch (listType) {
+      case 'followers':
+        return lt('暂无粉丝', 'No Followers', 'フォロワーなし');
+      case 'friends':
+        return _isOwnProfile
+            ? lt('暂无好友', 'No Friends Yet', '友達はまだいません')
+            : lt('暂无共同好友', 'No Mutual Friends', '共通の友達なし');
+      case 'following':
+      default:
+        return lt('暂无关注', 'Not Following Anyone', 'フォロー中のユーザーなし');
+    }
   }
 }
 
@@ -221,8 +278,7 @@ class _UserListItem extends StatelessWidget {
                       width: 44,
                       height: 44,
                       color: theme.cardBorder,
-                      child: Icon(Icons.person,
-                          color: theme.secondaryText),
+                      child: Icon(Icons.person, color: theme.secondaryText),
                     ),
             ),
             const SizedBox(width: 12),
@@ -244,8 +300,8 @@ class _UserListItem extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       user.bio!,
-                      style: RaverTypography.caption(
-                          color: theme.secondaryText),
+                      style:
+                          RaverTypography.caption(color: theme.secondaryText),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -253,8 +309,7 @@ class _UserListItem extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right,
-                color: theme.secondaryText, size: 20),
+            Icon(Icons.chevron_right, color: theme.secondaryText, size: 20),
           ],
         ),
       ),

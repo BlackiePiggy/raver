@@ -49,7 +49,7 @@ class PersonalityViewModel extends ChangeNotifier {
         _phase = LoadPhase.success(_questions);
       }
     } catch (e) {
-      _phase = LoadPhase.failure(e);
+      _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }

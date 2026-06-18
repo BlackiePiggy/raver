@@ -1,8 +1,8 @@
-/// The runtime mode of the application, determining whether mock
-/// or live backend services are used.
+/// The runtime mode of the application, determining which backend service
+/// surface is used.
 enum AppRuntimeMode {
-  /// Use in-memory / stub data instead of real network calls.
-  mock,
+  /// Use local developer-only overrides instead of the production BFF.
+  localDevelopment,
 
   /// Use the live BFF (backend-for-frontend) service.
   live,
@@ -32,7 +32,11 @@ class AppConfig {
   // ---------------------------------------------------------------------------
 
   /// BFF base URL used in **debug** builds.
-  static const String debugBffBaseUrl = 'http://localhost:8787';
+  ///
+  /// The Flutter migration is validated against the live BFF so debug and
+  /// release builds share the same service surface unless a local proxy is
+  /// wired in explicitly.
+  static const String debugBffBaseUrl = 'https://api.ravehub.top';
 
   /// BFF base URL used in **release** builds.
   static const String releaseBffBaseUrl = 'https://api.ravehub.top';
@@ -59,8 +63,7 @@ class AppConfig {
 
   /// The Alibaba Cloud OSS bucket host used for all user-uploaded and
   /// system-default assets.
-  static const String ossBaseUrl =
-      'wen-jasonlee.oss-cn-shanghai.aliyuncs.com';
+  static const String ossBaseUrl = 'wen-jasonlee.oss-cn-shanghai.aliyuncs.com';
 
   // ---------------------------------------------------------------------------
   // Default avatars
@@ -121,13 +124,11 @@ class AppConfig {
   static String? defaultAvatarUrlFromSeed(String seed, List<String> pool) {
     if (pool.isEmpty) return null;
     final normalized = seed.toLowerCase();
-    var hash = 1469598103934665603; // FNV offset basis (64-bit)
-    const prime = 1099511628211; // FNV prime (64-bit)
+    var hash = 2166136261; // FNV offset basis (32-bit, web-safe)
+    const prime = 16777619; // FNV prime (32-bit)
     for (final codeUnit in normalized.runes) {
       hash ^= codeUnit;
-      // Dart ints are 64-bit on VM; we mask to keep consistent overflow
-      // behaviour with the Swift `&*` operator.
-      hash = (hash * prime) & 0x7FFFFFFFFFFFFFFF;
+      hash = (hash * prime) & 0x7FFFFFFF;
     }
     final index = hash % pool.length;
     return pool[index];

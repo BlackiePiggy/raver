@@ -58,7 +58,7 @@ class QuizViewModel extends ChangeNotifier {
         _startTimer();
       }
     } catch (e) {
-      _phase = LoadPhase.failure(e);
+      _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }

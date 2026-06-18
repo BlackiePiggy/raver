@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:raver_models/raver_models.dart';
 
@@ -56,11 +55,38 @@ final organizersProvider =
 );
 
 class FestivalDetailState {
-  const FestivalDetailState({this.festival, this.isLoading = false, this.error});
+  const FestivalDetailState({
+    this.festival,
+    this.isLoading = false,
+    this.isFollowLoading = false,
+    this.error,
+    this.followError,
+  });
 
   final LearnFestival? festival;
   final bool isLoading;
+  final bool isFollowLoading;
   final String? error;
+
+  final String? followError;
+
+  FestivalDetailState copyWith({
+    LearnFestival? festival,
+    bool? isLoading,
+    bool? isFollowLoading,
+    String? error,
+    String? followError,
+    bool clearError = false,
+    bool clearFollowError = false,
+  }) {
+    return FestivalDetailState(
+      festival: festival ?? this.festival,
+      isLoading: isLoading ?? this.isLoading,
+      isFollowLoading: isFollowLoading ?? this.isFollowLoading,
+      error: clearError ? null : (error ?? this.error),
+      followError: clearFollowError ? null : (followError ?? this.followError),
+    );
+  }
 }
 
 class FestivalDetailNotifier extends StateNotifier<FestivalDetailState> {
@@ -77,12 +103,45 @@ class FestivalDetailNotifier extends StateNotifier<FestivalDetailState> {
     try {
       final festival = await _api.fetchFestivalDetail(_festivalId);
       state = FestivalDetailState(festival: festival);
+      await _syncFollowPreference();
     } catch (e) {
       state = FestivalDetailState(error: e.toString());
     }
   }
 
   Future<void> retry() => _load();
+
+  Future<void> _syncFollowPreference() async {
+    final festival = state.festival;
+    if (festival == null) return;
+    try {
+      final preference = await _api.fetchFollowedBrandUpdatePreference();
+      state = state.copyWith(
+        festival: festival.copyWith(
+          isFollowing: preference.watchedBrandIds.contains(festival.id),
+        ),
+        clearFollowError: true,
+      );
+    } catch (_) {
+      // Detail content remains usable when the authenticated preference endpoint
+      // is unavailable, for example before login.
+    }
+  }
+
+  Future<void> toggleFollow() async {
+    final festival = state.festival;
+    if (festival == null || state.isFollowLoading) return;
+    state = state.copyWith(isFollowLoading: true, clearFollowError: true);
+    try {
+      final updated = await _api.toggleFestivalFollow(festival);
+      state = state.copyWith(festival: updated, isFollowLoading: false);
+    } catch (e) {
+      state = state.copyWith(
+        isFollowLoading: false,
+        followError: e.toString(),
+      );
+    }
+  }
 }
 
 final festivalDetailProvider = StateNotifierProvider.autoDispose

@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:raver_design_system/raver_design_system.dart';
 
 /// A CustomPainter-based timetable visualizer for event schedules.
 ///
@@ -39,7 +38,8 @@ class EventScheduleCanvas extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final totalHours = parsed.maxTime!.difference(parsed.minTime!).inMinutes / 60;
+    final totalHours =
+        parsed.maxTime!.difference(parsed.minTime!).inMinutes / 60;
     const pixelsPerHour = 60.0;
     const stageHeight = 48.0;
     const leftPad = 80.0; // space for stage labels
@@ -214,8 +214,7 @@ class EventScheduleCanvasPainter extends CustomPainter {
       ..color = const Color(0x22FFFFFF)
       ..strokeWidth = 0.5;
 
-    final totalMinutes =
-        parsed.maxTime!.difference(parsed.minTime!).inMinutes;
+    final totalMinutes = parsed.maxTime!.difference(parsed.minTime!).inMinutes;
     final totalHours = (totalMinutes / 60).ceil();
 
     // Draw hour gridlines and labels

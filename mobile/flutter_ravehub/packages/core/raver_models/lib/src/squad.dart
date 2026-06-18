@@ -20,30 +20,28 @@ class SquadProfile {
   });
 
   factory SquadProfile.fromJson(Map<String, dynamic> json) => SquadProfile(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        avatarUrl: json['avatarUrl'] as String,
-        description: json['description'] as String,
-        memberCount: json['memberCount'] as int,
-        members: (json['members'] as List<dynamic>?)
-            ?.map((e) =>
-                SquadMemberProfile.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        myRole: json['myRole'] as String?,
-        groupId: json['groupId'] as String,
-      );
+    id: _string(json['id']),
+    name: _string(json['name']),
+    avatarUrl: _string(json['avatarUrl'] ?? json['avatarURL']),
+    description: _string(json['description']),
+    memberCount: _int(json['memberCount']),
+    members: (json['members'] as List<dynamic>?)
+        ?.map((e) => SquadMemberProfile.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    myRole: json['myRole'] as String?,
+    groupId: _string(json['groupId'] ?? json['groupID'] ?? json['id']),
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'avatarUrl': avatarUrl,
-        'description': description,
-        'memberCount': memberCount,
-        if (members != null)
-          'members': members!.map((e) => e.toJson()).toList(),
-        if (myRole != null) 'myRole': myRole,
-        'groupId': groupId,
-      };
+    'id': id,
+    'name': name,
+    'avatarUrl': avatarUrl,
+    'description': description,
+    'memberCount': memberCount,
+    if (members != null) 'members': members!.map((e) => e.toJson()).toList(),
+    if (myRole != null) 'myRole': myRole,
+    'groupId': groupId,
+  };
 
   SquadProfile copyWith({
     String? id,
@@ -54,17 +52,16 @@ class SquadProfile {
     List<SquadMemberProfile>? members,
     String? myRole,
     String? groupId,
-  }) =>
-      SquadProfile(
-        id: id ?? this.id,
-        name: name ?? this.name,
-        avatarUrl: avatarUrl ?? this.avatarUrl,
-        description: description ?? this.description,
-        memberCount: memberCount ?? this.memberCount,
-        members: members ?? this.members,
-        myRole: myRole ?? this.myRole,
-        groupId: groupId ?? this.groupId,
-      );
+  }) => SquadProfile(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    avatarUrl: avatarUrl ?? this.avatarUrl,
+    description: description ?? this.description,
+    memberCount: memberCount ?? this.memberCount,
+    members: members ?? this.members,
+    myRole: myRole ?? this.myRole,
+    groupId: groupId ?? this.groupId,
+  );
 
   @override
   bool operator ==(Object other) {
@@ -96,20 +93,22 @@ class SquadMemberProfile {
 
   factory SquadMemberProfile.fromJson(Map<String, dynamic> json) =>
       SquadMemberProfile(
-        userId: json['userId'] as String,
-        displayName: json['displayName'] as String,
-        avatarUrl: json['avatarUrl'] as String,
-        role: json['role'] as String,
-        joinedAt: json['joinedAt'] as String,
+        userId: _string(json['userId'] ?? json['id']),
+        displayName: _string(
+          json['displayName'] ?? json['nickname'] ?? json['username'],
+        ),
+        avatarUrl: _string(json['avatarUrl'] ?? json['avatarURL']),
+        role: _string(json['role'], fallback: 'member'),
+        joinedAt: _string(json['joinedAt']),
       );
 
   Map<String, dynamic> toJson() => {
-        'userId': userId,
-        'displayName': displayName,
-        'avatarUrl': avatarUrl,
-        'role': role,
-        'joinedAt': joinedAt,
-      };
+    'userId': userId,
+    'displayName': displayName,
+    'avatarUrl': avatarUrl,
+    'role': role,
+    'joinedAt': joinedAt,
+  };
 
   SquadMemberProfile copyWith({
     String? userId,
@@ -117,14 +116,13 @@ class SquadMemberProfile {
     String? avatarUrl,
     String? role,
     String? joinedAt,
-  }) =>
-      SquadMemberProfile(
-        userId: userId ?? this.userId,
-        displayName: displayName ?? this.displayName,
-        avatarUrl: avatarUrl ?? this.avatarUrl,
-        role: role ?? this.role,
-        joinedAt: joinedAt ?? this.joinedAt,
-      );
+  }) => SquadMemberProfile(
+    userId: userId ?? this.userId,
+    displayName: displayName ?? this.displayName,
+    avatarUrl: avatarUrl ?? this.avatarUrl,
+    role: role ?? this.role,
+    joinedAt: joinedAt ?? this.joinedAt,
+  );
 
   @override
   bool operator ==(Object other) {
@@ -163,30 +161,33 @@ class SquadOfflineActivity {
 
   factory SquadOfflineActivity.fromJson(Map<String, dynamic> json) =>
       SquadOfflineActivity(
-        id: json['id'] as String,
-        squadId: json['squadId'] as String,
-        eventId: json['eventId'] as String,
-        eventName: json['eventName'] as String,
-        status: json['status'] as String,
-        startedAt: json['startedAt'] as String,
-        endedAt: json['endedAt'] as String,
+        id: _string(json['id']),
+        squadId: _string(json['squadId'] ?? json['squadID']),
+        eventId: _string(json['eventId'] ?? json['eventID']),
+        eventName: _string(json['eventName']),
+        status: _string(json['status'], fallback: 'active'),
+        startedAt: _string(json['startedAt']),
+        endedAt: _string(json['endedAt']),
         participants: (json['participants'] as List<dynamic>?)
-            ?.map((e) => SquadOfflineActivityParticipant.fromJson(
-                e as Map<String, dynamic>))
+            ?.map(
+              (e) => SquadOfflineActivityParticipant.fromJson(
+                e as Map<String, dynamic>,
+              ),
+            )
             .toList(),
       );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'squadId': squadId,
-        'eventId': eventId,
-        'eventName': eventName,
-        'status': status,
-        'startedAt': startedAt,
-        'endedAt': endedAt,
-        if (participants != null)
-          'participants': participants!.map((e) => e.toJson()).toList(),
-      };
+    'id': id,
+    'squadId': squadId,
+    'eventId': eventId,
+    'eventName': eventName,
+    'status': status,
+    'startedAt': startedAt,
+    'endedAt': endedAt,
+    if (participants != null)
+      'participants': participants!.map((e) => e.toJson()).toList(),
+  };
 
   SquadOfflineActivity copyWith({
     String? id,
@@ -197,17 +198,16 @@ class SquadOfflineActivity {
     String? startedAt,
     String? endedAt,
     List<SquadOfflineActivityParticipant>? participants,
-  }) =>
-      SquadOfflineActivity(
-        id: id ?? this.id,
-        squadId: squadId ?? this.squadId,
-        eventId: eventId ?? this.eventId,
-        eventName: eventName ?? this.eventName,
-        status: status ?? this.status,
-        startedAt: startedAt ?? this.startedAt,
-        endedAt: endedAt ?? this.endedAt,
-        participants: participants ?? this.participants,
-      );
+  }) => SquadOfflineActivity(
+    id: id ?? this.id,
+    squadId: squadId ?? this.squadId,
+    eventId: eventId ?? this.eventId,
+    eventName: eventName ?? this.eventName,
+    status: status ?? this.status,
+    startedAt: startedAt ?? this.startedAt,
+    endedAt: endedAt ?? this.endedAt,
+    participants: participants ?? this.participants,
+  );
 
   @override
   bool operator ==(Object other) {
@@ -219,8 +219,7 @@ class SquadOfflineActivity {
   int get hashCode => id.hashCode;
 
   @override
-  String toString() =>
-      'SquadOfflineActivity(id: $id, eventName: $eventName)';
+  String toString() => 'SquadOfflineActivity(id: $id, eventName: $eventName)';
 }
 
 class SquadOfflineActivityParticipant {
@@ -240,26 +239,26 @@ class SquadOfflineActivityParticipant {
     required this.lastLocationAt,
   });
 
-  factory SquadOfflineActivityParticipant.fromJson(
-    Map<String, dynamic> json,
-  ) =>
+  factory SquadOfflineActivityParticipant.fromJson(Map<String, dynamic> json) =>
       SquadOfflineActivityParticipant(
-        userId: json['userId'] as String,
-        displayName: json['displayName'] as String,
-        avatarUrl: json['avatarUrl'] as String,
+        userId: _string(json['userId'] ?? json['id']),
+        displayName: _string(
+          json['displayName'] ?? json['nickname'] ?? json['username'],
+        ),
+        avatarUrl: _string(json['avatarUrl'] ?? json['avatarURL']),
         latitude: (json['latitude'] as num?)?.toDouble(),
         longitude: (json['longitude'] as num?)?.toDouble(),
-        lastLocationAt: json['lastLocationAt'] as String,
+        lastLocationAt: _string(json['lastLocationAt']),
       );
 
   Map<String, dynamic> toJson() => {
-        'userId': userId,
-        'displayName': displayName,
-        'avatarUrl': avatarUrl,
-        if (latitude != null) 'latitude': latitude,
-        if (longitude != null) 'longitude': longitude,
-        'lastLocationAt': lastLocationAt,
-      };
+    'userId': userId,
+    'displayName': displayName,
+    'avatarUrl': avatarUrl,
+    if (latitude != null) 'latitude': latitude,
+    if (longitude != null) 'longitude': longitude,
+    'lastLocationAt': lastLocationAt,
+  };
 
   SquadOfflineActivityParticipant copyWith({
     String? userId,
@@ -268,15 +267,14 @@ class SquadOfflineActivityParticipant {
     double? latitude,
     double? longitude,
     String? lastLocationAt,
-  }) =>
-      SquadOfflineActivityParticipant(
-        userId: userId ?? this.userId,
-        displayName: displayName ?? this.displayName,
-        avatarUrl: avatarUrl ?? this.avatarUrl,
-        latitude: latitude ?? this.latitude,
-        longitude: longitude ?? this.longitude,
-        lastLocationAt: lastLocationAt ?? this.lastLocationAt,
-      );
+  }) => SquadOfflineActivityParticipant(
+    userId: userId ?? this.userId,
+    displayName: displayName ?? this.displayName,
+    avatarUrl: avatarUrl ?? this.avatarUrl,
+    latitude: latitude ?? this.latitude,
+    longitude: longitude ?? this.longitude,
+    lastLocationAt: lastLocationAt ?? this.lastLocationAt,
+  );
 
   @override
   bool operator ==(Object other) {
@@ -290,4 +288,17 @@ class SquadOfflineActivityParticipant {
   @override
   String toString() =>
       'SquadOfflineActivityParticipant(userId: $userId, displayName: $displayName)';
+}
+
+String _string(Object? value, {String fallback = ''}) {
+  if (value == null) return fallback;
+  if (value is String) return value;
+  return value.toString();
+}
+
+int _int(Object? value, {int fallback = 0}) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? fallback;
+  return fallback;
 }

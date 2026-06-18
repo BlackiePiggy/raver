@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:raver_design_system/raver_design_system.dart';
+import 'package:raver_models/raver_models.dart';
 
 import '../../data/circle_id_api.dart';
 import '../../data/circle_id_repository.dart';
@@ -24,11 +25,10 @@ class CircleIdViewModel extends ChangeNotifier {
       _cards
         ..clear()
         ..addAll(await _repository.fetchMyCircleIds());
-      _phase = _cards.isEmpty
-          ? const LoadPhase.empty()
-          : LoadPhase.success(_cards);
+      _phase =
+          _cards.isEmpty ? const LoadPhase.empty() : LoadPhase.success(_cards);
     } catch (e) {
-      _phase = LoadPhase.failure(e);
+      _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -38,28 +38,27 @@ class CircleIdViewModel extends ChangeNotifier {
       _cards
         ..clear()
         ..addAll(await _repository.fetchMyCircleIds());
-      _phase = _cards.isEmpty
-          ? const LoadPhase.empty()
-          : LoadPhase.success(_cards);
+      _phase =
+          _cards.isEmpty ? const LoadPhase.empty() : LoadPhase.success(_cards);
     } catch (e) {
       if (_cards.isEmpty) {
-        _phase = LoadPhase.failure(e);
+        _phase = LoadPhase.fromError(e);
       }
     }
     notifyListeners();
   }
 
-  Future<CircleIdCard?> createCard({
-    required String nickname,
-    required String tagline,
-    required int gradientIndex,
-  }) async {
+  Future<List<WebEvent>> searchEvents({String? search}) {
+    return _repository.searchEvents(search: search);
+  }
+
+  Future<List<WebDJ>> searchDjs({String? search}) {
+    return _repository.searchDjs(search: search);
+  }
+
+  Future<CircleIdCard?> createCard(CircleIdCreationDraft draft) async {
     try {
-      final card = await _repository.createCircleId(
-        nickname: nickname,
-        tagline: tagline,
-        gradientIndex: gradientIndex,
-      );
+      final card = await _repository.createCircleId(draft);
       _cards.insert(0, card);
       _phase = LoadPhase.success(_cards);
       notifyListeners();
@@ -67,6 +66,14 @@ class CircleIdViewModel extends ChangeNotifier {
     } catch (_) {
       return null;
     }
+  }
+
+  void replaceCard(CircleIdCard card) {
+    final index = _cards.indexWhere((item) => item.id == card.id);
+    if (index == -1) return;
+    _cards[index] = card;
+    _phase = LoadPhase.success(_cards);
+    notifyListeners();
   }
 
   Future<CircleIdCard?> updateCard({

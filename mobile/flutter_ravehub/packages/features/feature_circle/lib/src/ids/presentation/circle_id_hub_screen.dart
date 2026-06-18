@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 
-import '../../data/circle_id_api.dart';
-import '../view_models/circle_id_view_model.dart';
-import '../widgets/circle_id_composer_sheet.dart';
 import '../../_shared/circle_service_locator.dart';
+import '../data/circle_id_api.dart';
+import 'view_models/circle_id_view_model.dart';
+import 'widgets/circle_id_composer_sheet.dart';
+import 'widgets/circle_id_share_sheet.dart';
 
-/// Hub for managing the user's Circle ID (raver identity cards).
 class CircleIdHubScreen extends StatefulWidget {
   const CircleIdHubScreen({super.key});
 
@@ -17,6 +18,8 @@ class CircleIdHubScreen extends StatefulWidget {
 
 class _CircleIdHubScreenState extends State<CircleIdHubScreen> {
   late final CircleIdViewModel _viewModel;
+  final ScrollController _scrollController = ScrollController();
+  final Set<String> _busyActions = {};
 
   @override
   void initState() {
@@ -35,8 +38,18 @@ class _CircleIdHubScreenState extends State<CircleIdHubScreen> {
   @override
   void dispose() {
     _viewModel.removeListener(_rebuild);
+    _scrollController.dispose();
     _viewModel.dispose();
     super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: RaverMotion.normal,
+      curve: RaverMotion.curve,
+    );
   }
 
   void _showCreateSheet() {
@@ -45,40 +58,91 @@ class _CircleIdHubScreenState extends State<CircleIdHubScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => CircleIdComposerSheet(
-        onSubmit: (nickname, tagline, gradientIndex) async {
-          final card = await _viewModel.createCard(
-            nickname: nickname,
-            tagline: tagline,
-            gradientIndex: gradientIndex,
-          );
-          if (card != null && mounted) {
-            Navigator.of(context).pop();
+        onSearchEvents: (search) => _viewModel.searchEvents(search: search),
+        onSearchDjs: (search) => _viewModel.searchDjs(search: search),
+        onSubmit: (draft) async {
+          final card = await _viewModel.createCard(draft);
+          if (!mounted) return;
+          if (card == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  lt(
+                    'ID 提交失败，请稍后重试',
+                    'ID submission failed. Please try again.',
+                    'IDの送信に失敗しました。もう一度お試しください。',
+                  ),
+                ),
+              ),
+            );
+            return;
           }
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                lt('ID 已提交审核', 'ID submitted for review', 'IDを審査に送信しました'),
+              ),
+            ),
+          );
         },
       ),
     );
   }
 
-  void _showEditSheet(CircleIdCard card) {
-    showModalBottomSheet<void>(
+  Future<void> _toggleReaction(
+    CircleIdCard card,
+    _CircleIdReaction reaction,
+  ) async {
+    final key = '${card.id}:${reaction.name}';
+    if (_busyActions.contains(key)) return;
+    setState(() => _busyActions.add(key));
+    try {
+      final post = switch (reaction) {
+        _CircleIdReaction.like =>
+          await CircleServiceLocator.feedRepository.toggleLikePost(
+            postId: card.id,
+            currentlyLiked: card.isLiked,
+          ),
+        _CircleIdReaction.favorite =>
+          await CircleServiceLocator.feedRepository.toggleFavoritePost(
+            postId: card.id,
+            currentlySaved: card.isFavorited,
+          ),
+        _CircleIdReaction.repost =>
+          await CircleServiceLocator.feedRepository.toggleRepost(
+            postId: card.id,
+            currentlyReposted: card.isReposted,
+          ),
+      };
+      _viewModel.replaceCard(card.withPostInteraction(post));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            lt(
+              '操作失败，请稍后重试',
+              'Action failed. Please try again.',
+              '操作に失敗しました。もう一度お試しください。',
+            ),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busyActions.remove(key));
+    }
+  }
+
+  Future<void> _showShareSheet(CircleIdCard card) async {
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => CircleIdComposerSheet(
-        initialNickname: card.nickname,
-        initialTagline: card.tagline,
-        initialGradientIndex: card.gradientIndex,
-        onSubmit: (nickname, tagline, gradientIndex) async {
-          final updated = await _viewModel.updateCard(
-            id: card.id,
-            nickname: nickname,
-            tagline: tagline,
-            gradientIndex: gradientIndex,
-          );
-          if (updated != null && mounted) {
-            Navigator.of(context).pop();
-          }
-        },
+      builder: (_) => CircleIdShareSheet(
+        card: card,
+        onShared: (post) =>
+            _viewModel.replaceCard(card.withPostInteraction(post)),
       ),
     );
   }
@@ -87,82 +151,95 @@ class _CircleIdHubScreenState extends State<CircleIdHubScreen> {
   Widget build(BuildContext context) {
     final theme = context.raver;
 
-    return Column(
-      children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                lt('我的ID卡', 'My ID Cards', 'マイIDカード'),
-                style: RaverTypography.title(
-                  size: 18,
-                  color: theme.primaryText,
-                ),
-              ),
-              GestureDetector(
-                onTap: _showCreateSheet,
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: theme.accent,
-                    borderRadius: BorderRadius.circular(16),
+    return RaverTabReselectionListener(
+      tabIndex: 1,
+      onReselected: _scrollToTop,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    lt('ID（未发行）', 'ID (Unreleased)', 'ID（未リリース）'),
+                    style: RaverTypography.title(
+                      size: 18,
+                      color: theme.primaryText,
+                    ),
                   ),
-                  child: const Icon(Icons.add, color: Colors.white, size: 18),
                 ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: LoadPhaseBuilder<List<CircleIdCard>>(
-            phase: _viewModel.phase,
-            onLoading: () =>
-                const Center(child: CircularProgressIndicator.adaptive()),
-            onEmpty: () => EmptyStateView(
-              icon: Icons.badge_outlined,
-              title: lt(
-                '创建你的第一张ID卡',
-                'Create your first ID card',
-                '最初のIDカードを作ろう',
-              ),
-              actionLabel: lt('创建', 'Create', '作成'),
-              onAction: _showCreateSheet,
+                TextButton.icon(
+                  onPressed: _showCreateSheet,
+                  icon: Icon(Icons.add_circle, color: theme.accent, size: 19),
+                  label: Text(
+                    lt('发布 ID', 'Post ID', 'IDを投稿'),
+                    style: RaverTypography.label(
+                      color: theme.primaryText,
+                      weight: FontWeight.w700,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    backgroundColor: theme.card,
+                    shape: const StadiumBorder(),
+                  ),
+                ),
+              ],
             ),
-            onFailure: (error) => ErrorStateView(
-              title: lt('加载失败', 'Failed to Load', '読み込みに失敗しました'),
-              error: error,
-              onRetry: _viewModel.load,
-              retryLabel: lt('重试', 'Retry', '再試行'),
-            ),
-            onSuccess: (cards) => _buildGrid(cards, theme),
           ),
-        ),
-      ],
+          Expanded(
+            child: LoadPhaseBuilder<List<CircleIdCard>>(
+              phase: _viewModel.phase,
+              onLoading: () =>
+                  const Center(child: CircularProgressIndicator.adaptive()),
+              onEmpty: () => EmptyStateView(
+                icon: Icons.music_note_outlined,
+                title: lt(
+                  '还没有 ID 讨论',
+                  'No ID Discussion Yet',
+                  'IDディスカッションはまだありません',
+                ),
+                subtitle: lt(
+                  '点击“发布 ID”，记录一首未发行歌曲。',
+                  'Tap “Post ID” to record an unreleased track.',
+                  '「IDを投稿」をタップして未リリース曲を記録しましょう。',
+                ),
+                actionLabel: lt('发布 ID', 'Post ID', 'IDを投稿'),
+                onAction: _showCreateSheet,
+              ),
+              onFailure: (error) => ErrorStateView(
+                title: lt('加载失败', 'Failed to Load', '読み込みに失敗しました'),
+                error: error,
+                onRetry: _viewModel.load,
+                retryLabel: lt('重试', 'Retry', '再試行'),
+              ),
+              onSuccess: (cards) => _buildList(cards, theme),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildGrid(List<CircleIdCard> cards, RaverThemeData theme) {
+  Widget _buildList(List<CircleIdCard> cards, RaverThemeData theme) {
     return RefreshIndicator(
       color: theme.accent,
       onRefresh: _viewModel.refresh,
-      child: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          childAspectRatio: 0.75,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-        ),
+      child: ListView.separated(
+        controller: _scrollController,
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 20),
         itemCount: cards.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final card = cards[index];
-          return _CircleIdCardWidget(
+          return _CircleIdEntryCard(
             card: card,
-            onTap: () => _showEditSheet(card),
+            onTap: () =>
+                context.push('/circle/ids/${Uri.encodeComponent(card.id)}'),
+            onLike: () => _toggleReaction(card, _CircleIdReaction.like),
+            onFavorite: () => _toggleReaction(card, _CircleIdReaction.favorite),
+            onRepost: () => _toggleReaction(card, _CircleIdReaction.repost),
+            onShare: () => _showShareSheet(card),
           );
         },
       ),
@@ -170,142 +247,424 @@ class _CircleIdHubScreenState extends State<CircleIdHubScreen> {
   }
 }
 
-class _CircleIdCardWidget extends StatelessWidget {
-  const _CircleIdCardWidget({
+class _CircleIdEntryCard extends StatelessWidget {
+  const _CircleIdEntryCard({
     required this.card,
     required this.onTap,
+    required this.onLike,
+    required this.onFavorite,
+    required this.onRepost,
+    required this.onShare,
   });
 
   final CircleIdCard card;
   final VoidCallback onTap;
-
-  static const _gradients = [
-    [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-    [Color(0xFFEC4899), Color(0xFFF43F5E)],
-    [Color(0xFF14B8A6), Color(0xFF06B6D4)],
-    [Color(0xFFF59E0B), Color(0xFFEF4444)],
-    [Color(0xFF8B5CF6), Color(0xFFEC4899)],
-    [Color(0xFF06B6D4), Color(0xFF3B82F6)],
-  ];
+  final VoidCallback onLike;
+  final VoidCallback onFavorite;
+  final VoidCallback onRepost;
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
     final theme = context.raver;
-    final gradientColors =
-        _gradients[card.gradientIndex % _gradients.length];
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: gradientColors,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: gradientColors.first.withValues(alpha: 0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          color: theme.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: theme.cardBorder),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Avatar
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: Colors.white.withValues(alpha: 0.2),
-                backgroundImage: card.avatarUrl.isNotEmpty
-                    ? NetworkImage(card.avatarUrl)
-                    : null,
-                child: card.avatarUrl.isEmpty
-                    ? const Icon(
-                        Icons.person,
-                        color: Colors.white,
-                        size: 24,
-                      )
-                    : null,
-              ),
-              const SizedBox(height: 12),
-
-              // Nickname
-              Text(
-                card.nickname,
-                style: RaverTypography.label(
-                  size: 16,
-                  color: Colors.white,
-                  weight: FontWeight.w700,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-
-              // EDMTI type
-              if (card.edmtiType.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
                   child: Text(
-                    card.edmtiType,
-                    style: RaverTypography.caption(
-                      size: 10,
-                      color: Colors.white,
-                      weight: FontWeight.w600,
+                    card.songName,
+                    style: RaverTypography.title(
+                      size: 16,
+                      color: theme.primaryText,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.chevron_right, color: theme.secondaryText),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _CircleIdPlayerPreview(card: card),
+            if (card.event != null) ...[
+              const SizedBox(height: 10),
+              _LinkedEventRow(event: card.event!),
+            ],
+            if (card.djs.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: card.djs.map(_LinkedDjChip.new).toList(),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _ActionPill(
+                  icon: card.isLiked ? Icons.favorite : Icons.favorite_border,
+                  count: card.likeCount,
+                  isActive: card.isLiked,
+                  onTap: onLike,
+                ),
+                const SizedBox(width: 8),
+                _ActionPill(
+                  icon: card.isFavorited ? Icons.star : Icons.star_border,
+                  count: card.favoriteCount,
+                  isActive: card.isFavorited,
+                  onTap: onFavorite,
+                ),
+                const SizedBox(width: 8),
+                _ActionPill(
+                  icon: Icons.repeat,
+                  count: card.repostCount,
+                  isActive: card.isReposted,
+                  onTap: onRepost,
+                ),
+                const SizedBox(width: 8),
+                _ActionPill(
+                  icon: Icons.ios_share_outlined,
+                  count: 0,
+                  onTap: onShare,
+                ),
+                const SizedBox(width: 8),
+                _ActionPill(
+                  icon: Icons.chat_bubble_outline,
+                  count: card.commentCount,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _Avatar(url: card.contributorAvatarUrl, size: 28),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        card.contributorName.isEmpty
+                            ? lt('贡献者', 'Contributor', '投稿者')
+                            : card.contributorName,
+                        style: RaverTypography.caption(
+                          color: theme.primaryText,
+                          weight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        lt('贡献者', 'Contributor', '投稿者'),
+                        style: RaverTypography.caption(
+                          size: 11,
+                          color: theme.secondaryText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  _compactDate(card.createdAt),
+                  style: RaverTypography.caption(
+                    size: 11,
+                    color: theme.secondaryText,
                   ),
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-              const Spacer(),
+class _CircleIdPlayerPreview extends StatelessWidget {
+  const _CircleIdPlayerPreview({required this.card});
 
-              // Tagline
-              if (card.tagline.isNotEmpty)
+  final CircleIdCard card;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.raver;
+    final hasVideo = card.videoUrl.isNotEmpty;
+    final hasAudio = card.audioUrl.isNotEmpty;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.cardBorder),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: theme.cardBorder,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              hasVideo ? Icons.play_circle_fill : Icons.music_note,
+              color: theme.accent,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(
-                  card.tagline,
+                  card.songName,
+                  style: RaverTypography.label(
+                    color: theme.primaryText,
+                    weight: FontWeight.w700,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  hasVideo
+                      ? lt('视频 ID', 'Video ID', '動画ID')
+                      : hasAudio
+                          ? lt('音频 ID', 'Audio ID', '音声ID')
+                          : lt('ID 片段', 'ID Clip', 'IDクリップ'),
+                  style: RaverTypography.caption(color: theme.secondaryText),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LinkedEventRow extends StatelessWidget {
+  const _LinkedEventRow({required this.event});
+
+  final CircleIdLinkedEvent event;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.raver;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.cardBorder),
+      ),
+      child: Row(
+        children: [
+          _Thumb(url: event.coverImageUrl, size: 44),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  event.name,
                   style: RaverTypography.caption(
-                    size: 11,
-                    color: Colors.white.withValues(alpha: 0.8),
+                    color: theme.primaryText,
+                    weight: FontWeight.w700,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-
-              const SizedBox(height: 8),
-
-              // Check-in count
-              Row(
-                children: [
-                  Icon(
-                    Icons.check_circle_outline,
-                    size: 14,
-                    color: Colors.white.withValues(alpha: 0.7),
+                const SizedBox(height: 2),
+                Text(
+                  _compactDate(event.startDate),
+                  style: RaverTypography.caption(
+                    size: 11,
+                    color: theme.secondaryText,
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${card.checkinCount}',
-                    style: RaverTypography.caption(
-                      size: 12,
-                      color: Colors.white.withValues(alpha: 0.7),
-                      weight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right, size: 18, color: theme.secondaryText),
+        ],
+      ),
+    );
+  }
+}
+
+class _LinkedDjChip extends StatelessWidget {
+  const _LinkedDjChip(this.dj);
+
+  final CircleIdLinkedDj dj;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.raver;
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.background,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: theme.cardBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Avatar(url: dj.avatarUrl, size: 24),
+          const SizedBox(width: 7),
+          Flexible(
+            child: Text(
+              dj.name,
+              style: RaverTypography.caption(
+                color: theme.primaryText,
+                weight: FontWeight.w700,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionPill extends StatelessWidget {
+  const _ActionPill({
+    required this.icon,
+    required this.count,
+    this.isActive = false,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final int count;
+  final bool isActive;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.raver;
+    final foreground = isActive ? theme.accent : theme.primaryText;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: (isActive ? theme.accent : theme.cardBorder).withValues(
+            alpha: isActive ? 0.14 : 0.42,
+          ),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 17, color: foreground),
+            if (count > 0 || icon != Icons.ios_share_outlined) ...[
+              const SizedBox(width: 5),
+              Text(
+                '$count',
+                style: RaverTypography.caption(
+                  color: foreground,
+                  weight: FontWeight.w700,
+                ),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _CircleIdReaction { like, favorite, repost }
+
+class _Avatar extends StatelessWidget {
+  const _Avatar({required this.url, required this.size});
+
+  final String url;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.raver;
+    if (url.isEmpty) {
+      return CircleAvatar(
+        radius: size / 2,
+        backgroundColor: theme.cardBorder,
+        child: Icon(Icons.person, size: size * 0.5, color: theme.secondaryText),
+      );
+    }
+    return ClipOval(
+      child: Image.network(
+        url,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => CircleAvatar(
+          radius: size / 2,
+          backgroundColor: theme.cardBorder,
+          child: Icon(
+            Icons.person,
+            size: size * 0.5,
+            color: theme.secondaryText,
           ),
         ),
       ),
     );
   }
+}
+
+class _Thumb extends StatelessWidget {
+  const _Thumb({required this.url, required this.size});
+
+  final String url;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.raver;
+    final fallback = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: theme.cardBorder,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(Icons.event, color: theme.secondaryText, size: size * 0.45),
+    );
+    if (url.isEmpty) return fallback;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Image.network(
+        url,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => fallback,
+      ),
+    );
+  }
+}
+
+String _compactDate(String value) {
+  final parsed = DateTime.tryParse(value);
+  if (parsed == null) return value;
+  return '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
 }

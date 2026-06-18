@@ -5,6 +5,7 @@ import 'package:raver_models/raver_models.dart';
 
 import '../data/inbox_service_locator.dart';
 import 'view_models/inbox_view_model.dart';
+import 'widgets/refreshable_empty_state.dart';
 
 /// Inbox screen listing content review status updates.
 ///
@@ -18,8 +19,7 @@ class ContentReviewsInboxScreen extends StatefulWidget {
       _ContentReviewsInboxScreenState();
 }
 
-class _ContentReviewsInboxScreenState
-    extends State<ContentReviewsInboxScreen> {
+class _ContentReviewsInboxScreenState extends State<ContentReviewsInboxScreen> {
   late final InboxViewModel _viewModel;
   final ScrollController _scrollController = ScrollController();
 
@@ -71,13 +71,16 @@ class _ContentReviewsInboxScreenState
       body: LoadPhaseBuilder<List<ContentReviewNotificationItem>>(
         phase: _viewModel.contentReviewsPhase,
         onLoading: () => const _ContentReviewsSkeleton(),
-        onEmpty: () => EmptyStateView(
-          icon: Icons.rate_review_outlined,
-          title: lt('暂无审核记录', 'No Reviews', '審査記録はありません'),
-          subtitle: lt(
-            '您提交的内容审核进度将在这里显示',
-            'Review status of your submissions will appear here',
-            '投稿内容の審査状況はこちらに表示されます',
+        onEmpty: () => RefreshableEmptyState(
+          onRefresh: _viewModel.refreshContentReviews,
+          child: EmptyStateView(
+            icon: Icons.rate_review_outlined,
+            title: lt('暂无审核记录', 'No Reviews', '審査記録はありません'),
+            subtitle: lt(
+              '您提交的内容审核进度将在这里显示',
+              'Review status of your submissions will appear here',
+              '投稿内容の審査状況はこちらに表示されます',
+            ),
           ),
         ),
         onFailure: (error) => ErrorStateView(
@@ -91,6 +94,7 @@ class _ContentReviewsInboxScreenState
           onRefresh: _viewModel.refreshContentReviews,
           child: ListView.separated(
             controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             itemCount: _viewModel.contentReviews.length +
                 (_viewModel.canLoadMoreContentReviews ? 1 : 0),

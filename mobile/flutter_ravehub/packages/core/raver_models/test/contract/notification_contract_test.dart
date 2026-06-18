@@ -147,5 +147,86 @@ void main() {
       expect(unread.followedDJs, 42);
       expect(unread.followedBrands, 7);
     });
+
+    test('snake case and numeric string aliases deserialize correctly', () {
+      final json = <String, dynamic>{
+        'community_unread_count': '4',
+        'followed_events_unread_count': '6',
+        'followed_djs_unread_count': 8.0,
+        'followed_brands_unread_count': '10',
+      };
+
+      final unread = NotificationUnreadCount.fromJson(json);
+
+      expect(unread.community, 4);
+      expect(unread.followedEvents, 6);
+      expect(unread.followedDJs, 8);
+      expect(unread.followedBrands, 10);
+    });
+  });
+
+  group('Followed entity inbox projections', () {
+    test('followed event live projection deserializes correctly', () {
+      final item = FollowedEventNotificationItem.fromJson({
+        'id': 'inbox-event-1',
+        'type': 'news',
+        'eventId': 'event-1',
+        'eventName': 'RaveHub Night',
+        'newsId': 'news-1',
+        'newsTitle': 'Lineup phase two announced',
+        'newsSummary': 'Three artists were added.',
+        'newsCoverImageURL': 'https://cdn.example.com/news.jpg',
+        'isRead': false,
+        'occurredAt': '2026-06-16T10:00:00Z',
+      });
+
+      expect(item.type, 'news');
+      expect(item.eventId, 'event-1');
+      expect(item.newsId, 'news-1');
+      expect(item.summary, 'Three artists were added.');
+      expect(item.coverImageUrl, contains('news.jpg'));
+      expect(item.isRead, isFalse);
+      expect(item.createdAt, '2026-06-16T10:00:00Z');
+    });
+
+    test('followed DJ live projection deserializes correctly', () {
+      final item = FollowedDJNotificationItem.fromJson({
+        'id': 'inbox-dj-1',
+        'type': 'event',
+        'djId': 'dj-1',
+        'djName': 'DJ Koda',
+        'newsId': 'event-2',
+        'newsTitle': 'DJ Koda joins RaveHub Night',
+        'newsSummary': 'A new performance was announced.',
+        'newsCoverImageUrl': 'https://cdn.example.com/event.jpg',
+        'isRead': true,
+        'occurredAt': '2026-06-16T11:00:00Z',
+      });
+
+      expect(item.type, 'event');
+      expect(item.djId, 'dj-1');
+      expect(item.newsId, 'event-2');
+      expect(item.newsCoverImageUrl, contains('event.jpg'));
+      expect(item.isRead, isTrue);
+    });
+
+    test('followed brand keeps legacy aliases working', () {
+      final item = FollowedBrandNotificationItem.fromJson({
+        'id': 'legacy-brand-1',
+        'brandId': 'brand-1',
+        'brandName': 'RaveHub Records',
+        'imageUrl': 'https://cdn.example.com/brand.jpg',
+        'changeType': 'news',
+        'summary': 'New release announced.',
+        'createdAt': '2026-06-16T12:00:00Z',
+      });
+
+      expect(item.type, 'news');
+      expect(item.newsId, isEmpty);
+      expect(item.summary, 'New release announced.');
+      expect(item.imageUrl, contains('brand.jpg'));
+      expect(item.isRead, isFalse);
+      expect(item.occurredAt, '2026-06-16T12:00:00Z');
+    });
   });
 }

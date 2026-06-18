@@ -5,9 +5,13 @@ import 'package:geolocator/geolocator.dart';
 /// Handles permission checks internally so callers get a simple API.
 /// Modelled after the iOS `AppLocationProvider`.
 class LocationService {
+  /// Convenience static accessor used by older feature code.
+  static Future<Position?> getCurrentPosition() =>
+      LocationService().currentPosition();
+
   /// Returns the device's current position, or `null` if location services
   /// are disabled or permission is denied.
-  Future<Position?> getCurrentPosition() async {
+  Future<Position?> currentPosition() async {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return null;
 

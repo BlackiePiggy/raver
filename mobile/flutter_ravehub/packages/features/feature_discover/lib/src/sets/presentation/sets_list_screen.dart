@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,11 +15,27 @@ class SetsListScreen extends ConsumerStatefulWidget {
 }
 
 class _SetsListScreenState extends ConsumerState<SetsListScreen> {
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-        () => ref.read(setsListProvider.notifier).loadIfNeeded());
+    Future.microtask(() => ref.read(setsListProvider.notifier).loadIfNeeded());
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: RaverMotion.normal,
+      curve: RaverMotion.curve,
+    );
   }
 
   @override
@@ -40,8 +55,7 @@ class _SetsListScreenState extends ConsumerState<SetsListScreen> {
             Icon(Icons.error_outline, size: 48, color: theme.secondaryText),
             const SizedBox(height: 12),
             Text(
-              lt('Sets 加载失败', 'Failed to load sets',
-                  'セットの読み込みに失敗しました'),
+              lt('Sets 加载失败', 'Failed to load sets', 'セットの読み込みに失敗しました'),
               style: TextStyle(color: theme.primaryText, fontSize: 16),
             ),
             const SizedBox(height: 12),
@@ -54,39 +68,44 @@ class _SetsListScreenState extends ConsumerState<SetsListScreen> {
       );
     }
 
-    return Column(
-      children: [
-        _SortBar(
-          selected: state.sortBy,
-          onSelected: (s) =>
-              ref.read(setsListProvider.notifier).setSortBy(s),
-          theme: theme,
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: () => ref.read(setsListProvider.notifier).reload(),
-            child: GridView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 0.72,
+    return RaverTabReselectionListener(
+      tabIndex: 0,
+      onReselected: _scrollToTop,
+      child: Column(
+        children: [
+          _SortBar(
+            selected: state.sortBy,
+            onSelected: (s) => ref.read(setsListProvider.notifier).setSortBy(s),
+            theme: theme,
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => ref.read(setsListProvider.notifier).reload(),
+              child: GridView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.72,
+                ),
+                itemCount: state.sets.length + (state.canLoadMore ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index >= state.sets.length) {
+                    Future.microtask(
+                      () => ref.read(setsListProvider.notifier).loadMore(),
+                    );
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final djSet = state.sets[index];
+                  return _SetGridCard(djSet: djSet);
+                },
               ),
-              itemCount: state.sets.length + (state.canLoadMore ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index >= state.sets.length) {
-                  Future.microtask(
-                      () => ref.read(setsListProvider.notifier).loadMore());
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final djSet = state.sets[index];
-                return _SetGridCard(djSet: djSet);
-              },
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -126,13 +145,11 @@ class _SortBar extends StatelessWidget {
                     color: theme.primaryText,
                   ),
                 ),
-                Icon(Icons.arrow_drop_down,
-                    size: 20, color: theme.primaryText),
+                Icon(Icons.arrow_drop_down, size: 20, color: theme.primaryText),
               ],
             ),
             itemBuilder: (_) => SetSortBy.values
-                .map((s) =>
-                    PopupMenuItem(value: s, child: Text(s.title)))
+                .map((s) => PopupMenuItem(value: s, child: Text(s.title)))
                 .toList(),
           ),
         ],
@@ -162,11 +179,9 @@ class _SetGridCard extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   djSet.thumbnailUrl.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: djSet.thumbnailUrl,
+                      ? RemoteCoverImage(
+                          url: djSet.thumbnailUrl,
                           fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) =>
-                              _thumbnailFallback(theme),
                         )
                       : _thumbnailFallback(theme),
                   Positioned(
@@ -174,7 +189,9 @@ class _SetGridCard extends StatelessWidget {
                     bottom: 6,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.7),
                         borderRadius: BorderRadius.circular(4),
@@ -182,7 +199,9 @@ class _SetGridCard extends StatelessWidget {
                       child: Text(
                         _formatDuration(djSet.duration),
                         style: const TextStyle(
-                            fontSize: 10, color: Colors.white),
+                          fontSize: 10,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
@@ -212,19 +231,17 @@ class _SetGridCard extends StatelessWidget {
                   width: 18,
                   height: 18,
                   child: djSet.djAvatarUrl.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: djSet.djAvatarUrl,
+                      ? RemoteCoverImage(
+                          url: djSet.djAvatarUrl,
                           fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => Container(
-                            color: theme.cardBorder,
-                            child: Icon(Icons.person,
-                                size: 10, color: theme.secondaryText),
-                          ),
                         )
                       : Container(
                           color: theme.cardBorder,
-                          child: Icon(Icons.person,
-                              size: 10, color: theme.secondaryText),
+                          child: Icon(
+                            Icons.person,
+                            size: 10,
+                            color: theme.secondaryText,
+                          ),
                         ),
                 ),
               ),
@@ -234,8 +251,7 @@ class _SetGridCard extends StatelessWidget {
                   djSet.djName.isNotEmpty
                       ? djSet.djName
                       : lt('未关联 DJ', 'No DJ Linked', 'DJ未リンク'),
-                  style: TextStyle(
-                      fontSize: 11, color: theme.secondaryText),
+                  style: TextStyle(fontSize: 11, color: theme.secondaryText),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -257,8 +273,11 @@ class _SetGridCard extends StatelessWidget {
         ),
       ),
       child: Center(
-        child: Icon(Icons.play_circle_outline,
-            size: 32, color: theme.secondaryText),
+        child: Icon(
+          Icons.play_circle_outline,
+          size: 32,
+          color: theme.secondaryText,
+        ),
       ),
     );
   }

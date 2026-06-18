@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:raver_design_system/raver_design_system.dart';
+import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_models/raver_models.dart';
 
 class SearchResultCard extends StatelessWidget {
@@ -16,58 +17,79 @@ class SearchResultCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = context.raver;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: theme.card,
+    return Semantics(
+      key: const ValueKey('search_result_card_semantics'),
+      button: true,
+      excludeSemantics: true,
+      label: _semanticLabel,
+      child: Material(
+        color: theme.card,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: theme.cardBorder),
+          side: BorderSide(color: theme.cardBorder),
         ),
-        child: Row(
-          children: [
-            _buildThumbnail(theme),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildDomainBadge(theme),
-                  const SizedBox(height: 6),
-                  Text(
-                    item.title,
-                    style: RaverTypography.label(
-                      size: 14,
-                      color: theme.primaryText,
-                      weight: FontWeight.w600,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (item.subtitle != null && item.subtitle!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      item.subtitle!,
-                      style: RaverTypography.caption(
-                        color: theme.secondaryText,
+        child: InkWell(
+          onTap: onTap,
+          splashColor: theme.accent.withValues(alpha: 0.08),
+          highlightColor: theme.accent.withValues(alpha: 0.05),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                _buildThumbnail(theme),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildDomainBadge(theme),
+                      const SizedBox(height: 6),
+                      Text(
+                        item.title,
+                        style: RaverTypography.label(
+                          size: 14,
+                          color: theme.primaryText,
+                          weight: FontWeight.w600,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ],
-              ),
+                      if (item.subtitle != null &&
+                          item.subtitle!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          item.subtitle!,
+                          style: RaverTypography.caption(
+                            color: theme.secondaryText,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  size: 16,
+                  color: theme.secondaryText.withValues(alpha: 0.7),
+                ),
+              ],
             ),
-            Icon(
-              Icons.chevron_right,
-              size: 16,
-              color: theme.secondaryText.withValues(alpha: 0.7),
-            ),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  String get _semanticLabel {
+    final subtitle = item.subtitle;
+    return [
+      _typeLabel,
+      item.title,
+      if (subtitle != null && subtitle.isNotEmpty) subtitle,
+    ].join(', ');
   }
 
   Widget _buildThumbnail(RaverThemeData theme) {
@@ -173,19 +195,19 @@ class SearchResultCard extends StatelessWidget {
       };
 
   String get _typeLabel => switch (item.type) {
-        GlobalSearchItemType.event => 'Event',
-        GlobalSearchItemType.news => 'News',
+        GlobalSearchItemType.event => lt('活动', 'Event', 'イベント'),
+        GlobalSearchItemType.news => lt('资讯', 'News', 'ニュース'),
         GlobalSearchItemType.dj => 'DJ',
         GlobalSearchItemType.set => 'Set',
-        GlobalSearchItemType.rankingBoard => 'Ranking',
-        GlobalSearchItemType.rankingEntry => 'Ranking',
-        GlobalSearchItemType.ratingEvent => 'Rating',
-        GlobalSearchItemType.ratingUnit => 'Rating',
-        GlobalSearchItemType.post => 'Post',
-        GlobalSearchItemType.label => 'Label',
-        GlobalSearchItemType.festival => 'Brand',
-        GlobalSearchItemType.genre => 'Genre',
-        GlobalSearchItemType.user => 'User',
-        GlobalSearchItemType.squad => 'Squad',
+        GlobalSearchItemType.rankingBoard => lt('榜单', 'Ranking', 'ランキング'),
+        GlobalSearchItemType.rankingEntry => lt('榜单', 'Ranking', 'ランキング'),
+        GlobalSearchItemType.ratingEvent => lt('打分', 'Rating', '評価'),
+        GlobalSearchItemType.ratingUnit => lt('打分', 'Rating', '評価'),
+        GlobalSearchItemType.post => lt('圈子', 'Post', '投稿'),
+        GlobalSearchItemType.label => lt('厂牌', 'Label', 'レーベル'),
+        GlobalSearchItemType.festival => lt('品牌', 'Brand', 'ブランド'),
+        GlobalSearchItemType.genre => lt('风格树', 'Genre', 'ジャンル'),
+        GlobalSearchItemType.user => lt('用户', 'User', 'ユーザー'),
+        GlobalSearchItemType.squad => lt('小队', 'Squad', 'スクワッド'),
       };
 }

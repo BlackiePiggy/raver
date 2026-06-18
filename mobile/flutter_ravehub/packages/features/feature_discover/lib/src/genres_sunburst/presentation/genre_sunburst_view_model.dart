@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:raver_models/raver_models.dart';
 
@@ -59,8 +58,8 @@ class GenreSunburstNotifier extends StateNotifier<GenreSunburstState> {
   }
 }
 
-final genreSunburstProvider =
-    StateNotifierProvider.autoDispose<GenreSunburstNotifier, GenreSunburstState>(
+final genreSunburstProvider = StateNotifierProvider.autoDispose<
+    GenreSunburstNotifier, GenreSunburstState>(
   (ref) {
     final api = ref.watch(genreApiProvider);
     final notifier = GenreSunburstNotifier(api);

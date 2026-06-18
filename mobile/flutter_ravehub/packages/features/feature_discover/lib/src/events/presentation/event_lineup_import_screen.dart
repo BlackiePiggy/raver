@@ -7,14 +7,14 @@ import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 
 import '../data/events_api_service.dart';
-import '../view_models/event_upload_view_model.dart';
+import 'view_models/event_upload_view_model.dart';
 import '../../_shared/discover_service_locator.dart';
 
 /// EventLineupImportScreen -- AI OCR lineup poster import.
 ///
 /// Flow:
 /// 1. Show image picker (camera or gallery)
-/// 2. Upload image to POST /v1/events/:eventId/lineup/import-image
+/// 2. Upload image to POST /v1/events/lineup/import-image
 /// 3. Show loading state
 /// 4. Display matched DJs as selectable list (CheckboxListTile)
 /// 5. Confirm button -> returns selected LineupEntry list to caller
@@ -23,12 +23,22 @@ import '../../_shared/discover_service_locator.dart';
 /// It calls context.pop(selectedEntries) on confirm.
 class EventLineupImportScreen extends StatefulWidget {
   /// Creates an [EventLineupImportScreen].
-  const EventLineupImportScreen({super.key, this.eventId});
+  const EventLineupImportScreen({
+    super.key,
+    this.eventId,
+    this.startDate,
+    this.endDate,
+  });
 
-  /// The event ID to associate the imported lineup with.
-  /// If null, the screen can still be used for a new event (the API call
-  /// will use a placeholder ID or fail gracefully).
+  /// The event ID that opened the import flow, if any.
+  ///
+  /// The current live OCR endpoint is global and does not require this ID; the
+  /// field is kept so existing event-detail routes remain source-compatible.
   final String? eventId;
+
+  /// Event-local date bounds used by the live OCR endpoint as context.
+  final DateTime? startDate;
+  final DateTime? endDate;
 
   @override
   State<EventLineupImportScreen> createState() =>
@@ -86,12 +96,11 @@ class _EventLineupImportScreenState extends State<EventLineupImportScreen> {
   // ---------------------------------------------------------------------------
 
   Future<void> _uploadAndProcess() async {
-    final eventId = widget.eventId ?? 'draft';
-
     try {
       final matches = await _api.importLineupFromImage(
-        eventId: eventId,
         imageFile: _imageFile!,
+        startDate: widget.startDate,
+        endDate: widget.endDate,
       );
 
       setState(() {

@@ -7,11 +7,34 @@ import 'package:raver_i18n/raver_i18n.dart';
 import 'organizer_card.dart';
 import 'organizer_view_model.dart';
 
-class OrganizersRootScreen extends ConsumerWidget {
+class OrganizersRootScreen extends ConsumerStatefulWidget {
   const OrganizersRootScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OrganizersRootScreen> createState() =>
+      _OrganizersRootScreenState();
+}
+
+class _OrganizersRootScreenState extends ConsumerState<OrganizersRootScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: RaverMotion.normal,
+      curve: RaverMotion.curve,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(organizersProvider);
 
     if (state.isLoading && state.festivals.isEmpty) {
@@ -22,8 +45,7 @@ class OrganizersRootScreen extends ConsumerWidget {
       return ErrorStateView(
         title: lt('加载失败', 'Failed to load', 'ロードに失敗しました'),
         description: state.error,
-        onRetry: () =>
-            ref.read(organizersProvider.notifier).loadFestivals(),
+        onRetry: () => ref.read(organizersProvider.notifier).loadFestivals(),
       );
     }
 
@@ -34,19 +56,23 @@ class OrganizersRootScreen extends ConsumerWidget {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () =>
-          ref.read(organizersProvider.notifier).loadFestivals(),
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: state.festivals.length,
-        itemBuilder: (context, index) {
-          final festival = state.festivals[index];
-          return OrganizerCard(
-            festival: festival,
-            onTap: () => context.push('/festivals/${festival.id}'),
-          );
-        },
+    return RaverTabReselectionListener(
+      tabIndex: 0,
+      onReselected: _scrollToTop,
+      child: RefreshIndicator(
+        onRefresh: () => ref.read(organizersProvider.notifier).loadFestivals(),
+        child: ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemCount: state.festivals.length,
+          itemBuilder: (context, index) {
+            final festival = state.festivals[index];
+            return OrganizerCard(
+              festival: festival,
+              onTap: () => context.push('/festivals/${festival.id}'),
+            );
+          },
+        ),
       ),
     );
   }

@@ -37,11 +37,29 @@ class _TracklistEditorScreenState extends State<TracklistEditorScreen> {
     super.dispose();
   }
 
-  void _showAddTrackSheet() {
+  void _showTrackSheet({int? editIndex}) {
     final theme = context.raver;
-    final titleCtrl = TextEditingController();
-    final artistCtrl = TextEditingController();
-    final startCtrl = TextEditingController(text: '0:00');
+    final existing = editIndex == null ? null : _vm.tracklist[editIndex];
+    final titleCtrl = TextEditingController(
+      text: existing?['title'] as String? ?? '',
+    );
+    final artistCtrl = TextEditingController(
+      text: existing?['artist'] as String? ?? '',
+    );
+    final startCtrl = TextEditingController(
+      text: _formatSeconds(existing?['startSecond'] as int? ?? 0),
+    );
+    final endCtrl = TextEditingController(
+      text: existing?['endSecond'] is int
+          ? _formatSeconds(existing!['endSecond'] as int)
+          : '',
+    );
+    final spotifyCtrl = TextEditingController(
+      text: existing?['spotifyUrl'] as String? ?? '',
+    );
+    final neteaseCtrl = TextEditingController(
+      text: existing?['neteaseUrl'] as String? ?? '',
+    );
 
     showModalBottomSheet<void>(
       context: context,
@@ -62,7 +80,9 @@ class _TracklistEditorScreenState extends State<TracklistEditorScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              lt('添加曲目', 'Add Track', 'トラック追加'),
+              editIndex == null
+                  ? lt('添加曲目', 'Add Track', 'トラック追加')
+                  : lt('编辑曲目', 'Edit Track', 'トラック編集'),
               style: RaverTypography.title(color: theme.primaryText),
             ),
             const SizedBox(height: 16),
@@ -116,18 +136,99 @@ class _TracklistEditorScreenState extends State<TracklistEditorScreen> {
               keyboardType: TextInputType.datetime,
               style: TextStyle(color: theme.primaryText),
             ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: endCtrl,
+              decoration: InputDecoration(
+                labelText: lt('结束时间（可选）', 'End Time (optional)', '終了時間（任意）'),
+                hintText: '3:30',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: theme.cardBorder),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: theme.cardBorder),
+                ),
+              ),
+              keyboardType: TextInputType.datetime,
+              style: TextStyle(color: theme.primaryText),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: spotifyCtrl,
+              decoration: InputDecoration(
+                labelText: lt('Spotify 链接（可选）', 'Spotify link (optional)',
+                    'Spotifyリンク（任意）'),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: theme.cardBorder),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: theme.cardBorder),
+                ),
+              ),
+              keyboardType: TextInputType.url,
+              style: TextStyle(color: theme.primaryText),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: neteaseCtrl,
+              decoration: InputDecoration(
+                labelText: lt(
+                    '网易云链接（可选）', 'NetEase link (optional)', 'NetEaseリンク（任意）'),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: theme.cardBorder),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: theme.cardBorder),
+                ),
+              ),
+              keyboardType: TextInputType.url,
+              style: TextStyle(color: theme.primaryText),
+            ),
             const SizedBox(height: 16),
             PrimaryButton(
-              label: lt('添加', 'Add', '追加'),
+              label: editIndex == null
+                  ? lt('添加', 'Add', '追加')
+                  : lt('保存', 'Save', '保存'),
               isExpanded: true,
               onPressed: () {
                 final title = titleCtrl.text.trim();
                 if (title.isEmpty) return;
-                _vm.addTrack(
+                final payload = (
                   title: title,
                   artist: artistCtrl.text.trim(),
                   startSecond: _parseTimeInput(startCtrl.text.trim()),
+                  endSecond: endCtrl.text.trim().isEmpty
+                      ? null
+                      : _parseTimeInput(endCtrl.text.trim()),
+                  spotifyUrl: spotifyCtrl.text.trim(),
+                  neteaseUrl: neteaseCtrl.text.trim(),
                 );
+                if (editIndex == null) {
+                  _vm.addTrack(
+                    title: payload.title,
+                    artist: payload.artist,
+                    startSecond: payload.startSecond,
+                    endSecond: payload.endSecond,
+                    spotifyUrl: payload.spotifyUrl,
+                    neteaseUrl: payload.neteaseUrl,
+                  );
+                } else {
+                  _vm.updateTrack(
+                    editIndex,
+                    title: payload.title,
+                    artist: payload.artist,
+                    startSecond: payload.startSecond,
+                    endSecond: payload.endSecond,
+                    spotifyUrl: payload.spotifyUrl,
+                    neteaseUrl: payload.neteaseUrl,
+                  );
+                }
                 Navigator.pop(ctx);
               },
             ),
@@ -142,8 +243,7 @@ class _TracklistEditorScreenState extends State<TracklistEditorScreen> {
     if (input.isEmpty) return 0;
     final parts = input.split(':');
     if (parts.length == 2) {
-      return (int.tryParse(parts[0]) ?? 0) * 60 +
-          (int.tryParse(parts[1]) ?? 0);
+      return (int.tryParse(parts[0]) ?? 0) * 60 + (int.tryParse(parts[1]) ?? 0);
     }
     if (parts.length == 3) {
       return (int.tryParse(parts[0]) ?? 0) * 3600 +
@@ -176,7 +276,7 @@ class _TracklistEditorScreenState extends State<TracklistEditorScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: theme.accent,
-        onPressed: _showAddTrackSheet,
+        onPressed: _showTrackSheet,
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: tracks.isEmpty
@@ -192,25 +292,29 @@ class _TracklistEditorScreenState extends State<TracklistEditorScreen> {
                 final track = tracks[index];
                 return ListTile(
                   key: ValueKey('tracklist_$index'),
+                  onTap: () => _showTrackSheet(editIndex: index),
                   leading: const Icon(Icons.drag_handle, size: 20),
                   title: Text(
                     track['title'] as String? ?? '',
-                    style:
-                        TextStyle(fontSize: 15, color: theme.primaryText),
+                    style: TextStyle(fontSize: 15, color: theme.primaryText),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   subtitle: Text(
-                    track['artist'] as String? ?? '',
-                    style: TextStyle(
-                        fontSize: 13, color: theme.secondaryText),
+                    [
+                      track['artist'] as String? ?? '',
+                      if ((track['spotifyUrl'] as String? ?? '').isNotEmpty)
+                        'Spotify',
+                      if ((track['neteaseUrl'] as String? ?? '').isNotEmpty)
+                        'NetEase',
+                    ].where((text) => text.isNotEmpty).join(' · '),
+                    style: TextStyle(fontSize: 13, color: theme.secondaryText),
                   ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        _formatSeconds(
-                            track['startSecond'] as int? ?? 0),
+                        _formatSeconds(track['startSecond'] as int? ?? 0),
                         style: TextStyle(
                           fontSize: 12,
                           fontFamily: 'monospace',

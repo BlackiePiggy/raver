@@ -113,19 +113,72 @@ class ProfileApi {
     String? birthday,
     String? city,
     String? avatarUrl,
+    String? backgroundUrl,
   }) async {
-    final response = await _dio.put<Map<String, dynamic>>(
-      '/v1/users/me',
+    final response = await _dio.patch<Map<String, dynamic>>(
+      '/v1/profile/me',
       data: {
         if (displayName != null) 'displayName': displayName,
         if (bio != null) 'bio': bio,
         if (gender != null) 'gender': gender,
         if (birthday != null) 'birthday': birthday,
-        if (city != null) 'city': city,
+        if (city != null) 'location': city,
         if (avatarUrl != null) 'avatarUrl': avatarUrl,
+        if (backgroundUrl != null) 'backgroundURL': backgroundUrl,
       },
     );
     return UserProfile.fromJson(response.data!);
+  }
+
+  /// Update the current user's home-city location.
+  Future<void> updateLocation({required String location}) async {
+    await _dio.patch<void>(
+      '/v1/profile/me',
+      data: {'location': location},
+    );
+  }
+
+  /// Delete the current account and invalidate local credentials server-side.
+  Future<void> deleteAccount() async {
+    await _dio.delete<void>('/v1/auth/account');
+  }
+
+  /// Upload the current user's avatar image.
+  Future<String> uploadMyAvatar(String localPath) async {
+    final formData = FormData.fromMap({
+      'avatar': await MultipartFile.fromFile(localPath),
+    });
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/v1/profile/me/avatar',
+      data: formData,
+    );
+    final data = response.data ?? const <String, dynamic>{};
+    final url = data['avatarURL'] ?? data['avatarUrl'] ?? data['url'];
+    if (url is String && url.isNotEmpty) return url;
+    throw StateError('Avatar upload response did not include a URL.');
+  }
+
+  /// Upload the current user's profile background image.
+  Future<String> uploadMyBackground(String localPath) async {
+    final formData = FormData.fromMap({
+      'background': await MultipartFile.fromFile(localPath),
+    });
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/v1/profile/me/background',
+      data: formData,
+    );
+    final data = response.data ?? const <String, dynamic>{};
+    final url = data['backgroundURL'] ?? data['backgroundUrl'] ?? data['url'];
+    if (url is String && url.isNotEmpty) return url;
+    throw StateError('Background upload response did not include a URL.');
+  }
+
+  /// Logs out the current session by invalidating the refresh token.
+  Future<void> logout({required String refreshToken}) async {
+    await _dio.post<void>(
+      '/v1/auth/logout',
+      data: {'refreshToken': refreshToken},
+    );
   }
 
   /// Check display name availability.

@@ -1,6 +1,7 @@
 enum ShareTargetType {
   event,
   dj,
+  set,
   djSet,
   brand,
   label,
@@ -10,12 +11,14 @@ enum ShareTargetType {
   ratingUnit,
   post,
   circle,
+  circleId,
   myCheckins,
   eventRoute;
 
   static final _snakeCaseMap = <String, ShareTargetType>{
     'event': event,
     'dj': dj,
+    'set': set,
     'dj_set': djSet,
     'brand': brand,
     'label': label,
@@ -25,6 +28,7 @@ enum ShareTargetType {
     'rating_unit': ratingUnit,
     'post': post,
     'circle': circle,
+    'circle_id': circleId,
     'my_checkins': myCheckins,
     'event_route': eventRoute,
   };
@@ -45,6 +49,14 @@ class ShareLinkPayload {
   final String shortUrl;
   final String posterUrl;
   final String qrCodeUrl;
+  final String canonicalUrl;
+  final String deepLink;
+  final String fallbackUrl;
+  final String title;
+  final String subtitle;
+  final String imageUrl;
+  final String previewType;
+  final String status;
 
   const ShareLinkPayload({
     required this.code,
@@ -52,15 +64,31 @@ class ShareLinkPayload {
     required this.shortUrl,
     required this.posterUrl,
     required this.qrCodeUrl,
+    this.canonicalUrl = '',
+    this.deepLink = '',
+    this.fallbackUrl = '',
+    this.title = '',
+    this.subtitle = '',
+    this.imageUrl = '',
+    this.previewType = '',
+    this.status = '',
   });
 
   factory ShareLinkPayload.fromJson(Map<String, dynamic> json) =>
       ShareLinkPayload(
-        code: json['code'] as String,
-        url: json['url'] as String,
-        shortUrl: json['shortUrl'] as String,
-        posterUrl: json['posterUrl'] as String,
-        qrCodeUrl: json['qrCodeUrl'] as String,
+        code: _string(json['code']),
+        url: _string(json['url'] ?? json['shortUrl']),
+        shortUrl: _string(json['shortUrl'] ?? json['url']),
+        posterUrl: _string(json['posterUrl']),
+        qrCodeUrl: _string(json['qrCodeUrl']),
+        canonicalUrl: _string(json['canonicalUrl']),
+        deepLink: _string(json['deepLink']),
+        fallbackUrl: _string(json['fallbackUrl']),
+        title: _string(json['title']),
+        subtitle: _string(json['subtitle']),
+        imageUrl: _string(json['imageUrl']),
+        previewType: _string(json['previewType']),
+        status: _string(json['status']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -69,6 +97,14 @@ class ShareLinkPayload {
         'shortUrl': shortUrl,
         'posterUrl': posterUrl,
         'qrCodeUrl': qrCodeUrl,
+        'canonicalUrl': canonicalUrl,
+        'deepLink': deepLink,
+        'fallbackUrl': fallbackUrl,
+        'title': title,
+        'subtitle': subtitle,
+        'imageUrl': imageUrl,
+        'previewType': previewType,
+        'status': status,
       };
 
   ShareLinkPayload copyWith({
@@ -77,6 +113,14 @@ class ShareLinkPayload {
     String? shortUrl,
     String? posterUrl,
     String? qrCodeUrl,
+    String? canonicalUrl,
+    String? deepLink,
+    String? fallbackUrl,
+    String? title,
+    String? subtitle,
+    String? imageUrl,
+    String? previewType,
+    String? status,
   }) =>
       ShareLinkPayload(
         code: code ?? this.code,
@@ -84,14 +128,20 @@ class ShareLinkPayload {
         shortUrl: shortUrl ?? this.shortUrl,
         posterUrl: posterUrl ?? this.posterUrl,
         qrCodeUrl: qrCodeUrl ?? this.qrCodeUrl,
+        canonicalUrl: canonicalUrl ?? this.canonicalUrl,
+        deepLink: deepLink ?? this.deepLink,
+        fallbackUrl: fallbackUrl ?? this.fallbackUrl,
+        title: title ?? this.title,
+        subtitle: subtitle ?? this.subtitle,
+        imageUrl: imageUrl ?? this.imageUrl,
+        previewType: previewType ?? this.previewType,
+        status: status ?? this.status,
       );
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is ShareLinkPayload &&
-        other.code == code &&
-        other.url == url;
+    return other is ShareLinkPayload && other.code == code && other.url == url;
   }
 
   @override
@@ -106,10 +156,7 @@ class ShareTarget {
   final ShareTargetType type;
   final String entityId;
 
-  const ShareTarget({
-    required this.type,
-    required this.entityId,
-  });
+  const ShareTarget({required this.type, required this.entityId});
 
   factory ShareTarget.fromJson(Map<String, dynamic> json) => ShareTarget(
         type: ShareTargetType.fromJson(json['type'] as String),
@@ -121,14 +168,8 @@ class ShareTarget {
         'entityId': entityId,
       };
 
-  ShareTarget copyWith({
-    ShareTargetType? type,
-    String? entityId,
-  }) =>
-      ShareTarget(
-        type: type ?? this.type,
-        entityId: entityId ?? this.entityId,
-      );
+  ShareTarget copyWith({ShareTargetType? type, String? entityId}) =>
+      ShareTarget(type: type ?? this.type, entityId: entityId ?? this.entityId);
 
   @override
   bool operator ==(Object other) {
@@ -142,6 +183,11 @@ class ShareTarget {
   int get hashCode => Object.hash(type, entityId);
 
   @override
-  String toString() =>
-      'ShareTarget(type: $type, entityId: $entityId)';
+  String toString() => 'ShareTarget(type: $type, entityId: $entityId)';
+}
+
+String _string(Object? value) {
+  if (value == null) return '';
+  if (value is String) return value;
+  return value.toString();
 }

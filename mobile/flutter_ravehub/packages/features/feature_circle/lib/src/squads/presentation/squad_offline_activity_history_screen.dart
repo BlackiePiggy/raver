@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
-import 'package:raver_models/raver_models.dart';
 
-import '../view_models/squad_view_model.dart';
+import 'view_models/squad_view_model.dart';
 import '../../_shared/circle_service_locator.dart';
 
 /// Screen showing the full history of offline activities for a squad.
@@ -94,9 +93,7 @@ class _SquadOfflineActivityHistoryScreenState
                         width: 8,
                         height: 8,
                         decoration: BoxDecoration(
-                          color: isOngoing
-                              ? Colors.green
-                              : theme.secondaryText,
+                          color: isOngoing ? Colors.green : theme.secondaryText,
                           shape: BoxShape.circle,
                         ),
                       ),

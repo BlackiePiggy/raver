@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:raver_auth/raver_auth.dart';
 
 import '../../data/auth_api.dart';
+import '../../data/auth_error_message.dart';
 import '../../data/auth_service_locator.dart';
 
 /// The method the user has selected for login.
@@ -91,11 +92,9 @@ class LoginState {
   bool get canLogin {
     if (isLoading || !agreedToTerms) return false;
     return switch (method) {
-      LoginMethod.email =>
-        _isValidEmail(email) && verificationCode.length == 6,
+      LoginMethod.email => _isValidEmail(email) && verificationCode.length == 6,
       LoginMethod.sms => phone.length >= 6 && verificationCode.length == 6,
-      LoginMethod.password =>
-        username.isNotEmpty && password.length >= 6,
+      LoginMethod.password => username.isNotEmpty && password.length >= 6,
     };
   }
 
@@ -247,41 +246,49 @@ class LoginNotifier extends StateNotifier<LoginState> {
   void toggleTermsAgreement() =>
       state = state.copyWith(agreedToTerms: !state.agreedToTerms);
 
+  /// Set a user-visible error message.
+  void setError(String message) =>
+      state = state.copyWith(errorMessage: message);
+
+  /// Clear the current user-visible error message.
+  void clearError() => state = state.copyWith(clearError: true);
+
   // ---------------------------------------------------------------------------
   // Send verification code
   // ---------------------------------------------------------------------------
 
   /// Sends a verification code via email or SMS.
   ///
-  /// Starts a 60-second cooldown on success.
+  /// Starts the server-provided cooldown on success.
   Future<void> sendCode() async {
     if (!state.canSendCode) return;
 
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
+      late final int cooldownSeconds;
       switch (state.method) {
         case LoginMethod.email:
-          await _api.sendEmailCode(email: state.email);
+          cooldownSeconds = await _api.sendEmailCode(email: state.email);
         case LoginMethod.sms:
-          await _api.sendSmsCode(
+          cooldownSeconds = await _api.sendSmsCode(
             phone: state.phone,
             countryCode: state.countryCode,
           );
         case LoginMethod.password:
-          break;
+          cooldownSeconds = 0;
       }
 
       state = state.copyWith(
         isLoading: false,
         codeSent: true,
-        cooldownSeconds: 60,
+        cooldownSeconds: cooldownSeconds,
       );
       _startCooldown();
     } on Exception catch (e) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: e.toString(),
+        errorMessage: authUserFacingError(e),
       );
     }
   }
@@ -329,13 +336,15 @@ class LoginNotifier extends StateNotifier<LoginState> {
         refreshToken: refreshToken,
         expiresIn: expiresIn,
       );
+      await AuthServiceLocator.instance.authenticatedSessionHandler
+          ?.call(result);
 
       state = state.copyWith(isLoading: false);
       return true;
     } on Exception catch (e) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: e.toString(),
+        errorMessage: authUserFacingError(e),
       );
       return false;
     }

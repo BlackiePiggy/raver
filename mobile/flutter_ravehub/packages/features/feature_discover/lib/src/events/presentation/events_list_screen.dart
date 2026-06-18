@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
+import 'package:raver_models/raver_models.dart';
+import 'package:raver_platform/raver_platform.dart';
 
-import '../view_models/events_list_view_model.dart';
-import '../widgets/event_card.dart';
-import '../widgets/event_filter_sheet.dart';
+import 'view_models/events_list_view_model.dart';
+import 'widgets/event_card.dart';
+import 'widgets/event_filter_sheet.dart';
 import '../../_shared/discover_service_locator.dart';
 
 class EventsListScreen extends StatefulWidget {
@@ -18,7 +22,9 @@ class EventsListScreen extends StatefulWidget {
 class _EventsListScreenState extends State<EventsListScreen> {
   late final EventsListViewModel _viewModel;
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
   EventFilterResult? _activeFilter;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -27,7 +33,7 @@ class _EventsListScreenState extends State<EventsListScreen> {
       repository: DiscoverServiceLocator.eventsRepository,
     );
     _viewModel.addListener(_rebuild);
-    _viewModel.load();
+    unawaited(_viewModel.load());
     _scrollController.addListener(_onScroll);
   }
 
@@ -38,13 +44,24 @@ class _EventsListScreenState extends State<EventsListScreen> {
   void _onScroll() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
-      _viewModel.loadMore();
+      unawaited(_viewModel.loadMore());
     }
+  }
+
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: RaverMotion.normal,
+      curve: RaverMotion.curve,
+    );
   }
 
   @override
   void dispose() {
     _viewModel.removeListener(_rebuild);
+    _searchDebounce?.cancel();
+    _searchController.dispose();
     _scrollController.dispose();
     _viewModel.dispose();
     super.dispose();
@@ -54,34 +71,145 @@ class _EventsListScreenState extends State<EventsListScreen> {
   Widget build(BuildContext context) {
     final theme = context.raver;
 
-    return Column(
-      children: [
-        _buildFilterBar(theme),
-        const SizedBox(height: 8),
-        Expanded(
-          child: LoadPhaseBuilder<List<dynamic>>(
-            phase: _viewModel.phase,
-            onLoading: () => const EventListSkeleton(),
-            onEmpty: () => EmptyStateView(
-              icon: Icons.event_busy,
-              title: lt('暂无活动', 'No Events', 'イベントなし'),
-              subtitle: lt(
-                '换个条件试试',
-                'Try different filters',
-                '別の条件を試してください',
+    return RaverTabReselectionListener(
+      tabIndex: 0,
+      onReselected: _scrollToTop,
+      child: Column(
+        children: [
+          _buildSearchField(theme),
+          const SizedBox(height: 10),
+          _buildStatusBar(theme),
+          const SizedBox(height: 8),
+          _buildFilterBar(theme),
+          const SizedBox(height: 8),
+          Expanded(
+            child: LoadPhaseBuilder<List<dynamic>>(
+              phase: _viewModel.phase,
+              onLoading: () => const EventListSkeleton(),
+              onEmpty: () => EmptyStateView(
+                icon: Icons.event_busy,
+                title: lt('暂无活动', 'No Events', 'イベントなし'),
+                subtitle: lt(
+                  '换个条件试试',
+                  'Try different filters',
+                  '別の条件を試してください',
+                ),
+              ),
+              onFailure: (error) => ErrorStateView(
+                title: lt('加载失败', 'Failed to Load', '読み込みに失敗しました'),
+                error: error,
+                onRetry: _viewModel.load,
+                retryLabel: lt('重试', 'Retry', '再試行'),
+              ),
+              onSuccess: (_) => _buildEventsList(theme),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBar(RaverThemeData theme) {
+    return SizedBox(
+      height: 36,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: EventStatusFilter.values.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final filter = EventStatusFilter.values[index];
+          final isSelected = _viewModel.statusFilter == filter;
+
+          return GestureDetector(
+            onTap: () => unawaited(_viewModel.setStatusFilter(filter)),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isSelected ? theme.accent : theme.card,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: isSelected ? theme.accent : theme.cardBorder,
+                ),
+              ),
+              child: Text(
+                filter.label,
+                style: RaverTypography.label(
+                  size: 13,
+                  color: isSelected ? Colors.white : theme.primaryText,
+                  weight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                ),
               ),
             ),
-            onFailure: (error) => ErrorStateView(
-              title: lt('加载失败', 'Failed to Load', '読み込みに失敗しました'),
-              error: error,
-              onRetry: _viewModel.load,
-              retryLabel: lt('重试', 'Retry', '再試行'),
-            ),
-            onSuccess: (_) => _buildEventsList(theme),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSearchField(RaverThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: TextField(
+        controller: _searchController,
+        textInputAction: TextInputAction.search,
+        onChanged: _queueSearch,
+        onSubmitted: (value) {
+          _searchDebounce?.cancel();
+          unawaited(_viewModel.setSearchQuery(value));
+        },
+        style: RaverTypography.body(
+          size: 14,
+          color: theme.primaryText,
+        ),
+        decoration: InputDecoration(
+          hintText: lt('搜索活动', 'Search events', 'イベントを検索'),
+          hintStyle: RaverTypography.body(
+            size: 14,
+            color: theme.secondaryText,
+          ),
+          prefixIcon: Icon(Icons.search, color: theme.secondaryText, size: 20),
+          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _searchController,
+            builder: (context, value, _) {
+              if (value.text.isEmpty) return const SizedBox.shrink();
+              return IconButton(
+                tooltip: lt('清除', 'Clear', 'クリア'),
+                icon: Icon(Icons.close, color: theme.secondaryText, size: 18),
+                onPressed: () {
+                  _searchDebounce?.cancel();
+                  _searchController.clear();
+                  unawaited(_viewModel.setSearchQuery(''));
+                },
+              );
+            },
+          ),
+          filled: true,
+          fillColor: theme.card,
+          contentPadding: const EdgeInsets.symmetric(vertical: 11),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(22),
+            borderSide: BorderSide(color: theme.cardBorder),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(22),
+            borderSide: BorderSide(color: theme.cardBorder),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(22),
+            borderSide: BorderSide(color: theme.accent),
           ),
         ),
-      ],
+      ),
     );
+  }
+
+  void _queueSearch(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      unawaited(_viewModel.setSearchQuery(value));
+    });
   }
 
   Widget _buildFilterBar(RaverThemeData theme) {
@@ -100,7 +228,7 @@ class _EventsListScreenState extends State<EventsListScreen> {
                 final isSelected = _viewModel.eventTypeFilter == filter;
 
                 return GestureDetector(
-                  onTap: () => _viewModel.setEventTypeFilter(filter),
+                  onTap: () => unawaited(_viewModel.setEventTypeFilter(filter)),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     alignment: Alignment.center,
@@ -138,17 +266,15 @@ class _EventsListScreenState extends State<EventsListScreen> {
                     : theme.card,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: _activeFilter != null
-                      ? theme.accent
-                      : theme.cardBorder,
+                  color:
+                      _activeFilter != null ? theme.accent : theme.cardBorder,
                 ),
               ),
               child: Icon(
                 Icons.tune,
                 size: 18,
-                color: _activeFilter != null
-                    ? theme.accent
-                    : theme.secondaryText,
+                color:
+                    _activeFilter != null ? theme.accent : theme.secondaryText,
               ),
             ),
           ),
@@ -164,8 +290,14 @@ class _EventsListScreenState extends State<EventsListScreen> {
     );
     if (result != null) {
       setState(() => _activeFilter = result);
-      // Re-load with the filter applied
-      _viewModel.load();
+      unawaited(
+        _viewModel.applyAdvancedFilters(
+          eventTypes: result.selectedTypes,
+          status: result.status,
+          city: result.city,
+          brand: result.brand,
+        ),
+      );
     }
   }
 
@@ -192,9 +324,25 @@ class _EventsListScreenState extends State<EventsListScreen> {
           return EventCard(
             event: event,
             onTap: () => context.push('/events/${event.id}'),
+            onFavorite: () => unawaited(_viewModel.toggleFavorite(event.id)),
+            onShare: () => unawaited(_shareEvent(event)),
           );
         },
       ),
     );
+  }
+
+  Future<void> _shareEvent(WebEvent event) async {
+    final fallbackUrl = 'https://ravehub.top/events/${event.id}';
+    try {
+      final payload = await DiscoverServiceLocator.eventsRepository
+          .resolveShareLink(event: event, channel: 'system_share');
+      final shareUrl = payload.shortUrl.isNotEmpty
+          ? payload.shortUrl
+          : (payload.url.isNotEmpty ? payload.url : fallbackUrl);
+      await ShareService.shareUrl(shareUrl, subject: event.name);
+    } catch (_) {
+      await ShareService.shareUrl(fallbackUrl, subject: event.name);
+    }
   }
 }

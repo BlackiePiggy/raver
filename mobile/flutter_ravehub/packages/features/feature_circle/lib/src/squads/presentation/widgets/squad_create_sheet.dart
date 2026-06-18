@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
+import 'package:raver_platform/raver_platform.dart';
 
 /// Bottom sheet for creating a new squad.
 class SquadCreateSheet extends StatefulWidget {
@@ -9,7 +10,7 @@ class SquadCreateSheet extends StatefulWidget {
   final Future<void> Function(
     String name,
     String description,
-    String? coverUrl,
+    String? avatarLocalPath,
   ) onSubmit;
 
   @override
@@ -20,6 +21,8 @@ class _SquadCreateSheetState extends State<SquadCreateSheet> {
   final _nameController = TextEditingController();
   final _descController = TextEditingController();
   bool _isSubmitting = false;
+  bool _isPickingAvatar = false;
+  String? _avatarLocalPath;
 
   bool get _canSubmit =>
       _nameController.text.trim().isNotEmpty && !_isSubmitting;
@@ -37,9 +40,20 @@ class _SquadCreateSheetState extends State<SquadCreateSheet> {
     await widget.onSubmit(
       _nameController.text.trim(),
       _descController.text.trim(),
-      null, // cover URL, would come from image picker
+      _avatarLocalPath,
     );
     if (mounted) setState(() => _isSubmitting = false);
+  }
+
+  Future<void> _pickAvatar() async {
+    if (_isPickingAvatar || _isSubmitting) return;
+    setState(() => _isPickingAvatar = true);
+    final path = await MediaPickerService.pickSquareImageFromGallery();
+    if (!mounted) return;
+    setState(() {
+      _avatarLocalPath = path ?? _avatarLocalPath;
+      _isPickingAvatar = false;
+    });
   }
 
   @override
@@ -81,11 +95,9 @@ class _SquadCreateSheetState extends State<SquadCreateSheet> {
             ),
             const SizedBox(height: 20),
 
-            // Cover upload placeholder
+            // Avatar upload
             GestureDetector(
-              onTap: () {
-                // TODO: Use MediaPickerService
-              },
+              onTap: _pickAvatar,
               child: Container(
                 height: 120,
                 width: double.infinity,
@@ -97,16 +109,32 @@ class _SquadCreateSheetState extends State<SquadCreateSheet> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      Icons.add_photo_alternate,
-                      size: 32,
-                      color: theme.secondaryText,
-                    ),
+                    if (_isPickingAvatar)
+                      const SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      Icon(
+                        _avatarLocalPath == null
+                            ? Icons.add_photo_alternate
+                            : Icons.check_circle_outline,
+                        size: 32,
+                        color: _avatarLocalPath == null
+                            ? theme.secondaryText
+                            : theme.accent,
+                      ),
                     const SizedBox(height: 6),
                     Text(
-                      lt('上传封面', 'Upload Cover', 'カバーをアップロード'),
+                      _avatarLocalPath == null
+                          ? lt('上传小队头像', 'Upload Squad Avatar',
+                              'Squad アバターをアップロード')
+                          : lt('已选择头像', 'Avatar Selected', 'アバターを選択済み'),
                       style: RaverTypography.caption(
-                        color: theme.secondaryText,
+                        color: _avatarLocalPath == null
+                            ? theme.secondaryText
+                            : theme.accent,
                       ),
                     ),
                   ],

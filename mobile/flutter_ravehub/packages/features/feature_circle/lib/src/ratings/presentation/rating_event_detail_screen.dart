@@ -3,9 +3,12 @@ import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_models/raver_models.dart';
+import 'package:raver_platform/raver_platform.dart';
 
-import '../view_models/rating_view_model.dart';
-import '../widgets/create_rating_unit_sheet.dart';
+import 'view_models/rating_view_model.dart';
+import 'widgets/create_rating_event_sheet.dart';
+import 'widgets/create_rating_unit_sheet.dart';
+import 'widgets/rating_share_card.dart';
 import '../../_shared/circle_service_locator.dart';
 
 /// Detail screen for a specific rating event, showing all rating units.
@@ -50,12 +53,148 @@ class _RatingEventDetailScreenState extends State<RatingEventDetailScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => CreateRatingUnitSheet(
-        onSubmit: (name, djId) async {
-          await _viewModel.createUnit(name: name, djId: djId);
+        onUploadImage: (localPath) =>
+            CircleServiceLocator.ratingRepository.uploadRatingImage(
+          localPath: localPath,
+          ratingEventId: widget.ratingId,
+          usage: 'rating_unit_image',
+        ),
+        onSubmit: (name, description, djId, imageUrl) async {
+          await _viewModel.createUnit(
+            name: name,
+            description: description,
+            djId: djId,
+            imageUrl: imageUrl.isEmpty ? null : imageUrl,
+          );
           if (mounted) Navigator.of(context).pop();
         },
       ),
     );
+  }
+
+  void _showEditEventSheet(WebRatingEvent event) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CreateRatingEventSheet(
+        initialName: event.name,
+        initialDescription: event.description,
+        initialEventId: event.eventId,
+        initialImageUrl: event.imageUrl,
+        title: lt('编辑评分活动', 'Edit Rating Event', '評価イベントを編集'),
+        submitLabel: lt('保存', 'Save', '保存'),
+        showEventId: false,
+        onUploadImage: (localPath) =>
+            CircleServiceLocator.ratingRepository.uploadRatingImage(
+          localPath: localPath,
+          ratingEventId: event.id,
+          usage: 'rating_event_cover',
+        ),
+        onSubmit: (name, description, eventId, imageUrl) async {
+          final success = await _viewModel.updateEvent(
+            name: name,
+            description: description,
+            imageUrl: imageUrl.isEmpty ? null : imageUrl,
+          );
+          if (!mounted) return;
+          if (success) {
+            Navigator.of(context).pop();
+            _showSnack(lt('已保存', 'Saved', '保存しました'));
+          } else {
+            _showSnack(lt('保存失败', 'Failed to save', '保存に失敗しました'));
+          }
+        },
+      ),
+    );
+  }
+
+  void _showEditUnitSheet(WebRatingUnit unit) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CreateRatingUnitSheet(
+        initialName: unit.name,
+        initialDescription: unit.description,
+        initialDjId: unit.djId,
+        initialImageUrl: unit.imageUrl,
+        title: lt('编辑评分单元', 'Edit Rating Unit', '評価ユニットを編集'),
+        submitLabel: lt('保存', 'Save', '保存'),
+        onUploadImage: (localPath) =>
+            CircleServiceLocator.ratingRepository.uploadRatingImage(
+          localPath: localPath,
+          ratingEventId: widget.ratingId,
+          ratingUnitId: unit.id,
+          usage: 'rating_unit_image',
+        ),
+        onSubmit: (name, description, djId, imageUrl) async {
+          final success = await _viewModel.updateUnit(
+            unitId: unit.id,
+            name: name,
+            description: description,
+            djId: djId,
+            imageUrl: imageUrl.isEmpty ? null : imageUrl,
+          );
+          if (!mounted) return;
+          if (success) {
+            Navigator.of(context).pop();
+            _showSnack(lt('已保存', 'Saved', '保存しました'));
+          } else {
+            _showSnack(lt('保存失败', 'Failed to save', '保存に失敗しました'));
+          }
+        },
+      ),
+    );
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _shareRatingEvent(WebRatingEvent event) async {
+    final fallbackUrl = 'https://ravehub.top/circle/ratings/${event.id}';
+    try {
+      final payload = await CircleServiceLocator.ratingRepository
+          .resolveRatingEventShareLink(event: event, channel: 'system_share');
+      final shareUrl = payload.shortUrl.isNotEmpty
+          ? payload.shortUrl
+          : (payload.url.isNotEmpty ? payload.url : fallbackUrl);
+      final ratedUnits = _viewModel.units
+          .where((unit) => (unit.rating ?? 0) > 0 || unit.ratingCount > 0)
+          .toList();
+      final average = ratedUnits.isEmpty
+          ? 0.0
+          : ratedUnits.map((unit) => unit.rating ?? 0).reduce((a, b) => a + b) /
+              ratedUnits.length;
+      final voteCount =
+          _viewModel.units.fold<int>(0, (sum, unit) => sum + unit.ratingCount);
+      final bytes = await ShareCardGenerator.capture(
+        card: RatingShareCard(
+          title: event.name,
+          subtitle: event.description.isNotEmpty
+              ? event.description
+              : event.eventName,
+          kindLabel: lt('评分活动', 'Rating Event', '評価イベント'),
+          scoreLabel: ratedUnits.isEmpty
+              ? lt('暂无评分', 'No Ratings', '評価なし')
+              : '${average.toStringAsFixed(1)} ${lt("均分", "avg", "平均")}',
+          metricLabel: '$voteCount ${lt("票", "votes", "票")}',
+          shortUrl: shareUrl,
+        ),
+        size: const Size(390, 520),
+      );
+      await ShareService.shareBytes(
+        bytes,
+        fileName: 'ravehub-rating-event-${event.id}.png',
+        mimeType: 'image/png',
+        text: shareUrl,
+      );
+    } catch (_) {
+      await ShareService.shareUrl(fallbackUrl, subject: event.name);
+    }
   }
 
   @override
@@ -74,6 +213,16 @@ class _RatingEventDetailScreenState extends State<RatingEventDetailScreen> {
           style: RaverTypography.title(size: 17, color: theme.primaryText),
         ),
         actions: [
+          if (_viewModel.event != null)
+            IconButton(
+              icon: Icon(Icons.ios_share_outlined, color: theme.primaryText),
+              onPressed: () => _shareRatingEvent(_viewModel.event!),
+            ),
+          if (_viewModel.event != null)
+            IconButton(
+              icon: Icon(Icons.edit_outlined, color: theme.primaryText),
+              onPressed: () => _showEditEventSheet(_viewModel.event!),
+            ),
           IconButton(
             icon: Icon(Icons.add, color: theme.accent),
             onPressed: _showCreateUnitSheet,
@@ -128,10 +277,7 @@ class _RatingEventDetailScreenState extends State<RatingEventDetailScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
               lt('评分单元', 'Rating Units', '評価ユニット'),
-              style: RaverTypography.title(
-                size: 16,
-                color: theme.primaryText,
-              ),
+              style: RaverTypography.title(size: 16, color: theme.primaryText),
             ),
           ),
           const SizedBox(height: 8),
@@ -153,6 +299,7 @@ class _RatingEventDetailScreenState extends State<RatingEventDetailScreen> {
                     onTap: () => context.push(
                       '/circle/ratings/${widget.ratingId}/units/${entry.value.id}',
                     ),
+                    onEdit: () => _showEditUnitSheet(entry.value),
                   ),
                 ),
 
@@ -181,16 +328,14 @@ class _RatingEventDetailScreenState extends State<RatingEventDetailScreen> {
           const SizedBox(height: 16),
           Text(
             event.name,
-            style: RaverTypography.headline(color: theme.primaryText)
-                .copyWith(fontSize: 22),
+            style: RaverTypography.headline(
+              color: theme.primaryText,
+            ).copyWith(fontSize: 22),
           ),
           const SizedBox(height: 6),
           Text(
             event.description,
-            style: RaverTypography.body(
-              size: 14,
-              color: theme.secondaryText,
-            ),
+            style: RaverTypography.body(size: 14, color: theme.secondaryText),
           ),
           const SizedBox(height: 8),
           Row(
@@ -199,10 +344,7 @@ class _RatingEventDetailScreenState extends State<RatingEventDetailScreen> {
               const SizedBox(width: 4),
               Text(
                 event.eventName,
-                style: RaverTypography.caption(
-                  size: 12,
-                  color: theme.accent,
-                ),
+                style: RaverTypography.caption(size: 12, color: theme.accent),
               ),
             ],
           ),
@@ -282,12 +424,14 @@ class _UnitTile extends StatelessWidget {
     required this.rank,
     required this.theme,
     required this.onTap,
+    required this.onEdit,
   });
 
   final WebRatingUnit unit;
   final int rank;
   final RaverThemeData theme;
   final VoidCallback onTap;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -330,10 +474,16 @@ class _UnitTile extends StatelessWidget {
             CircleAvatar(
               radius: 18,
               backgroundColor: theme.cardBorder,
-              backgroundImage: unit.djAvatarUrl.isNotEmpty
-                  ? NetworkImage(unit.djAvatarUrl)
-                  : null,
-              child: unit.djAvatarUrl.isEmpty
+              backgroundImage:
+                  (unit.imageUrl.isNotEmpty ? unit.imageUrl : unit.djAvatarUrl)
+                          .isNotEmpty
+                      ? NetworkImage(
+                          unit.imageUrl.isNotEmpty
+                              ? unit.imageUrl
+                              : unit.djAvatarUrl,
+                        )
+                      : null,
+              child: unit.imageUrl.isEmpty && unit.djAvatarUrl.isEmpty
                   ? Icon(Icons.person, size: 18, color: theme.secondaryText)
                   : null,
             ),
@@ -354,12 +504,20 @@ class _UnitTile extends StatelessWidget {
                   ),
                   Text(
                     unit.djName,
-                    style: RaverTypography.caption(
-                      color: theme.secondaryText,
-                    ),
+                    style: RaverTypography.caption(color: theme.secondaryText),
                   ),
                 ],
               ),
+            ),
+
+            IconButton(
+              icon: Icon(
+                Icons.edit_outlined,
+                size: 18,
+                color: theme.secondaryText,
+              ),
+              tooltip: lt('编辑', 'Edit', '編集'),
+              onPressed: onEdit,
             ),
 
             // Rating

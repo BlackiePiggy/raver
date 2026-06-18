@@ -10,13 +10,16 @@ class SearchApiService {
     required String query,
     required String tab,
     required int limit,
+    String locale = 'en',
   }) async {
+    final keyword = query.trim();
     final response = await _dio.get<Map<String, dynamic>>(
-      '/v1/search/global',
+      '/v1/search',
       queryParameters: {
-        'query': query,
+        if (keyword.isNotEmpty) 'q': keyword,
         'tab': tab,
-        'limit': limit,
+        'limit': limit.clamp(1, 80),
+        'locale': locale,
       },
     );
     return GlobalSearchResponse.fromJson(response.data!);

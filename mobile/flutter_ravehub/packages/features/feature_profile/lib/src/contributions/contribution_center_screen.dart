@@ -126,10 +126,11 @@ class _ContributionCenterScreenState extends State<ContributionCenterScreen> {
               final count = (map['count'] as int?) ?? 0;
               final maxCount = _viewModel.distribution.fold<int>(
                 1,
-                (max, e) =>
-                    ((e as Map<String, dynamic>)['count'] as int?) ?? 0 > max
-                        ? ((e)['count'] as int?) ?? 0
-                        : max,
+                (max, e) {
+                  final value =
+                      ((e as Map<String, dynamic>)['count'] as int?) ?? 0;
+                  return value > max ? value : max;
+                },
               );
               final ratio =
                   maxCount > 0 ? (count / maxCount).clamp(0.05, 1.0) : 0.05;

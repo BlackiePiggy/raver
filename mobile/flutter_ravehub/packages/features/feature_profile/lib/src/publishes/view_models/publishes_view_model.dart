@@ -10,8 +10,7 @@ class PublishesViewModel extends ChangeNotifier {
   final PublishesApi _api;
 
   // Phase for the list
-  LoadPhase<List<ContentSubmissionSummary>> _phase =
-      const LoadPhase.loading();
+  LoadPhase<List<ContentSubmissionSummary>> _phase = const LoadPhase.loading();
   LoadPhase<List<ContentSubmissionSummary>> get phase => _phase;
 
   final List<ContentSubmissionSummary> _submissions = [];
@@ -54,7 +53,7 @@ class PublishesViewModel extends ChangeNotifier {
           ? const LoadPhase.empty()
           : LoadPhase.success(_submissions);
     } catch (e) {
-      _phase = LoadPhase.failure(e);
+      _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -74,7 +73,7 @@ class PublishesViewModel extends ChangeNotifier {
           ? const LoadPhase.empty()
           : LoadPhase.success(_submissions);
     } catch (e) {
-      if (_submissions.isEmpty) _phase = LoadPhase.failure(e);
+      if (_submissions.isEmpty) _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }

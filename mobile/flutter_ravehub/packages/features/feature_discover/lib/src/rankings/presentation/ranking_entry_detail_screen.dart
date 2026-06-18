@@ -6,7 +6,6 @@ import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_models/raver_models.dart';
 
-import '../data/ranking_api.dart';
 import 'ranking_view_model.dart';
 
 /// Detail screen for a single ranking entry (a DJ or artist in the board).
@@ -19,6 +18,7 @@ class RankingEntryDetailScreen extends ConsumerStatefulWidget {
     super.key,
     required this.boardId,
     required this.entryId,
+    this.year,
   });
 
   /// The ranking board ID.
@@ -26,6 +26,9 @@ class RankingEntryDetailScreen extends ConsumerStatefulWidget {
 
   /// The entry ID (used as an index or name key).
   final String entryId;
+
+  /// The ranking year requested by a shared link or parent board.
+  final int? year;
 
   @override
   ConsumerState<RankingEntryDetailScreen> createState() =>
@@ -36,14 +39,18 @@ class _RankingEntryDetailScreenState
     extends ConsumerState<RankingEntryDetailScreen> {
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(rankingDetailProvider(widget.boardId));
+    final request = RankingDetailRequest(
+      boardId: widget.boardId,
+      year: widget.year,
+    );
+    final state = ref.watch(rankingDetailProvider(request));
     final theme = context.raver;
 
     return Scaffold(
       appBar: RaverNavigationChrome(
         title: lt('排名详情', 'Ranking Entry', 'ランキング詳細'),
       ),
-      body: _buildBody(context, state, theme),
+      body: _buildBody(context, state, theme, request),
     );
   }
 
@@ -51,6 +58,7 @@ class _RankingEntryDetailScreenState
     BuildContext context,
     RankingDetailState state,
     RaverThemeData theme,
+    RankingDetailRequest request,
   ) {
     if (state.isLoading) {
       return const Center(child: CircularProgressIndicator.adaptive());
@@ -61,7 +69,7 @@ class _RankingEntryDetailScreenState
         title: lt('加载失败', 'Failed to load', 'ロードに失敗しました'),
         description: state.error,
         onRetry: () =>
-            ref.read(rankingDetailProvider(widget.boardId).notifier).retry(),
+            ref.read(rankingDetailProvider(request).notifier).retry(),
       );
     }
 
@@ -76,7 +84,9 @@ class _RankingEntryDetailScreenState
     // Find the entry by matching entryId as rank index (1-based) or name.
     final entryIndex = int.tryParse(widget.entryId);
     RankingEntry? entry;
-    if (entryIndex != null && entryIndex > 0 && entryIndex <= detail.entries.length) {
+    if (entryIndex != null &&
+        entryIndex > 0 &&
+        entryIndex <= detail.entries.length) {
       entry = detail.entries[entryIndex - 1];
     } else {
       // Fall back to matching by name or djId.
@@ -199,8 +209,7 @@ class _RankingEntryDetailScreenState
           if (entry.festivalId != null) ...[
             const SizedBox(height: 4),
             TextButton.icon(
-              onPressed: () =>
-                  context.push('/festivals/${entry!.festivalId}'),
+              onPressed: () => context.push('/festivals/${entry!.festivalId}'),
               icon: const Icon(Icons.festival_outlined),
               label: Text(
                 lt('查看音乐节', 'View Festival', 'フェスティバルを見る'),

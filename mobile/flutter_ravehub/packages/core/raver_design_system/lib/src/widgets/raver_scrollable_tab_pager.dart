@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../theme/raver_motion.dart';
 import '../theme/raver_theme.dart';
-import '../theme/raver_typography.dart';
 
 /// A horizontally scrollable tab bar with an animated underline indicator
 /// and a [PageView] for swiping between tab content pages.
@@ -15,6 +14,9 @@ class RaverScrollableTabPager extends StatefulWidget {
     this.initialIndex = 0,
     this.onPageChanged,
     this.tabPadding = const EdgeInsets.symmetric(horizontal: 16),
+    this.indicatorColors,
+    this.showsDivider = true,
+    this.tabSpacing = 24,
   });
 
   /// Labels for each tab.
@@ -31,6 +33,15 @@ class RaverScrollableTabPager extends StatefulWidget {
 
   /// Horizontal padding around each tab label.
   final EdgeInsets tabPadding;
+
+  /// Optional per-tab indicator colors.
+  final List<Color>? indicatorColors;
+
+  /// Whether to show the bottom divider.
+  final bool showsDivider;
+
+  /// Horizontal spacing between tab labels.
+  final double tabSpacing;
 
   @override
   State<RaverScrollableTabPager> createState() =>
@@ -56,6 +67,7 @@ class _RaverScrollableTabPagerState extends State<RaverScrollableTabPager>
   }
 
   void _onTabChanged() {
+    if (mounted) setState(() {});
     if (_tabController.indexIsChanging) {
       _pageController.animateToPage(
         _tabController.index,
@@ -68,6 +80,7 @@ class _RaverScrollableTabPagerState extends State<RaverScrollableTabPager>
 
   void _onPageSwiped(int index) {
     _tabController.animateTo(index);
+    if (mounted) setState(() {});
     widget.onPageChanged?.call(index);
   }
 
@@ -83,37 +96,45 @@ class _RaverScrollableTabPagerState extends State<RaverScrollableTabPager>
   @override
   Widget build(BuildContext context) {
     final theme = context.raver;
+    final selected = _tabController.index.clamp(0, widget.tabs.length - 1);
+    final activeColor = widget.indicatorColors == null
+        ? theme.primaryText
+        : widget.indicatorColors![selected];
 
     return Column(
       children: [
         // Tab bar
         Container(
           decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: theme.cardBorder,
-                width: 0.5,
-              ),
-            ),
+            border: widget.showsDivider
+                ? Border(
+                    bottom: BorderSide(
+                      color: theme.cardBorder,
+                      width: 0.5,
+                    ),
+                  )
+                : null,
           ),
           child: TabBar(
             controller: _tabController,
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             padding: EdgeInsets.zero,
-            labelPadding: widget.tabPadding,
-            indicatorColor: theme.accent,
+            labelPadding: EdgeInsets.symmetric(
+              horizontal: widget.tabSpacing / 2,
+            ),
+            indicatorColor: activeColor,
             // iOS: indicatorHeight 2.6
             indicatorWeight: 2.6,
             indicatorSize: TabBarIndicatorSize.label,
             // iOS: system 17pt regular for tab labels
             labelStyle: const TextStyle(
-              fontSize: 17,
+              fontSize: 18,
               fontWeight: FontWeight.w400,
               height: 1.2,
             ),
             unselectedLabelStyle: const TextStyle(
-              fontSize: 17,
+              fontSize: 18,
               fontWeight: FontWeight.w400,
               height: 1.2,
             ),

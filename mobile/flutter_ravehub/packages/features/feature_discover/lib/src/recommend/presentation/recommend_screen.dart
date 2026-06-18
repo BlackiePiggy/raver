@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
@@ -6,6 +8,21 @@ import 'package:raver_models/raver_models.dart';
 
 import 'recommend_view_model.dart';
 import '../../../src/_shared/discover_service_locator.dart';
+
+@visibleForTesting
+double recommendationCardScaleForPageDelta(double pageDelta) {
+  return (1 - pageDelta.abs() * 0.05).clamp(0.95, 1.0).toDouble();
+}
+
+@visibleForTesting
+double recommendationCoverParallaxOffset({
+  required double pageDelta,
+  required double cardWidth,
+}) {
+  final rawOffset = 20 + pageDelta * cardWidth * 1.4;
+  final maxBleedOffset = cardWidth * 0.16;
+  return rawOffset.clamp(-maxBleedOffset, maxBleedOffset).toDouble();
+}
 
 class RecommendScreen extends StatefulWidget {
   const RecommendScreen({super.key});
@@ -45,103 +62,126 @@ class _RecommendScreenState extends State<RecommendScreen> {
   Widget build(BuildContext context) {
     final theme = context.raver;
 
-    return Stack(
-      children: [
-        LoadPhaseBuilder<List<WebEvent>>(
-          phase: _viewModel.phase,
-          onLoading: () => _buildSkeleton(theme),
-          onEmpty: () => EmptyStateView(
-            icon: Icons.auto_awesome,
-            title: lt('暂无推荐活动', 'No Recommendations', 'おすすめなし'),
-            subtitle: lt(
-              '稍后再来看看',
-              'Check back later',
-              'あとでまた確認してください',
-            ),
-          ),
-          onFailure: (error) => ErrorStateView(
-            title: lt(
-              '推荐加载失败',
-              'Recommendations Failed',
-              'おすすめの読み込みに失敗しました',
-            ),
-            error: error,
-            onRetry: _viewModel.reload,
-            retryLabel: lt('重试', 'Retry', '再試行'),
-          ),
-          onSuccess: (events) => _buildPager(events, theme),
-        ),
-        if (_viewModel.isRefreshing)
-          Positioned(
-            top: 12,
-            left: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: theme.card.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: theme.cardBorder),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return RefreshIndicator(
+          onRefresh: _viewModel.reload,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(
+              height: constraints.maxHeight,
+              child: Stack(
                 children: [
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.5,
-                      color: theme.accent,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    lt('更新推荐中', 'Updating', '更新中'),
-                    style: RaverTypography.caption(color: theme.secondaryText),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        if (_viewModel.bannerMessage != null)
-          Positioned(
-            top: 12,
-            left: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.orange.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _viewModel.bannerMessage!,
-                      style: RaverTypography.caption(color: Colors.orange),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: _viewModel.reload,
-                    child: Text(
-                      lt('重试', 'Retry', '再試行'),
-                      style: RaverTypography.caption(
-                        color: Colors.orange,
-                        weight: FontWeight.w600,
+                  LoadPhaseBuilder<List<WebEvent>>(
+                    phase: _viewModel.phase,
+                    onLoading: () => _buildSkeleton(theme),
+                    onEmpty: () => EmptyStateView(
+                      icon: Icons.auto_awesome,
+                      title: lt('暂无推荐活动', 'No Recommendations', 'おすすめなし'),
+                      subtitle: lt(
+                        '稍后再来看看',
+                        'Check back later',
+                        'あとでまた確認してください',
                       ),
                     ),
+                    onFailure: (error) => ErrorStateView(
+                      title: lt(
+                        '推荐加载失败',
+                        'Recommendations Failed',
+                        'おすすめの読み込みに失敗しました',
+                      ),
+                      error: error,
+                      onRetry: _viewModel.reload,
+                      retryLabel: lt('重试', 'Retry', '再試行'),
+                    ),
+                    onSuccess: (events) => _buildPager(events, theme),
                   ),
+                  if (_viewModel.isRefreshing)
+                    Positioned(
+                      top: 12,
+                      left: 16,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.card.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: theme.cardBorder),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                color: theme.accent,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              lt('更新推荐中', 'Updating', '更新中'),
+                              style: RaverTypography.caption(
+                                color: theme.secondaryText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (_viewModel.bannerMessage != null)
+                    Positioned(
+                      top: 12,
+                      left: 16,
+                      right: 16,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.orange.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _viewModel.bannerMessage!,
+                                style: RaverTypography.caption(
+                                  color: Colors.orange,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: _viewModel.reload,
+                              child: Text(
+                                lt('重试', 'Retry', '再試行'),
+                                style: RaverTypography.caption(
+                                  color: Colors.orange,
+                                  weight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
-      ],
+        );
+      },
     );
   }
 
@@ -157,14 +197,17 @@ class _RecommendScreenState extends State<RecommendScreen> {
               return AnimatedBuilder(
                 animation: _pageController,
                 builder: (context, child) {
-                  double value = 1.0;
+                  var pageDelta = 0.0;
                   if (_pageController.position.haveDimensions) {
-                    value = (_pageController.page ?? 0) - index;
-                    value = (1 - value.abs() * 0.15).clamp(0.85, 1.0);
+                    pageDelta = (_pageController.page ?? 0) - index;
                   }
                   return Transform.scale(
-                    scale: value,
-                    child: _buildEventCard(events[index], theme),
+                    scale: recommendationCardScaleForPageDelta(pageDelta),
+                    child: _buildEventCard(
+                      events[index],
+                      theme,
+                      pageDelta: pageDelta,
+                    ),
                   );
                 },
               );
@@ -178,7 +221,11 @@ class _RecommendScreenState extends State<RecommendScreen> {
     );
   }
 
-  Widget _buildEventCard(WebEvent event, RaverThemeData theme) {
+  Widget _buildEventCard(
+    WebEvent event,
+    RaverThemeData theme, {
+    required double pageDelta,
+  }) {
     return GestureDetector(
       onTap: () => context.push('/events/${event.id}'),
       child: Container(
@@ -197,7 +244,7 @@ class _RecommendScreenState extends State<RecommendScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            RemoteCoverImage(url: event.coverImageUrl, fit: BoxFit.cover),
+            _buildParallaxCover(event, pageDelta),
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -298,6 +345,37 @@ class _RecommendScreenState extends State<RecommendScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildParallaxCover(WebEvent event, double pageDelta) {
+    return Positioned.fill(
+      child: ClipRect(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final cardWidth = math.max(constraints.maxWidth, 1.0);
+            final imageWidth = cardWidth * 1.32;
+            final offset = recommendationCoverParallaxOffset(
+              pageDelta: pageDelta,
+              cardWidth: cardWidth,
+            );
+
+            return OverflowBox(
+              minWidth: imageWidth,
+              maxWidth: imageWidth,
+              minHeight: constraints.maxHeight,
+              maxHeight: constraints.maxHeight,
+              child: Transform.translate(
+                offset: Offset(offset, 0),
+                child: RemoteCoverImage(
+                  url: event.coverImageUrl,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            );
+          },
         ),
       ),
     );

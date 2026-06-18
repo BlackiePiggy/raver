@@ -15,6 +15,12 @@ const logStage = (stage: string, details?: Record<string, unknown>): void => {
 
 const TEMP_EMAIL = 'quiz-preflight-smoke-user@local.test';
 const TEMP_USERNAME = 'quiz_preflight_smoke_user';
+const STANDARD_TEXT_QUESTION_COUNT = 15;
+const STANDARD_IMAGE_QUESTION_COUNT = 5;
+const STANDARD_QUESTION_COUNT = STANDARD_TEXT_QUESTION_COUNT + STANDARD_IMAGE_QUESTION_COUNT;
+const MIN_IMAGE_POOL_COUNT_WITH_RESERVE = STANDARD_IMAGE_QUESTION_COUNT + 1;
+const SMOKE_IMAGE_DATA_URL =
+  'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%221%22 height=%221%22%3E%3C/svg%3E';
 
 const assert = (condition: boolean, message: string): void => {
   if (!condition) {
@@ -82,60 +88,92 @@ const main = async (): Promise<void> => {
     await prisma.quizUserPolicyOverride.deleteMany({ where: { userId } });
   };
 
+  const createSmokeQuestion = async (index: number, isImageQuestion: boolean): Promise<void> => {
+    const question = await prisma.quizQuestion.create({
+      data: {
+        status: QuizQuestionStatus.active,
+        type: QuizQuestionType.single_choice,
+        stemText: `Quiz preflight smoke question ${Date.now()}-${index}`,
+        stemImageUrl: isImageQuestion ? SMOKE_IMAGE_DATA_URL : null,
+        timeLimitSec: 15,
+        sortOrder: 950_000 + index,
+      },
+      select: { id: true },
+    });
+    createdQuestionIds.push(question.id);
+
+    const optionA = await prisma.quizQuestionOption.create({
+      data: {
+        questionId: question.id,
+        text: 'Option A',
+        sortOrder: 0,
+      },
+      select: { id: true },
+    });
+
+    await prisma.quizQuestionOption.createMany({
+      data: [
+        {
+          questionId: question.id,
+          text: 'Option B',
+          sortOrder: 1,
+        },
+        {
+          questionId: question.id,
+          text: 'Option C',
+          sortOrder: 2,
+        },
+      ],
+    });
+
+    await prisma.quizQuestion.update({
+      where: { id: question.id },
+      data: {
+        correctOptionId: optionA.id,
+      },
+    });
+  };
+
   const ensureReservePool = async (): Promise<void> => {
-    const existingActiveCount = await prisma.quizQuestion.count({
+    const existingActiveQuestions = await prisma.quizQuestion.findMany({
       where: {
         status: QuizQuestionStatus.active,
         type: QuizQuestionType.single_choice,
         correctOptionId: { not: null },
       },
+      select: {
+        correctOptionId: true,
+        stemImageUrl: true,
+        options: {
+          select: {
+            id: true,
+            imageUrl: true,
+          },
+        },
+      },
     });
+    const eligibleActiveQuestions = existingActiveQuestions.filter((question) => {
+      return question.options.some((option) => option.id === question.correctOptionId);
+    });
+    const imageQuestionCount = eligibleActiveQuestions.filter((question) => {
+      return Boolean(question.stemImageUrl) || question.options.some((option) => Boolean(option.imageUrl));
+    }).length;
+    const textQuestionCount = eligibleActiveQuestions.length - imageQuestionCount;
 
-    const needed = Math.max(0, 8 - existingActiveCount);
-    for (let index = 0; index < needed; index += 1) {
-      const question = await prisma.quizQuestion.create({
-        data: {
-          status: QuizQuestionStatus.active,
-          type: QuizQuestionType.single_choice,
-          stemText: `Quiz preflight smoke question ${Date.now()}-${index}`,
-          timeLimitSec: 15,
-          sortOrder: 950_000 + index,
-        },
-        select: { id: true },
-      });
-      createdQuestionIds.push(question.id);
-
-      const optionA = await prisma.quizQuestionOption.create({
-        data: {
-          questionId: question.id,
-          text: 'Option A',
-          sortOrder: 0,
-        },
-        select: { id: true },
-      });
-
-      await prisma.quizQuestionOption.createMany({
-        data: [
-          {
-            questionId: question.id,
-            text: 'Option B',
-            sortOrder: 1,
-          },
-          {
-            questionId: question.id,
-            text: 'Option C',
-            sortOrder: 2,
-          },
-        ],
-      });
-
-      await prisma.quizQuestion.update({
-        where: { id: question.id },
-        data: {
-          correctOptionId: optionA.id,
-        },
-      });
+    const textNeeded = Math.max(0, STANDARD_TEXT_QUESTION_COUNT - textQuestionCount);
+    const imageNeeded = Math.max(0, MIN_IMAGE_POOL_COUNT_WITH_RESERVE - imageQuestionCount);
+    for (let index = 0; index < textNeeded; index += 1) {
+      await createSmokeQuestion(index, false);
     }
+    for (let index = 0; index < imageNeeded; index += 1) {
+      await createSmokeQuestion(textNeeded + index, true);
+    }
+  };
+
+  const countImageQuestions = (questions: Array<{ stemImageUrl: string | null; options: Array<{ imageUrl: string | null }> }>): number => {
+    return questions.filter((question) => {
+      return Boolean(question.stemImageUrl) || question.options.some((option) => Boolean(option.imageUrl));
+    }).length;
   };
 
   const readSnapshotEnvelope = async (sessionId: string): Promise<SnapshotEnvelope> => {
@@ -193,13 +231,13 @@ const main = async (): Promise<void> => {
     await ensureReservePool();
     logStage('ensureReservePool:done', { createdQuestionCount: createdQuestionIds.length });
 
-    logStage('config:shrinkQuestionCount:start');
+    logStage('config:standardQuestionCount:start');
     await prisma.quizConfig.update({
       where: { id: 'default' },
       data: {
         isEnabled: true,
-        questionCount: 3,
-        passCorrectCount: 2,
+        questionCount: STANDARD_QUESTION_COUNT,
+        passCorrectCount: 16,
         dailyAttemptLimit: 10,
         defaultTimeLimitSec: 20,
         dailyLimitTimeZone: 'Asia/Shanghai',
@@ -207,7 +245,7 @@ const main = async (): Promise<void> => {
         allowRestartDuringSession: true,
       },
     });
-    logStage('config:shrinkQuestionCount:done');
+    logStage('config:standardQuestionCount:done');
 
     logStage('status:initial:start');
     const initialStatus = await getQuizStatus(userId);
@@ -223,7 +261,8 @@ const main = async (): Promise<void> => {
       primaryCount: preflightSession.questions.length,
       reserveCount: preflightSession.reserveQuestions.length,
     });
-    assert(preflightSession.questions.length === 3, 'primary question count should match config');
+    assert(preflightSession.questions.length === STANDARD_QUESTION_COUNT, 'primary question count should use standard 20');
+    assert(countImageQuestions(preflightSession.questions) === STANDARD_IMAGE_QUESTION_COUNT, 'standard session should include 5 image questions');
     assert(preflightSession.reserveQuestions.length > 0, 'standard session should include reserve questions');
 
     const afterPreflightCreate = await getQuizStatus(userId);
@@ -257,7 +296,8 @@ const main = async (): Promise<void> => {
       primaryCount: replacementSession.questions.length,
       reserveCount: replacementSession.reserveQuestions.length,
     });
-    assert(replacementSession.questions.length === 3, 'replacement session should still use 3 primary questions');
+    assert(replacementSession.questions.length === STANDARD_QUESTION_COUNT, 'replacement session should still use standard 20');
+    assert(countImageQuestions(replacementSession.questions) === STANDARD_IMAGE_QUESTION_COUNT, 'replacement session should include 5 image questions');
     assert(replacementSession.reserveQuestions.length > 0, 'replacement session should include reserve questions');
 
     const snapshotEnvelope = await readSnapshotEnvelope(replacementSession.sessionId);
@@ -295,8 +335,8 @@ const main = async (): Promise<void> => {
       correctCount: submitResult.correctCount,
       passed: submitResult.passed,
     });
-    assert(submitResult.totalCount === 3, 'submit should score only the final presented question count');
-    assert(submitResult.correctCount === 3, 'submit should score replacement reserve question correctly');
+    assert(submitResult.totalCount === STANDARD_QUESTION_COUNT, 'submit should score only the final presented question count');
+    assert(submitResult.correctCount === STANDARD_QUESTION_COUNT, 'submit should score replacement reserve question correctly');
     assert(submitResult.passed === true, 'fully correct replacement session should pass');
 
     const finalStatus = await getQuizStatus(userId);

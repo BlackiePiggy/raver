@@ -1,0 +1,62 @@
+name: Flutter Screenshot Diff
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/flutter-screenshot-diff.yml'
+      - 'app/**'
+      - 'packages/**'
+      - 'qa/screenshots/**'
+
+jobs:
+  screenshot-diff:
+    name: Capture and compare screenshots
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install screenshot diff dependency
+        run: python3 -m pip install pillow
+
+      - name: Install Dart and Flutter dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Capture Flutter screenshots
+        working-directory: app
+        run: |
+          flutter test integration_test/flows/screenshot_parity_flow_test.dart \
+            -d macos \
+            --dart-define=RAVEHUB_SCREENSHOT_DIR="$PWD/build/screenshots/flutter"
+
+      - name: Collect macOS sandbox screenshot artifacts
+        run: bash app/scripts/collect_macos_screenshot_artifacts.sh app/build/screenshots/flutter
+
+      - name: Compare against iOS references
+        run: |
+          bash app/scripts/compare_screenshot_dir.sh \
+            qa/screenshots/ios-reference \
+            app/build/screenshots/flutter \
+            app/build/screenshots/diff
+
+      - name: Upload screenshot artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-screenshot-diff
+          path: app/build/screenshots
+          if-no-files-found: warn

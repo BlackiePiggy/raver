@@ -42,8 +42,8 @@ class EventDiscussionPage {
     final items = json['items'] as List<dynamic>? ?? [];
     return EventDiscussionPage(
       comments: items
-          .map((e) =>
-              EventDiscussionComment.fromJson(e as Map<String, dynamic>))
+          .map(
+              (e) => EventDiscussionComment.fromJson(e as Map<String, dynamic>))
           .toList(),
       nextCursor: json['nextCursor'] as String?,
     );
@@ -63,8 +63,9 @@ class EventCheckinResult {
   factory EventCheckinResult.fromJson(Map<String, dynamic> json) {
     return EventCheckinResult(
       success: json['success'] as bool? ?? true,
-      checkinId: json['checkinId'] as String? ?? '',
-      checkedInAt: json['checkedInAt'] as String? ?? '',
+      checkinId: _stringFromJson(json, const ['checkinId', 'checkin_id']),
+      checkedInAt:
+          _stringFromJson(json, const ['checkedInAt', 'checked_in_at']),
     );
   }
 
@@ -83,10 +84,17 @@ class EventCheckinUser {
 
   factory EventCheckinUser.fromJson(Map<String, dynamic> json) {
     return EventCheckinUser(
-      userId: json['userId'] as String? ?? '',
-      displayName: json['displayName'] as String? ?? '',
-      avatarUrl: json['avatarUrl'] as String? ?? '',
-      checkedInAt: json['checkedInAt'] as String? ?? '',
+      userId: _stringFromJson(json, const ['userId', 'user_id', 'id']),
+      displayName: _stringFromJson(
+        json,
+        const ['displayName', 'display_name', 'nickname', 'name'],
+      ),
+      avatarUrl: _stringFromJson(
+        json,
+        const ['avatarUrl', 'avatar_url', 'avatar'],
+      ),
+      checkedInAt:
+          _stringFromJson(json, const ['checkedInAt', 'checked_in_at']),
     );
   }
 
@@ -104,17 +112,48 @@ class EventCheckinList {
   });
 
   factory EventCheckinList.fromJson(Map<String, dynamic> json) {
-    final items = json['items'] as List<dynamic>? ?? [];
+    final items = _listFromJson(json, const ['items', 'users', 'checkins']);
     return EventCheckinList(
       users: items
           .map((e) => EventCheckinUser.fromJson(e as Map<String, dynamic>))
           .toList(),
-      totalCount: json['totalCount'] as int? ?? 0,
-      myCheckinAt: json['myCheckinAt'] as String?,
+      totalCount: _intFromJson(json, const ['totalCount', 'total_count']),
+      myCheckinAt:
+          _nullableStringFromJson(json, const ['myCheckinAt', 'my_checkin_at']),
     );
   }
 
   final List<EventCheckinUser> users;
   final int totalCount;
   final String? myCheckinAt;
+}
+
+String _stringFromJson(Map<String, dynamic> json, List<String> keys) =>
+    _nullableStringFromJson(json, keys) ?? '';
+
+String? _nullableStringFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is String && value.isNotEmpty) return value;
+    if (value is num || value is bool) return value.toString();
+  }
+  return null;
+}
+
+int _intFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+  }
+  return 0;
+}
+
+List<dynamic> _listFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is List<dynamic>) return value;
+  }
+  return const [];
 }

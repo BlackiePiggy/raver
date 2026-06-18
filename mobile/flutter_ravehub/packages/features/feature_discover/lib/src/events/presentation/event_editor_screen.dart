@@ -4,7 +4,8 @@ import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_platform/raver_platform.dart';
 
-import '../view_models/event_editor_view_model.dart';
+import 'view_models/event_editor_view_model.dart';
+import 'view_models/event_upload_view_model.dart';
 import '../../_shared/discover_service_locator.dart';
 
 class EventEditorScreen extends StatefulWidget {
@@ -169,10 +170,10 @@ class _EventEditorScreenState extends State<EventEditorScreen> {
     );
   }
 
-  Future<void> _pickPoster() async {
+  Future<void> _pickEventImage(EventUploadImageZone zone) async {
     final path = await MediaPickerService.pickImage();
     if (path == null) return;
-    await _vm.uploadPoster(path);
+    await _vm.uploadEventImage(zone, path);
   }
 
   @override
@@ -225,7 +226,7 @@ class _EventEditorScreenState extends State<EventEditorScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: _vm.eventType,
+                      initialValue: _vm.eventType,
                       decoration: InputDecoration(
                         labelText: lt('活动类型', 'Event Type', 'イベントタイプ'),
                       ),
@@ -238,7 +239,6 @@ class _EventEditorScreenState extends State<EventEditorScreen> {
                         if (v != null) _vm.updateEventType(v);
                       },
                     ),
-
                     const SizedBox(height: 24),
                     _buildSectionHeader(
                       theme,
@@ -266,7 +266,6 @@ class _EventEditorScreenState extends State<EventEditorScreen> {
                         hintText: 'Asia/Shanghai',
                       ),
                     ),
-
                     const SizedBox(height: 24),
                     _buildSectionHeader(
                       theme,
@@ -323,15 +322,36 @@ class _EventEditorScreenState extends State<EventEditorScreen> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 24),
                     _buildSectionHeader(
                       theme,
-                      lt('海报', 'Poster', 'ポスター'),
+                      lt('活动图片', 'Event Images', 'イベント画像'),
                     ),
                     const SizedBox(height: 12),
-                    _buildPosterPicker(theme),
-
+                    _buildImageZoneCard(
+                      theme,
+                      zone: EventUploadImageZone.poster,
+                      title: lt('海报', 'Poster', 'ポスター'),
+                      subtitle: lt('活动主视觉', 'Primary event artwork', 'メイン画像'),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildImageZoneCard(
+                      theme,
+                      zone: EventUploadImageZone.lineup,
+                      title: lt('阵容图', 'Lineup Image', 'ラインナップ画像'),
+                      subtitle: lt('DJ阵容或海报截图', 'DJ lineup or poster crop',
+                          'DJラインナップ画像'),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildImageZoneCard(
+                      theme,
+                      zone: EventUploadImageZone.cover,
+                      title: lt('封面', 'Cover', 'カバー'),
+                      subtitle: lt(
+                          '无海报时作为封面备选',
+                          'Fallback cover when no poster is set',
+                          'ポスターがない場合のカバー'),
+                    ),
                     const SizedBox(height: 24),
                     _buildSectionHeader(
                       theme,
@@ -415,72 +435,162 @@ class _EventEditorScreenState extends State<EventEditorScreen> {
     );
   }
 
-  Widget _buildPosterPicker(RaverThemeData theme) {
-    if (_vm.posterUrl != null && _vm.posterUrl!.isNotEmpty) {
-      return GestureDetector(
-        onTap: _pickPoster,
-        child: Stack(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: SizedBox(
-                height: 120,
-                width: double.infinity,
-                child: RemoteCoverImage(
-                  url: _vm.posterUrl!,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+  Widget _buildImageZoneCard(
+    RaverThemeData theme, {
+    required EventUploadImageZone zone,
+    required String title,
+    required String subtitle,
+  }) {
+    final url = _vm.imageUrl(zone);
+    final hasImage = url != null && url.isNotEmpty;
+    return Container(
+      height: 138,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: theme.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.cardBorder),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (hasImage)
+            GestureDetector(
+              onTap: () => _previewEventImage(zone),
+              child: RemoteCoverImage(url: url, fit: BoxFit.cover),
+            )
+          else
+            GestureDetector(
+              onTap: () => _pickEventImage(zone),
+              child: CustomPaint(
+                painter: _DashedBorderPainter(color: theme.cardBorder),
                 child: Center(
                   child: Icon(
-                    Icons.edit,
-                    color: Colors.white,
-                    size: 28,
+                    Icons.cloud_upload_outlined,
+                    color: theme.secondaryText,
+                    size: 32,
                   ),
                 ),
               ),
             ),
-          ],
-        ),
-      );
-    }
-
-    return GestureDetector(
-      onTap: _pickPoster,
-      child: Container(
-        height: 120,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: theme.cardBorder,
-            style: BorderStyle.solid,
-          ),
-        ),
-        child: CustomPaint(
-          painter: _DashedBorderPainter(color: theme.cardBorder),
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Row(
               children: [
-                Icon(Icons.cloud_upload_outlined, color: theme.secondaryText),
-                const SizedBox(height: 8),
-                Text(
-                  lt('上传海报', 'Upload Poster', 'ポスターをアップロード'),
-                  style: RaverTypography.caption(color: theme.secondaryText),
+                if (hasImage)
+                  _imageActionButton(
+                    icon: Icons.visibility_outlined,
+                    label: lt('预览', 'Preview', 'プレビュー'),
+                    onPressed: () => _previewEventImage(zone),
+                  ),
+                if (hasImage) const SizedBox(width: 8),
+                _imageActionButton(
+                  icon: hasImage
+                      ? Icons.edit_outlined
+                      : Icons.add_photo_alternate_outlined,
+                  label: hasImage
+                      ? lt('替换', 'Replace', '差し替え')
+                      : lt('添加图片', 'Add image', '画像追加'),
+                  onPressed: () => _pickEventImage(zone),
                 ),
+                if (hasImage) ...[
+                  const SizedBox(width: 8),
+                  _imageActionButton(
+                    icon: Icons.delete_outline,
+                    label: lt('删除', 'Delete', '削除'),
+                    onPressed: () => _vm.removeImageAsset(zone),
+                  ),
+                ],
               ],
             ),
           ),
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: 12,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: hasImage ? 0.55 : 0),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(hasImage ? 10 : 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            title,
+                            style: RaverTypography.label(
+                              size: 15,
+                              color:
+                                  hasImage ? Colors.white : theme.primaryText,
+                              weight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            hasImage ? lt('已设置', 'Set', '設定済み') : subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: RaverTypography.caption(
+                              color: hasImage
+                                  ? Colors.white70
+                                  : theme.secondaryText,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      hasImage ? Icons.photo : Icons.add_photo_alternate,
+                      color: hasImage ? Colors.white : theme.accent,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _imageActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.54),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: Colors.white, size: 18),
         ),
       ),
+    );
+  }
+
+  Future<void> _previewEventImage(EventUploadImageZone zone) async {
+    final url = _vm.imageUrl(zone);
+    if (url == null || url.isEmpty) return;
+    await MediaPreviewOverlay.show(
+      context,
+      mediaUrls: [url],
+      heroTagPrefix: 'event-edit-${zone.name}',
     );
   }
 

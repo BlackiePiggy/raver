@@ -1,13 +1,11 @@
 import 'package:flutter/foundation.dart';
-import 'package:raver_models/raver_models.dart';
 
 import '../../data/events_api_service.dart';
+import 'event_upload_view_model.dart';
 
 class EventEditorViewModel extends ChangeNotifier {
-  EventEditorViewModel({
-    required EventsApiService api,
-    String? eventId,
-  })  : _api = api,
+  EventEditorViewModel({required EventsApiService api, String? eventId})
+      : _api = api,
         _eventId = eventId;
 
   final EventsApiService _api;
@@ -63,6 +61,29 @@ class EventEditorViewModel extends ChangeNotifier {
   String? _posterUrl;
   String? get posterUrl => _posterUrl;
 
+  String? _lineupImageUrl;
+  String? get lineupImageUrl => _lineupImageUrl;
+
+  String? get coverImageUrl => imageUrl(EventUploadImageZone.cover);
+
+  final Map<EventUploadImageZone, List<EventUploadImageAsset>> _imageAssets =
+      {};
+  List<EventUploadImageAsset> get imageAssets => List.unmodifiable(
+        EventUploadImageZone.values.expand(imageAssetsFor),
+      );
+
+  List<EventUploadImageAsset> imageAssetsFor(EventUploadImageZone zone) =>
+      List.unmodifiable(_imageAssets[zone] ?? const []);
+
+  String? imageUrl(EventUploadImageZone zone) =>
+      imageAssetsFor(zone).isEmpty ? null : imageAssetsFor(zone).first.url;
+
+  final List<LineupEntry> _lineup = [];
+  List<LineupEntry> get lineup => List.unmodifiable(_lineup);
+
+  final List<ScheduleEntry> _schedule = [];
+  List<ScheduleEntry> get schedule => List.unmodifiable(_schedule);
+
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
@@ -98,6 +119,36 @@ class EventEditorViewModel extends ChangeNotifier {
       _ticketUrl = event.ticketUrl ?? '';
       _maxCapacity = event.maxCapacity;
       _posterUrl = event.coverImageUrl;
+      _lineupImageUrl = event.lineupImageUrl;
+      _restoreImageAssets(
+        posterUrl: event.coverImageUrl,
+        lineupImageUrl: event.lineupImageUrl,
+      );
+      _lineup
+        ..clear()
+        ..addAll(
+          (event.lineupArtists ?? const []).map(
+            (artist) => LineupEntry(
+              djId: artist.djId,
+              djName: artist.name,
+              isB2B: artist.isB2B,
+            ),
+          ),
+        );
+      _schedule
+        ..clear()
+        ..addAll(
+          (event.lineupSlots ?? const []).map(
+            (slot) => ScheduleEntry(
+              stageId: slot.id,
+              stageName: slot.stageName,
+              startTime: DateTime.tryParse(slot.startTime),
+              endTime: DateTime.tryParse(slot.endTime),
+              djId: slot.djId,
+              djName: slot.artistName,
+            ),
+          ),
+        );
     } catch (e) {
       _errorMessage = e.toString();
     }
@@ -179,17 +230,47 @@ class EventEditorViewModel extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   Future<void> uploadPoster(String localPath) async {
+    await uploadEventImage(EventUploadImageZone.poster, localPath);
+  }
+
+  Future<void> uploadEventImage(
+    EventUploadImageZone zone,
+    String localPath,
+  ) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final url = await _api.uploadEventPoster(localPath);
-      _posterUrl = url;
+      final url = await _api.uploadEventPoster(
+        localPath,
+        eventId: _eventId,
+        usage: zone.name,
+      );
+      if (zone == EventUploadImageZone.poster) {
+        _posterUrl = url;
+      } else if (zone == EventUploadImageZone.lineup) {
+        _lineupImageUrl = url;
+      }
+      _setImageAsset(
+        zone,
+        url: url,
+        fileName: _fileNameFromPath(localPath),
+      );
     } catch (e) {
       _errorMessage = e.toString();
     }
     _isLoading = false;
+    notifyListeners();
+  }
+
+  void removeImageAsset(EventUploadImageZone zone) {
+    _imageAssets.remove(zone);
+    if (zone == EventUploadImageZone.poster) {
+      _posterUrl = null;
+    } else if (zone == EventUploadImageZone.lineup) {
+      _lineupImageUrl = null;
+    }
     notifyListeners();
   }
 
@@ -204,7 +285,7 @@ class EventEditorViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final payload = _buildPayload();
+      final payload = buildPayload();
       if (isEditMode) {
         await _api.updateEvent(_eventId!, payload);
       } else {
@@ -219,24 +300,93 @@ class EventEditorViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Map<String, dynamic> _buildPayload() {
-    return {
-      'name': _title,
-      'description': _description,
-      'eventType': _eventType,
-      if (_startDate != null) 'startDate': _startDate!.toIso8601String(),
-      if (_endDate != null) 'endDate': _endDate!.toIso8601String(),
-      if (_timezone.isNotEmpty) 'timezone': _timezone,
-      'location': {
-        'name': _venueName,
-        'city': _venueCity,
-        'country': _venueCountry,
-        if (_venueLatitude != null) 'latitude': _venueLatitude,
-        if (_venueLongitude != null) 'longitude': _venueLongitude,
-      },
-      if (_posterUrl != null) 'coverImageUrl': _posterUrl,
-      if (_ticketUrl.isNotEmpty) 'ticketUrl': _ticketUrl,
-      if (_maxCapacity != null) 'maxCapacity': _maxCapacity,
-    };
+  Map<String, dynamic> buildPayload() {
+    final uploadModel = EventUploadViewModel(api: _api)
+      ..title = _title
+      ..description = _description
+      ..eventType = _eventType
+      ..startDate = _startDate
+      ..endDate = _endDate
+      ..timezone = _timezone
+      ..venueName = _venueName
+      ..venueCity = _venueCity
+      ..venueCountry = _venueCountry
+      ..venueLatitude = _venueLatitude
+      ..venueLongitude = _venueLongitude
+      ..ticketUrl = _ticketUrl
+      ..maxCapacity = _maxCapacity;
+    try {
+      uploadModel.addLineupEntries(_lineup);
+      for (final slot in _schedule) {
+        uploadModel.addScheduleEntry(
+          stageId: slot.stageId,
+          stageName: slot.stageName,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          djId: slot.djId,
+          djName: slot.djName,
+        );
+      }
+      final payload = uploadModel.buildCreatePayload();
+      final primaryCoverUrl = _posterUrl ?? coverImageUrl;
+      if (primaryCoverUrl != null && primaryCoverUrl.trim().isNotEmpty) {
+        payload['coverImageUrl'] = primaryCoverUrl;
+      }
+      if (_lineupImageUrl != null && _lineupImageUrl!.trim().isNotEmpty) {
+        payload['lineupImageUrl'] = _lineupImageUrl;
+      }
+      if (imageAssets.isNotEmpty) {
+        payload['imageAssets'] = imageAssets
+            .asMap()
+            .entries
+            .map((entry) => entry.value.toJson(entry.key + 1))
+            .toList();
+      }
+      return payload;
+    } finally {
+      uploadModel.dispose();
+    }
   }
+
+  void _restoreImageAssets({
+    required String posterUrl,
+    required String lineupImageUrl,
+  }) {
+    _imageAssets.clear();
+    if (posterUrl.trim().isNotEmpty) {
+      _setImageAsset(
+        EventUploadImageZone.poster,
+        url: posterUrl,
+        fileName: 'event-poster.jpg',
+      );
+    }
+    if (lineupImageUrl.trim().isNotEmpty) {
+      _setImageAsset(
+        EventUploadImageZone.lineup,
+        url: lineupImageUrl,
+        fileName: 'event-lineup.jpg',
+      );
+    }
+  }
+
+  void _setImageAsset(
+    EventUploadImageZone zone, {
+    required String url,
+    required String fileName,
+  }) {
+    _imageAssets[zone] = [
+      EventUploadImageAsset(
+        zone: zone,
+        url: url,
+        sortOrder: EventUploadImageZone.values.indexOf(zone) + 1,
+        fileName: fileName,
+      ),
+    ];
+  }
+}
+
+String _fileNameFromPath(String path) {
+  final normalized = path.replaceAll('\\', '/');
+  final fileName = normalized.split('/').last.trim();
+  return fileName.isEmpty ? 'event-image.jpg' : fileName;
 }

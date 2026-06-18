@@ -1,0 +1,33 @@
+name: Flutter Authenticated Smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  authenticated-live-smoke:
+    name: Authenticated live endpoint smoke
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Dart and Flutter dependencies
+        run: flutter pub get
+
+      - name: Run authenticated live endpoint smoke
+        env:
+          RAVEHUB_TEST_ACCESS_TOKEN: ${{ secrets.RAVEHUB_TEST_ACCESS_TOKEN }}
+        run: |
+          flutter test test/authenticated_live_endpoint_smoke_test.dart \
+            --dart-define=RAVEHUB_TEST_ACCESS_TOKEN="$RAVEHUB_TEST_ACCESS_TOKEN"

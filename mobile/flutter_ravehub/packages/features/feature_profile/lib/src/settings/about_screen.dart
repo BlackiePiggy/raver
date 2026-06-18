@@ -2,10 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
+import 'package:raver_platform/raver_platform.dart';
 
 /// About screen showing app info, version, and links.
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
+
+  static const _termsUrl = 'https://ravehub.top/legal/terms';
+  static const _privacyUrl = 'https://ravehub.top/legal/privacy';
+  static const _dataRequestsUrl = 'https://ravehub.top/legal/data-requests';
+
+  Future<void> _openExternalLink(BuildContext context, String url) async {
+    try {
+      await UrlLauncherService.openExternalUrl(url);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            lt(
+              '无法打开链接，请稍后重试',
+              'Unable to open the link. Please try again.',
+              'リンクを開けませんでした。もう一度お試しください。',
+            ),
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,40 +78,45 @@ class AboutScreen extends StatelessWidget {
                 ).copyWith(fontSize: 24),
               ),
               const SizedBox(height: 8),
-              Text(
-                'v1.0.0 (1)',
-                style: RaverTypography.caption(color: theme.secondaryText),
+              FutureBuilder<AppVersionInfo>(
+                future: AppInfoService.getVersionInfo(),
+                builder: (context, snapshot) {
+                  final versionLabel = snapshot.data?.displayVersion ??
+                      lt('版本加载中', 'Loading version', 'バージョンを読み込み中');
+                  return Text(
+                    versionLabel,
+                    style: RaverTypography.caption(color: theme.secondaryText),
+                  );
+                },
               ),
               const SizedBox(height: 40),
               _AboutLink(
                 icon: Icons.description_outlined,
                 title: lt('用户协议', 'Terms of Service', '利用規約'),
                 theme: theme,
-                onTap: () {
-                  // TODO: Open URL via url_launcher
-                },
+                onTap: () => _openExternalLink(context, _termsUrl),
               ),
               const SizedBox(height: 8),
               _AboutLink(
                 icon: Icons.privacy_tip_outlined,
                 title: lt('隐私政策', 'Privacy Policy', 'プライバシーポリシー'),
                 theme: theme,
-                onTap: () {
-                  // TODO: Open URL via url_launcher
-                },
+                onTap: () => _openExternalLink(context, _privacyUrl),
+              ),
+              const SizedBox(height: 8),
+              _AboutLink(
+                icon: Icons.assignment_outlined,
+                title: lt('数据请求', 'Data Requests', 'データリクエスト'),
+                theme: theme,
+                onTap: () => _openExternalLink(context, _dataRequestsUrl),
               ),
               const SizedBox(height: 8),
               _AboutLink(
                 icon: Icons.code_outlined,
-                title: lt('开源许可证', 'Open Source Licenses',
-                    'オープンソースライセンス'),
+                title: lt('开源许可证', 'Open Source Licenses', 'オープンソースライセンス'),
                 theme: theme,
                 onTap: () {
-                  showLicensePage(
-                    context: context,
-                    applicationName: 'RaveHub',
-                    applicationVersion: '1.0.0',
-                  );
+                  _showLicensePage(context);
                 },
               ),
               const Spacer(),
@@ -100,6 +129,16 @@ class AboutScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _showLicensePage(BuildContext context) async {
+    final version = await AppInfoService.getVersionInfo();
+    if (!context.mounted) return;
+    showLicensePage(
+      context: context,
+      applicationName: version.appName.isEmpty ? 'RaveHub' : version.appName,
+      applicationVersion: version.displayVersion,
     );
   }
 }
@@ -125,8 +164,7 @@ class _AboutLink extends StatelessWidget {
         title,
         style: RaverTypography.body(size: 16, color: theme.primaryText),
       ),
-      trailing:
-          Icon(Icons.open_in_new, color: theme.secondaryText, size: 18),
+      trailing: Icon(Icons.open_in_new, color: theme.secondaryText, size: 18),
       onTap: onTap,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),

@@ -56,7 +56,7 @@ class _OrganizerUploadFlowScreenState extends State<OrganizerUploadFlowScreen> {
   }
 
   Future<void> _pickAndUploadCover() async {
-    final path = await _mediaPicker.pickImage();
+    final path = await _mediaPicker.pickImageInstance();
     if (path != null) {
       await _vm.uploadCover(path);
     }

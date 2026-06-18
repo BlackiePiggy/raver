@@ -6,14 +6,15 @@ import 'package:raver_models/raver_models.dart';
 
 import '../data/inbox_service_locator.dart';
 import 'view_models/inbox_view_model.dart';
+import 'widgets/followed_update_tile.dart';
+import 'widgets/refreshable_empty_state.dart';
 
 /// Inbox screen listing updates from followed DJs.
 class FollowedDjsInboxScreen extends StatefulWidget {
   const FollowedDjsInboxScreen({super.key});
 
   @override
-  State<FollowedDjsInboxScreen> createState() =>
-      _FollowedDjsInboxScreenState();
+  State<FollowedDjsInboxScreen> createState() => _FollowedDjsInboxScreenState();
 }
 
 class _FollowedDjsInboxScreenState extends State<FollowedDjsInboxScreen> {
@@ -29,8 +30,6 @@ class _FollowedDjsInboxScreenState extends State<FollowedDjsInboxScreen> {
     _viewModel.addListener(_rebuild);
     _viewModel.loadFollowedDJs();
     _scrollController.addListener(_onScroll);
-
-    _viewModel.markAsRead(category: 'followed_djs', ids: []);
   }
 
   void _rebuild() {
@@ -68,13 +67,16 @@ class _FollowedDjsInboxScreenState extends State<FollowedDjsInboxScreen> {
       body: LoadPhaseBuilder<List<FollowedDJNotificationItem>>(
         phase: _viewModel.followedDJsPhase,
         onLoading: () => const _FollowedDJsSkeleton(),
-        onEmpty: () => EmptyStateView(
-          icon: Icons.headset_off,
-          title: lt('暂无更新', 'No Updates', '更新はありません'),
-          subtitle: lt(
-            '您关注的 DJ 暂无变更',
-            'DJs you follow have no updates yet',
-            'フォロー中の DJ の更新はまだありません',
+        onEmpty: () => RefreshableEmptyState(
+          onRefresh: _viewModel.refreshFollowedDJs,
+          child: EmptyStateView(
+            icon: Icons.headset_off,
+            title: lt('暂无更新', 'No Updates', '更新はありません'),
+            subtitle: lt(
+              '您关注的 DJ 暂无变更',
+              'DJs you follow have no updates yet',
+              'フォロー中の DJ の更新はまだありません',
+            ),
           ),
         ),
         onFailure: (error) => ErrorStateView(
@@ -88,6 +90,7 @@ class _FollowedDjsInboxScreenState extends State<FollowedDjsInboxScreen> {
           onRefresh: _viewModel.refreshFollowedDJs,
           child: ListView.separated(
             controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             itemCount: _viewModel.followedDJs.length +
                 (_viewModel.canLoadMoreFollowedDJs ? 1 : 0),
@@ -101,137 +104,39 @@ class _FollowedDjsInboxScreenState extends State<FollowedDjsInboxScreen> {
               }
 
               final item = _viewModel.followedDJs[index];
-              return _FollowedDJTile(
-                item: item,
-                onTap: () => context.push('/djs/${item.djId}'),
+              return FollowedUpdateTile(
+                entityName: item.djName,
+                updateType: item.type,
+                updateTitle: item.newsTitle,
+                summary: item.newsSummary,
+                occurredAt: item.occurredAt,
+                isRead: item.isRead,
+                imageUrl: item.avatarUrl.isNotEmpty
+                    ? item.avatarUrl
+                    : item.newsCoverImageUrl,
+                avatar: item.avatarUrl.isNotEmpty,
+                placeholderIcon: Icons.person,
+                onTap: () {
+                  _viewModel.markFollowedDJRead(item.id);
+                  context.push(
+                    '/inbox/changes/dj/${item.djId}',
+                    extra: {
+                      'entityName': item.djName,
+                      'changeType': item.type,
+                      'summary': item.newsSummary,
+                      'imageUrl': item.newsCoverImageUrl,
+                      'updateTitle': item.newsTitle,
+                      'targetType': item.type,
+                      'targetId': item.newsId,
+                    },
+                  );
+                },
               );
             },
           ),
         ),
       ),
     );
-  }
-}
-
-class _FollowedDJTile extends StatelessWidget {
-  const _FollowedDJTile({required this.item, required this.onTap});
-
-  final FollowedDJNotificationItem item;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.raver;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: theme.card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: theme.cardBorder),
-        ),
-        child: Row(
-          children: [
-            ClipOval(
-              child: item.avatarUrl.isNotEmpty
-                  ? RemoteCoverImage(
-                      url: item.avatarUrl,
-                      width: 48,
-                      height: 48,
-                    )
-                  : Container(
-                      width: 48,
-                      height: 48,
-                      color: theme.cardBorder,
-                      child: Icon(
-                        Icons.person,
-                        color: theme.secondaryText,
-                      ),
-                    ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.djName,
-                    style: RaverTypography.label(
-                      size: 14,
-                      color: theme.primaryText,
-                      weight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF70C754).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          item.changeType,
-                          style: RaverTypography.caption(
-                            color: const Color(0xFF70C754),
-                            weight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          item.summary,
-                          style: RaverTypography.caption(
-                            color: theme.secondaryText,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _formatRelativeTime(item.createdAt),
-                    style: RaverTypography.caption(
-                      color: theme.secondaryText,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.chevron_right,
-              size: 20,
-              color: theme.secondaryText,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static String _formatRelativeTime(String iso) {
-    try {
-      final dt = DateTime.parse(iso);
-      final diff = DateTime.now().difference(dt);
-      if (diff.inMinutes < 1) return lt('刚刚', 'just now', 'たった今');
-      if (diff.inMinutes < 60) return '${diff.inMinutes}m';
-      if (diff.inHours < 24) return '${diff.inHours}h';
-      if (diff.inDays < 30) return '${diff.inDays}d';
-      return '${dt.month}/${dt.day}';
-    } catch (_) {
-      return iso;
-    }
   }
 }
 

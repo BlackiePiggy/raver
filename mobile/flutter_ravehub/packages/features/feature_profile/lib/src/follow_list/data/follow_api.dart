@@ -37,4 +37,20 @@ class FollowApi {
       (json) => UserSummary.fromJson(json! as Map<String, dynamic>),
     );
   }
+
+  /// Fetch mutual friends list.
+  Future<BFFListPage<UserSummary>> fetchFriends({
+    required String userId,
+    required int page,
+    int limit = 20,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/v1/users/$userId/friends',
+      queryParameters: {'page': page, 'limit': limit},
+    );
+    return BFFListPage.fromJson(
+      response.data!,
+      (json) => UserSummary.fromJson(json! as Map<String, dynamic>),
+    );
+  }
 }

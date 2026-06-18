@@ -2,12 +2,43 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
+import 'package:raver_platform/raver_platform.dart';
 
 /// Quiz result screen showing score, ranking, and wrong answers.
 class QuizResultScreen extends StatelessWidget {
   const QuizResultScreen({super.key, required this.result});
 
   final Map<String, dynamic> result;
+
+  Future<void> _shareResult({
+    required BuildContext context,
+    required int score,
+    required int total,
+    required int correctRate,
+    required int rank,
+  }) async {
+    final text = lt(
+      '我在 RaveHub 电音测验中答对 $score/$total 题，正确率 $correctRate%，排名 #$rank。来一起测测你的电音知识吧！',
+      'I scored $score/$total on the RaveHub EDM quiz with $correctRate% accuracy and rank #$rank. Come test your electronic music knowledge!',
+      'RaveHub EDMクイズで $score/$total 問正解、正答率 $correctRate%、ランキング #$rank でした。あなたもEDM知識を試してみて！',
+    );
+    try {
+      await ShareService.shareText(text);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            lt(
+              '分享失败，请稍后重试',
+              'Share failed. Please try again.',
+              'シェアに失敗しました。もう一度お試しください。',
+            ),
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,8 +47,7 @@ class QuizResultScreen extends StatelessWidget {
     final total = result['totalQuestions'] as int? ?? 0;
     final correctRate = total > 0 ? (score / total * 100).toInt() : 0;
     final rank = result['rank'] as int? ?? 0;
-    final wrongAnswers =
-        (result['wrongAnswers'] as List<dynamic>?) ?? [];
+    final wrongAnswers = (result['wrongAnswers'] as List<dynamic>?) ?? [];
 
     return Scaffold(
       appBar: AppBar(
@@ -95,8 +125,7 @@ class QuizResultScreen extends StatelessWidget {
               ...wrongAnswers.map((item) {
                 final map = item as Map<String, dynamic>;
                 final question = map['question'] as String? ?? '';
-                final correctAnswer =
-                    map['correctAnswer'] as String? ?? '';
+                final correctAnswer = map['correctAnswer'] as String? ?? '';
                 final yourAnswer = map['yourAnswer'] as String? ?? '';
 
                 return Container(
@@ -137,8 +166,7 @@ class QuizResultScreen extends StatelessWidget {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(Icons.cancel,
-                              size: 16, color: Colors.redAccent),
+                          Icon(Icons.cancel, size: 16, color: Colors.redAccent),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
@@ -163,9 +191,13 @@ class QuizResultScreen extends StatelessWidget {
             PrimaryButton(
               label: lt('分享结果', 'Share Result', '結果をシェア'),
               icon: Icons.share_outlined,
-              onPressed: () {
-                // TODO: Implement share
-              },
+              onPressed: () => _shareResult(
+                context: context,
+                score: score,
+                total: total,
+                correctRate: correctRate,
+                rank: rank,
+              ),
               isExpanded: true,
             ),
           ],

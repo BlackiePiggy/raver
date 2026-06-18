@@ -1,12 +1,13 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
+import 'package:raver_platform/raver_platform.dart';
 
 import '../theme/raver_shadows.dart';
 import '../theme/raver_theme.dart';
-import '../theme/raver_typography.dart';
 
 class _TabItem {
   const _TabItem({required this.icon, required this.label});
@@ -27,12 +28,14 @@ class RaverFloatingTabBar extends StatelessWidget {
     required this.onSearchTap,
     super.key,
     this.inboxBadgeCount = 0,
+    this.hideWhenKeyboardVisible = true,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onTap;
   final VoidCallback onSearchTap;
   final int inboxBadgeCount;
+  final bool hideWhenKeyboardVisible;
 
   static const _tabs = [
     _TabItem(icon: Icons.explore_outlined, label: 'Discover'),
@@ -51,13 +54,19 @@ class RaverFloatingTabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = context.raver;
     final brightness = Theme.of(context).brightness;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final mediaQuery = MediaQuery.of(context);
+    final bottomPadding = mediaQuery.padding.bottom;
+    final isKeyboardVisible = mediaQuery.viewInsets.bottom > 0;
+
+    if (hideWhenKeyboardVisible && isKeyboardVisible) {
+      return const SizedBox.shrink();
+    }
 
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
         right: 16,
-        bottom: bottomPadding > 0 ? bottomPadding - 14 : 4,
+        bottom: bottomPadding > 0 ? max(4, bottomPadding - 14) : 4,
       ),
       child: Container(
         height: _barHeight,
@@ -158,13 +167,17 @@ class _TabBarContent extends StatelessWidget {
   Widget _buildTab(int index, double width) {
     final tab = RaverFloatingTabBar._tabs[index];
     final isSelected = index == selectedIndex;
+    void handleTap() {
+      unawaited(HapticService.selectionClick());
+      onTap(index);
+    }
 
     return SizedBox(
       width: width,
       // iOS: tab item height 52pt (inner)
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => onTap(index),
+        onTap: handleTap,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -245,50 +258,61 @@ class _TabBarContent extends StatelessWidget {
   }
 
   Widget _buildSearchButton(double width) {
+    void handleSearchTap() {
+      unawaited(HapticService.mediumImpact());
+      onSearchTap();
+    }
+
     return SizedBox(
       width: width,
       child: Center(
         child: GestureDetector(
-          onTap: onSearchTap,
-          child: Container(
-            width: RaverFloatingTabBar._searchButtonSize,
-            height: RaverFloatingTabBar._searchButtonSize,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  theme.accent,
-                  // iOS second stop: Color(red:0.31, green:0.22, blue:0.88)
-                  const Color(0xFF4F38E0),
+          behavior: HitTestBehavior.opaque,
+          onTap: handleSearchTap,
+          child: Semantics(
+            key: const ValueKey('raver_floating_tab_bar_search_button'),
+            button: true,
+            label: 'Search',
+            child: Container(
+              width: RaverFloatingTabBar._searchButtonSize,
+              height: RaverFloatingTabBar._searchButtonSize,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    theme.accent,
+                    // iOS second stop: Color(red:0.31, green:0.22, blue:0.88)
+                    const Color(0xFF4F38E0),
+                  ],
+                ),
+                // iOS search button: 1pt white@0.32 stroke
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.32),
+                  width: 1,
+                ),
+                boxShadow: [
+                  // iOS: accent glow, radius 14, y 8
+                  BoxShadow(
+                    color: theme.accent.withValues(alpha: 0.36),
+                    blurRadius: 14,
+                    offset: const Offset(0, 8),
+                  ),
+                  // iOS: black depth, radius 10, y 6
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.18),
+                    blurRadius: 10,
+                    offset: const Offset(0, 6),
+                  ),
                 ],
               ),
-              // iOS search button: 1pt white@0.32 stroke
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.32),
-                width: 1,
+              child: const Icon(
+                Icons.search,
+                color: Colors.white,
+                // iOS: 21pt bold
+                size: 21,
               ),
-              boxShadow: [
-                // iOS: accent glow, radius 14, y 8
-                BoxShadow(
-                  color: theme.accent.withValues(alpha: 0.36),
-                  blurRadius: 14,
-                  offset: const Offset(0, 8),
-                ),
-                // iOS: black depth, radius 10, y 6
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.18),
-                  blurRadius: 10,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.search,
-              color: Colors.white,
-              // iOS: 21pt bold
-              size: 21,
             ),
           ),
         ),

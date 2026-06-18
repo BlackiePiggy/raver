@@ -12,10 +12,10 @@ class BFFPagination {
   });
 
   factory BFFPagination.fromJson(Map<String, dynamic> json) => BFFPagination(
-        page: json['page'] as int? ?? 0,
-        limit: json['limit'] as int? ?? 0,
-        total: json['total'] as int? ?? 0,
-        totalPages: json['totalPages'] as int? ?? 0,
+        page: _intFromJson(json['page']),
+        limit: _intFromJson(json['limit']),
+        total: _intFromJson(json['total']),
+        totalPages: _intFromJson(json['totalPages'] ?? json['total_pages']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -56,6 +56,13 @@ class BFFPagination {
       'BFFPagination(page: $page, limit: $limit, total: $total, totalPages: $totalPages)';
 }
 
+int _intFromJson(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? 0;
+  return 0;
+}
+
 class BFFListPage<T> {
   final List<T> items;
   final BFFPagination? pagination;
@@ -65,17 +72,16 @@ class BFFListPage<T> {
     this.pagination,
   });
 
-  static BFFListPage<T> fromJson<T>(
+  factory BFFListPage.fromJson(
     Map<String, dynamic> json,
     T Function(Object? json) fromJsonT,
   ) {
-    return BFFListPage<T>(
+    return BFFListPage(
       items: (json['items'] as List<dynamic>? ?? [])
           .map((e) => fromJsonT(e))
           .toList(),
       pagination: json['pagination'] != null
-          ? BFFPagination.fromJson(
-              json['pagination'] as Map<String, dynamic>)
+          ? BFFPagination.fromJson(json['pagination'] as Map<String, dynamic>)
           : null,
     );
   }

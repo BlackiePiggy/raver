@@ -16,11 +16,27 @@ class NewsListScreen extends ConsumerStatefulWidget {
 }
 
 class _NewsListScreenState extends ConsumerState<NewsListScreen> {
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-        () => ref.read(newsListProvider.notifier).loadIfNeeded());
+    Future.microtask(() => ref.read(newsListProvider.notifier).loadIfNeeded());
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: RaverMotion.normal,
+      curve: RaverMotion.curve,
+    );
   }
 
   @override
@@ -28,19 +44,31 @@ class _NewsListScreenState extends ConsumerState<NewsListScreen> {
     final state = ref.watch(newsListProvider);
     final theme = context.raver;
 
-    return Column(
-      children: [
-        _CategoryFilterRow(
-          selected: state.selectedCategory,
-          onSelected: (c) =>
-              ref.read(newsListProvider.notifier).setCategory(c),
-          theme: theme,
-        ),
-        Expanded(
-          child: _buildContent(state, theme),
-        ),
-      ],
+    return RaverTabReselectionListener(
+      tabIndex: 0,
+      onReselected: _scrollToTop,
+      child: Column(
+        children: [
+          _CategoryFilterRow(
+            selected: state.selectedCategory,
+            onSelected: (c) =>
+                ref.read(newsListProvider.notifier).setCategory(c),
+            onPublish: _openNewsEditor,
+            theme: theme,
+          ),
+          Expanded(
+            child: _buildContent(state, theme),
+          ),
+        ],
+      ),
     );
+  }
+
+  Future<void> _openNewsEditor() async {
+    final didChange = await context.push<bool>('/news/new');
+    if (didChange == true && mounted) {
+      await ref.read(newsListProvider.notifier).reload();
+    }
   }
 
   Widget _buildContent(NewsListState state, RaverThemeData theme) {
@@ -88,9 +116,9 @@ class _NewsListScreenState extends ConsumerState<NewsListScreen> {
     return RefreshIndicator(
       onRefresh: () => ref.read(newsListProvider.notifier).reload(),
       child: ListView.separated(
+        controller: _scrollController,
         padding: const EdgeInsets.only(bottom: 80),
-        itemCount:
-            state.displayedArticles.length + (state.canLoadMore ? 1 : 0),
+        itemCount: state.displayedArticles.length + (state.canLoadMore ? 1 : 0),
         separatorBuilder: (_, __) =>
             Divider(height: 1, indent: 16, color: theme.cardBorder),
         itemBuilder: (context, index) {
@@ -117,49 +145,82 @@ class _CategoryFilterRow extends StatelessWidget {
   const _CategoryFilterRow({
     required this.selected,
     required this.onSelected,
+    required this.onPublish,
     required this.theme,
   });
 
   final NewsCategory selected;
   final ValueChanged<NewsCategory> onSelected;
+  final VoidCallback onPublish;
   final RaverThemeData theme;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 50,
+      height: 46,
       color: theme.background,
-      padding: const EdgeInsets.only(top: 8, bottom: 8),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: NewsCategory.values.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final category = NewsCategory.values[index];
-          final isSelected = category == selected;
-          return GestureDetector(
-            onTap: () => onSelected(category),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? _categoryColor(category)
-                    : theme.card,
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(left: 16),
+              itemCount: NewsCategory.values.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final category = NewsCategory.values[index];
+                final isSelected = category == selected;
+                return GestureDetector(
+                  onTap: () => onSelected(category),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected ? _categoryColor(category) : theme.card,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _categoryTitle(category),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isSelected ? Colors.white : theme.primaryText,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Tooltip(
+              message: lt('发布资讯', 'Publish News', 'ニュース投稿'),
+              child: InkWell(
+                onTap: onPublish,
                 borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                category.title,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isSelected ? Colors.white : theme.primaryText,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: const Color.fromRGBO(245, 130, 46, 1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.edit,
+                    color: Colors.white,
+                    size: 18,
+                  ),
                 ),
               ),
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
@@ -178,6 +239,23 @@ class _CategoryFilterRow extends StatelessWidget {
         return const Color.fromRGBO(222, 135, 74, 1);
       case NewsCategory.community:
         return const Color.fromRGBO(179, 140, 235, 1);
+    }
+  }
+
+  String _categoryTitle(NewsCategory category) {
+    switch (category) {
+      case NewsCategory.all:
+        return lt('全部', 'All', 'すべて');
+      case NewsCategory.festival:
+        return lt('电音节', 'Festival', 'フェス');
+      case NewsCategory.scene:
+        return lt('现场观察', 'Live Scene', '現場観察');
+      case NewsCategory.gear:
+        return lt('设备玩法', 'Gear', '機材');
+      case NewsCategory.industry:
+        return lt('行业动态', 'Industry', '業界動向');
+      case NewsCategory.community:
+        return lt('社区话题', 'Community', 'コミュニティ');
     }
   }
 }
@@ -254,8 +332,8 @@ class _NewsCard extends StatelessWidget {
                         article.createdAt.length > 10
                             ? article.createdAt.substring(0, 10)
                             : article.createdAt,
-                        style: TextStyle(
-                            fontSize: 10, color: theme.secondaryText),
+                        style:
+                            TextStyle(fontSize: 10, color: theme.secondaryText),
                       ),
                       const SizedBox(width: 10),
                       Icon(Icons.chat_bubble_outline,
@@ -263,8 +341,8 @@ class _NewsCard extends StatelessWidget {
                       const SizedBox(width: 3),
                       Text(
                         '${article.replyCount}',
-                        style: TextStyle(
-                            fontSize: 10, color: theme.secondaryText),
+                        style:
+                            TextStyle(fontSize: 10, color: theme.secondaryText),
                       ),
                     ],
                   ),

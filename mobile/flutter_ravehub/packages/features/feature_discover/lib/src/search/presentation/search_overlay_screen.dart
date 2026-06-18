@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
@@ -70,49 +72,80 @@ class _SearchOverlayScreenState extends State<SearchOverlayScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = context.raver;
+    final media = MediaQuery.of(context);
+    final bottomInset = media.viewInsets.bottom;
 
     return GestureDetector(
       onTap: _dismiss,
-      child: Scaffold(
-        backgroundColor: Colors.black.withValues(alpha: 0.18),
-        body: SafeArea(
-          child: Center(
-            child: GestureDetector(
-              onTap: () {},
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 420),
-                margin: const EdgeInsets.symmetric(horizontal: 18),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: theme.card.withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: theme.cardBorder),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      blurRadius: 24,
-                      offset: const Offset(0, 14),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(theme),
-                    const SizedBox(height: 16),
-                    _buildSearchField(theme),
-                    if (_recentStore.queries.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      _buildRecentSearches(theme),
-                    ],
-                    const SizedBox(height: 16),
-                    _buildScopeHints(theme),
-                  ],
+      child: Material(
+        type: MaterialType.transparency,
+        child: Stack(
+          key: const ValueKey('global_search_overlay_root'),
+          fit: StackFit.expand,
+          children: [
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: ColoredBox(
+                  color: Colors.black.withValues(alpha: 0.18),
                 ),
               ),
             ),
-          ),
+            TweenAnimationBuilder<double>(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              tween: Tween<double>(end: -bottomInset * 0.5),
+              builder: (context, offsetY, child) {
+                return Transform.translate(
+                  offset: Offset(0, offsetY),
+                  child: child,
+                );
+              },
+              child: SafeArea(
+                child: Center(
+                  child: _buildSearchPanel(theme),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchPanel(RaverThemeData theme) {
+    return GestureDetector(
+      onTap: _focusNode.unfocus,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 420),
+        margin: const EdgeInsets.symmetric(horizontal: 18),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.card.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: theme.cardBorder),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 24,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(theme),
+            const SizedBox(height: 16),
+            _buildSearchField(theme),
+            if (_recentStore.queries.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _buildRecentSearches(theme),
+            ],
+            const SizedBox(height: 16),
+            _buildScopeHints(theme),
+          ],
         ),
       ),
     );

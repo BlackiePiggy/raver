@@ -71,9 +71,8 @@ class _DjDetailScreenState extends ConsumerState<DjDetailScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: _TabSelector(
               selected: state.selectedTab,
-              onSelected: (tab) => ref
-                  .read(djDetailProvider(widget.djId).notifier)
-                  .setTab(tab),
+              onSelected: (tab) =>
+                  ref.read(djDetailProvider(widget.djId).notifier).setTab(tab),
               theme: theme,
             ),
           ),
@@ -90,8 +89,8 @@ class _DjDetailScreenState extends ConsumerState<DjDetailScreen> {
                     child: Center(
                       child: Text(
                         lt('暂无 Sets', 'No sets yet', 'セットはまだありません'),
-                        style: TextStyle(
-                            color: theme.secondaryText, fontSize: 14),
+                        style:
+                            TextStyle(color: theme.secondaryText, fontSize: 14),
                       ),
                     ),
                   ),
@@ -217,8 +216,9 @@ class _HeroHeader extends ConsumerWidget {
                   _FollowButton(
                     isFollowing: dj.isFollowing ?? false,
                     isLoading: state.isFollowLoading,
-                    onTap: () =>
-                        ref.read(djDetailProvider(djId).notifier).toggleFollow(),
+                    onTap: () => ref
+                        .read(djDetailProvider(djId).notifier)
+                        .toggleFollow(),
                   ),
                 ],
               ),
@@ -261,9 +261,8 @@ class _FollowButton extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isFollowing
-              ? Colors.white.withValues(alpha: 0.2)
-              : Colors.white,
+          color:
+              isFollowing ? Colors.white.withValues(alpha: 0.2) : Colors.white,
           borderRadius: BorderRadius.circular(20),
         ),
         child: isLoading
@@ -378,19 +377,39 @@ class _IntroSection extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: dj.genres!.map((genre) {
-                return Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: theme.accent.withValues(alpha: 0.12),
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
                     borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    genre,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: theme.accent,
+                    onTap: () => context.push(djGenreRoute(dj, genre)),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.accent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            genre,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: theme.accent,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 14,
+                            color: theme.accent,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -425,8 +444,7 @@ class _IntroSection extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Row(
                     children: [
-                      Icon(Icons.emoji_events,
-                          size: 16, color: theme.accent),
+                      Icon(Icons.emoji_events, size: 16, color: theme.accent),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -445,6 +463,31 @@ class _IntroSection extends StatelessWidget {
       ),
     );
   }
+}
+
+String djGenreRoute(WebDJ dj, String genre) {
+  final normalized = genre.trim().toLowerCase();
+  for (final binding in dj.genreBindings ?? const <WebGenreTagBinding>[]) {
+    final genreId = binding.genreId.trim();
+    if (genreId.isEmpty) continue;
+
+    final labels = <String>[binding.label.trim().toLowerCase()];
+    final pathParts = binding.path
+        .split('/')
+        .map((part) => part.trim().toLowerCase())
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    if (pathParts.isNotEmpty) labels.add(pathParts.last);
+
+    if (labels.contains(normalized)) {
+      return '/genres/${Uri.encodeComponent(genreId)}';
+    }
+  }
+
+  return Uri(
+    path: '/search',
+    queryParameters: {'q': genre.trim()},
+  ).toString();
 }
 
 class _InfoPill extends StatelessWidget {
@@ -543,8 +586,7 @@ class _SetTile extends StatelessWidget {
                     ? CachedNetworkImage(
                         imageUrl: djSet.thumbnailUrl,
                         fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) =>
-                            _thumbnailFallback(theme),
+                        errorWidget: (_, __, ___) => _thumbnailFallback(theme),
                       )
                     : _thumbnailFallback(theme),
               ),
@@ -567,8 +609,7 @@ class _SetTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     _formatDuration(djSet.duration),
-                    style: TextStyle(
-                        fontSize: 11, color: theme.secondaryText),
+                    style: TextStyle(fontSize: 11, color: theme.secondaryText),
                   ),
                 ],
               ),
@@ -582,8 +623,8 @@ class _SetTile extends StatelessWidget {
   Widget _thumbnailFallback(RaverThemeData theme) {
     return Container(
       color: theme.card,
-      child: Icon(Icons.play_circle_outline,
-          size: 24, color: theme.secondaryText),
+      child:
+          Icon(Icons.play_circle_outline, size: 24, color: theme.secondaryText),
     );
   }
 

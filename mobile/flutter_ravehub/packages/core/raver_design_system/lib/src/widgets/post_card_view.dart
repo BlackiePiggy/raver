@@ -16,10 +16,13 @@ class PostCardData {
     required this.createdAt,
     this.authorAvatarUrl,
     this.images = const [],
+    this.videos = const [],
     this.likeCount = 0,
     this.commentCount = 0,
     this.shareCount = 0,
+    this.saveCount = 0,
     this.isLiked = false,
+    this.isSaved = false,
     this.squadName,
     this.eventName,
   });
@@ -30,10 +33,13 @@ class PostCardData {
   final String content;
   final String createdAt;
   final List<String> images;
+  final List<String> videos;
   final int likeCount;
   final int commentCount;
   final int shareCount;
+  final int saveCount;
   final bool isLiked;
+  final bool isSaved;
   final String? squadName;
   final String? eventName;
 }
@@ -51,6 +57,7 @@ class PostCardView extends StatelessWidget {
     this.onLike,
     this.onComment,
     this.onShare,
+    this.onSave,
     this.onAuthorTap,
     this.onMoreTap,
   });
@@ -69,6 +76,9 @@ class PostCardView extends StatelessWidget {
 
   /// Called when the share button is tapped.
   final VoidCallback? onShare;
+
+  /// Called when the save button is tapped.
+  final VoidCallback? onSave;
 
   /// Called when the author avatar / name is tapped.
   final VoidCallback? onAuthorTap;
@@ -117,10 +127,10 @@ class PostCardView extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
 
-            // Images
-            if (post.images.isNotEmpty) ...[
+            // Media
+            if (post.images.isNotEmpty || post.videos.isNotEmpty) ...[
               const SizedBox(height: 12),
-              _ImageGrid(images: post.images),
+              _MediaSection(images: post.images, videos: post.videos),
             ],
 
             // Action bar
@@ -129,11 +139,14 @@ class PostCardView extends StatelessWidget {
               likeCount: post.likeCount,
               commentCount: post.commentCount,
               shareCount: post.shareCount,
+              saveCount: post.saveCount,
               isLiked: post.isLiked,
+              isSaved: post.isSaved,
               theme: theme,
               onLike: onLike,
               onComment: onComment,
               onShare: onShare,
+              onSave: onSave,
             ),
           ],
         ),
@@ -274,22 +287,31 @@ class _AuthorHeader extends StatelessWidget {
   }
 }
 
-class _ImageGrid extends StatelessWidget {
-  const _ImageGrid({required this.images});
+class _MediaSection extends StatelessWidget {
+  const _MediaSection({required this.images, required this.videos});
 
   final List<String> images;
+  final List<String> videos;
 
   @override
   Widget build(BuildContext context) {
-    if (images.length == 1) {
+    final media = [
+      ...images.map((url) => _PostMediaItem(url: url, isVideo: false)),
+      ...videos.map((url) => _PostMediaItem(url: url, isVideo: true)),
+    ];
+
+    if (media.length == 1) {
+      final item = media.first;
       return ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: RemoteCoverImage(
-          url: images.first,
-          width: double.infinity,
-          height: 200,
-          fit: BoxFit.cover,
-        ),
+        child: item.isVideo
+            ? _VideoTile(url: item.url, width: double.infinity, height: 200)
+            : RemoteCoverImage(
+                url: item.url,
+                width: double.infinity,
+                height: 200,
+                fit: BoxFit.cover,
+              ),
       );
     }
 
@@ -297,17 +319,109 @@ class _ImageGrid extends StatelessWidget {
       height: 160,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: images.length,
+        itemCount: media.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, index) => RemoteCoverImage(
-          url: images[index],
-          width: 160,
-          height: 160,
-          fit: BoxFit.cover,
-          borderRadius: BorderRadius.circular(12),
-        ),
+        itemBuilder: (_, index) {
+          final item = media[index];
+          return item.isVideo
+              ? _VideoTile(url: item.url, width: 160, height: 160)
+              : RemoteCoverImage(
+                  url: item.url,
+                  width: 160,
+                  height: 160,
+                  fit: BoxFit.cover,
+                  borderRadius: BorderRadius.circular(12),
+                );
+        },
       ),
     );
+  }
+}
+
+class _PostMediaItem {
+  const _PostMediaItem({required this.url, required this.isVideo});
+
+  final String url;
+  final bool isVideo;
+}
+
+class _VideoTile extends StatelessWidget {
+  const _VideoTile({
+    required this.url,
+    required this.width,
+    required this.height,
+  });
+
+  final String url;
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.raver;
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: theme.cardBorder,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  theme.primaryText.withValues(alpha: 0.16),
+                  theme.accent.withValues(alpha: 0.20),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
+          Center(
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.38),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                color: Colors.white,
+                size: 34,
+              ),
+            ),
+          ),
+          Positioned(
+            left: 10,
+            right: 10,
+            bottom: 10,
+            child: Text(
+              _videoFileName(url),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: RaverTypography.caption(
+                color: Colors.white,
+                weight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _videoFileName(String value) {
+    final uri = Uri.tryParse(value);
+    final path = uri?.path.isNotEmpty == true ? uri!.path : value;
+    final normalized = path.replaceAll('\\', '/');
+    final index = normalized.lastIndexOf('/');
+    return index >= 0 ? normalized.substring(index + 1) : normalized;
   }
 }
 
@@ -316,21 +430,27 @@ class _ActionBar extends StatelessWidget {
     required this.likeCount,
     required this.commentCount,
     required this.shareCount,
+    required this.saveCount,
     required this.isLiked,
+    required this.isSaved,
     required this.theme,
     this.onLike,
     this.onComment,
     this.onShare,
+    this.onSave,
   });
 
   final int likeCount;
   final int commentCount;
   final int shareCount;
+  final int saveCount;
   final bool isLiked;
+  final bool isSaved;
   final RaverThemeData theme;
   final VoidCallback? onLike;
   final VoidCallback? onComment;
   final VoidCallback? onShare;
+  final VoidCallback? onSave;
 
   @override
   Widget build(BuildContext context) {
@@ -356,6 +476,15 @@ class _ActionBar extends StatelessWidget {
           color: theme.secondaryText,
           onTap: onShare,
         ),
+        if (onSave != null) ...[
+          const SizedBox(width: 20),
+          _ActionButton(
+            icon: isSaved ? Icons.star_rounded : Icons.star_border_rounded,
+            count: saveCount,
+            color: isSaved ? Colors.amber : theme.secondaryText,
+            onTap: onSave,
+          ),
+        ],
       ],
     );
   }

@@ -13,67 +13,70 @@ import '../ratings/presentation/rating_unit_detail_screen.dart';
 
 /// Primary route for the Circle tab.
 List<RouteBase> buildCircleRoutes() => [
-      GoRoute(
-        path: '/circle',
-        builder: (BuildContext context, GoRouterState state) =>
-            const CircleHomeScreen(),
-      ),
-    ];
+  GoRoute(
+    path: '/circle',
+    builder: (BuildContext context, GoRouterState state) =>
+        const CircleHomeScreen(),
+  ),
+];
 
 /// Detail routes reachable from the Circle tab.
 List<RouteBase> buildCircleDetailRoutes() => [
-      // Feed
-      GoRoute(
-        path: '/circle/post/:postId',
-        builder: (BuildContext context, GoRouterState state) =>
-            PostDetailScreen(postId: state.pathParameters['postId']!),
-      ),
-      GoRoute(
-        path: '/circle/compose',
-        builder: (BuildContext context, GoRouterState state) =>
-            const ComposePostScreen(),
-      ),
+  // Feed
+  GoRoute(
+    path: '/circle/post/:postId',
+    builder: (BuildContext context, GoRouterState state) =>
+        PostDetailScreen(postId: state.pathParameters['postId']!),
+  ),
+  GoRoute(
+    path: '/circle/compose',
+    builder: (BuildContext context, GoRouterState state) =>
+        const ComposePostScreen(),
+  ),
 
-      // Squads
-      GoRoute(
-        path: '/circle/squads/:squadId',
-        builder: (BuildContext context, GoRouterState state) =>
-            SquadProfileScreen(squadId: state.pathParameters['squadId']!),
-      ),
-      GoRoute(
-        path: '/circle/squads/:squadId/manage',
-        builder: (BuildContext context, GoRouterState state) =>
-            SquadManageScreen(squadId: state.pathParameters['squadId']!),
-      ),
-      GoRoute(
-        path: '/circle/squads/:squadId/activities',
-        builder: (BuildContext context, GoRouterState state) =>
-            SquadOfflineActivityHistoryScreen(
+  // Squads
+  GoRoute(
+    path: '/circle/squads/:squadId',
+    builder: (BuildContext context, GoRouterState state) =>
+        SquadProfileScreen(squadId: state.pathParameters['squadId']!),
+  ),
+  GoRoute(
+    path: '/circle/squads/:squadId/manage',
+    builder: (BuildContext context, GoRouterState state) =>
+        SquadManageScreen(squadId: state.pathParameters['squadId']!),
+  ),
+  GoRoute(
+    path: '/circle/squads/:squadId/activities',
+    builder: (BuildContext context, GoRouterState state) =>
+        SquadOfflineActivityHistoryScreen(
           squadId: state.pathParameters['squadId']!,
         ),
-      ),
+  ),
 
-      // Circle IDs
-      GoRoute(
-        path: '/circle/ids/:cardId',
-        builder: (BuildContext context, GoRouterState state) =>
-            CircleIdDetailScreen(cardId: state.pathParameters['cardId']!),
-      ),
+  // Circle IDs
+  GoRoute(
+    path: '/circle/ids/:cardId',
+    builder: (BuildContext context, GoRouterState state) =>
+        CircleIdDetailScreen(cardId: state.pathParameters['cardId']!),
+  ),
+  GoRoute(
+    path: '/circle/id/:cardId',
+    builder: (BuildContext context, GoRouterState state) =>
+        CircleIdDetailScreen(cardId: state.pathParameters['cardId']!),
+  ),
 
-      // Ratings
-      GoRoute(
-        path: '/circle/ratings/:ratingId',
-        builder: (BuildContext context, GoRouterState state) =>
-            RatingEventDetailScreen(
-          ratingId: state.pathParameters['ratingId']!,
-        ),
-      ),
-      GoRoute(
-        path: '/circle/ratings/:ratingId/units/:unitId',
-        builder: (BuildContext context, GoRouterState state) =>
-            RatingUnitDetailScreen(
+  // Ratings
+  GoRoute(
+    path: '/circle/ratings/:ratingId',
+    builder: (BuildContext context, GoRouterState state) =>
+        RatingEventDetailScreen(ratingId: state.pathParameters['ratingId']!),
+  ),
+  GoRoute(
+    path: '/circle/ratings/:ratingId/units/:unitId',
+    builder: (BuildContext context, GoRouterState state) =>
+        RatingUnitDetailScreen(
           ratingId: state.pathParameters['ratingId']!,
           unitId: state.pathParameters['unitId']!,
         ),
-      ),
-    ];
+  ),
+];

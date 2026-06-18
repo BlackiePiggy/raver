@@ -20,12 +20,16 @@ dependencies:
     path: ../../core/raver_design_system
   raver_i18n:
     path: ../../core/raver_i18n
+  raver_platform:
+    path: ../../core/raver_platform
   flutter:
     sdk: flutter
   flutter_riverpod: ^2.5.0
   go_router: ^14.6.0
   dio: ^5.7.0
   cached_network_image: ^3.4.0
+  flutter_cache_manager: ^3.4.1
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   very_good_analysis: ^6.0.0

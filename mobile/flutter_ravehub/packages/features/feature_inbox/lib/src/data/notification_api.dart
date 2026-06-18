@@ -41,8 +41,8 @@ class NotificationApiService {
     );
     return BFFListPage.fromJson(
       response.data!,
-      (json) => FollowedEventNotificationItem.fromJson(
-          json! as Map<String, dynamic>),
+      (json) =>
+          FollowedEventNotificationItem.fromJson(json! as Map<String, dynamic>),
     );
   }
 
@@ -81,8 +81,8 @@ class NotificationApiService {
     );
     return BFFListPage.fromJson(
       response.data!,
-      (json) => FollowedBrandNotificationItem.fromJson(
-          json! as Map<String, dynamic>),
+      (json) =>
+          FollowedBrandNotificationItem.fromJson(json! as Map<String, dynamic>),
     );
   }
 
@@ -101,8 +101,8 @@ class NotificationApiService {
     );
     return BFFListPage.fromJson(
       response.data!,
-      (json) => ContentReviewNotificationItem.fromJson(
-          json! as Map<String, dynamic>),
+      (json) =>
+          ContentReviewNotificationItem.fromJson(json! as Map<String, dynamic>),
     );
   }
 
@@ -129,10 +129,28 @@ class NotificationApiService {
   }) async {
     await _dio.put<void>(
       '/v1/notification-center/read',
-      data: {
-        'category': category,
-        'ids': ids,
-      },
+      data: {'category': category, 'ids': ids},
+    );
+  }
+
+  Future<void> markFollowedEventRead({required String itemId}) async {
+    await _dio.post<void>(
+      '/v1/notification-center/followed-events/read',
+      data: {'itemId': itemId},
+    );
+  }
+
+  Future<void> markFollowedDJRead({required String itemId}) async {
+    await _dio.post<void>(
+      '/v1/notification-center/followed-djs/read',
+      data: {'itemId': itemId},
+    );
+  }
+
+  Future<void> markFollowedBrandRead({required String itemId}) async {
+    await _dio.post<void>(
+      '/v1/notification-center/followed-brands/read',
+      data: {'itemId': itemId},
     );
   }
 
@@ -150,10 +168,7 @@ class NotificationApiService {
   }) async {
     await _dio.post<void>(
       '/v1/notification-center/push-tokens',
-      data: {
-        'token': token,
-        'platform': platform,
-      },
+      data: {'token': token, 'platform': platform},
     );
   }
 }

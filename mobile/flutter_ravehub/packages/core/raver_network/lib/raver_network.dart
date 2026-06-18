@@ -21,6 +21,7 @@ export 'src/client/bff_envelope_interceptor.dart';
 export 'src/client/dio_client_factory.dart';
 export 'src/client/language_interceptor.dart';
 export 'src/client/logging_interceptor.dart';
+export 'src/client/service_error_mapper.dart';
 
 // Upload
 export 'src/upload/multipart_upload_service.dart';

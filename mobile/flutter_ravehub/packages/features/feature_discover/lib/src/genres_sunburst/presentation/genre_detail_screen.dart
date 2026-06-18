@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_models/raver_models.dart';
+import 'package:raver_platform/raver_platform.dart';
 
 import '../data/genre_api.dart';
 import 'genre_theme_palette.dart';
@@ -62,7 +64,8 @@ class GenreDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildBody(BuildContext context, WidgetRef ref, GenreDetailState state) {
+  Widget _buildBody(
+      BuildContext context, WidgetRef ref, GenreDetailState state) {
     if (state.isLoading) {
       return const Center(child: CircularProgressIndicator.adaptive());
     }
@@ -128,7 +131,11 @@ class GenreDetailScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           ...genre.soundCueTracks!.map(
-            (track) => _SoundCueTrackTile(track: track, themeColor: themeColor),
+            (track) => _SoundCueTrackTile(
+              track: track,
+              themeColor: themeColor,
+              onOpenUrl: (url) => _openExternalUrl(context, url),
+            ),
           ),
         ],
         if (genre.children != null && genre.children!.isNotEmpty) ...[
@@ -147,13 +154,28 @@ class GenreDetailScreen extends ConsumerWidget {
                       backgroundColor: LearnGenreThemePalette.colorForGenre(
                         child.name,
                       ).withValues(alpha: 0.15),
-                      onPressed: () {},
+                      onPressed: child.id.isEmpty
+                          ? null
+                          : () => context.push('/genres/${child.id}'),
                     ))
                 .toList(),
           ),
         ],
       ],
     );
+  }
+
+  Future<void> _openExternalUrl(BuildContext context, String url) async {
+    try {
+      await UrlLauncherService.openExternalUrl(url);
+    } catch (e) {
+      if (!context.mounted) return;
+      ToastBanner.show(
+        context,
+        message: e.toString(),
+        type: ToastType.error,
+      );
+    }
   }
 }
 
@@ -246,12 +268,20 @@ class _InfoChip extends StatelessWidget {
 }
 
 class _SoundCueTrackTile extends StatelessWidget {
-  const _SoundCueTrackTile({required this.track, required this.themeColor});
+  const _SoundCueTrackTile({
+    required this.track,
+    required this.themeColor,
+    required this.onOpenUrl,
+  });
   final LearnGenreSoundCueTrack track;
   final Color themeColor;
+  final ValueChanged<String> onOpenUrl;
 
   @override
   Widget build(BuildContext context) {
+    final hasSpotifyUrl = track.spotifyUrl.isNotEmpty;
+    final hasAppleMusicUrl = track.appleMusicUrl.isNotEmpty;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: GlassCard(
@@ -278,6 +308,28 @@ class _SoundCueTrackTile extends StatelessWidget {
                 ],
               ),
             ),
+            if (hasSpotifyUrl || hasAppleMusicUrl) ...[
+              const SizedBox(width: 8),
+              Wrap(
+                spacing: 4,
+                children: [
+                  if (hasSpotifyUrl)
+                    IconButton(
+                      tooltip: 'Spotify',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.play_circle_outline_rounded),
+                      onPressed: () => onOpenUrl(track.spotifyUrl),
+                    ),
+                  if (hasAppleMusicUrl)
+                    IconButton(
+                      tooltip: 'Apple Music',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.open_in_new_rounded),
+                      onPressed: () => onOpenUrl(track.appleMusicUrl),
+                    ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

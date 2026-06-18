@@ -5,6 +5,7 @@ import 'package:raver_design_system/raver_design_system.dart';
 
 import 'package:feature_profile/src/settings/settings_screen.dart';
 import 'package:feature_profile/src/settings/appearance_setting_screen.dart';
+import 'package:feature_profile/src/settings/cache_manage_screen.dart';
 import 'package:feature_profile/src/settings/language_setting_screen.dart';
 
 /// Wraps a widget with MaterialApp.router (GoRouter) + RaverTheme so that
@@ -77,6 +78,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Cache Management'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('About'), 300);
       expect(find.text('About'), findsOneWidget);
     });
   });
@@ -122,6 +124,18 @@ void main() {
       expect(find.text('中文'), findsOneWidget);
       expect(find.text('English'), findsOneWidget);
       expect(find.text('日本語'), findsOneWidget);
+    });
+  });
+
+  group('CacheManageScreen', () {
+    testWidgets('renders live cache status rows', (tester) async {
+      await tester.pumpWidget(_buildRoutedApp(const CacheManageScreen()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cache Status'), findsOneWidget);
+      expect(find.text('Memory image cache'), findsOneWidget);
+      expect(find.text('Disk image cache'), findsOneWidget);
+      expect(find.text('23.5 MB'), findsNothing);
     });
   });
 }

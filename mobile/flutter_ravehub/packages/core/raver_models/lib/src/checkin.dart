@@ -30,19 +30,33 @@ class WebCheckin {
   });
 
   factory WebCheckin.fromJson(Map<String, dynamic> json) => WebCheckin(
-        id: json['id'] as String,
-        userId: json['userId'] as String,
-        eventId: json['eventId'] as String,
-        eventName: json['eventName'] as String,
-        eventCoverUrl: json['eventCoverUrl'] as String,
-        djId: json['djId'] as String,
-        djName: json['djName'] as String,
-        djAvatarUrl: json['djAvatarUrl'] as String,
-        type: json['type'] as String,
-        note: json['note'] as String,
-        rating: json['rating'] as int,
-        attendedAt: json['attendedAt'] as String,
-        createdAt: json['createdAt'] as String,
+        id: _string(json['id']),
+        userId: _string(json['userId'] ?? json['user_id']),
+        eventId: _string(json['eventId'] ?? json['event_id']),
+        eventName: _string(
+          _nested(json['event'], 'name') ??
+              json['eventName'] ??
+              json['event_name'],
+        ),
+        eventCoverUrl: _string(
+          _nestedAny(
+                  json['event'], const ['coverImageUrl', 'cover_image_url']) ??
+              json['eventCoverUrl'] ??
+              json['event_cover_url'],
+        ),
+        djId: _string(json['djId'] ?? json['dj_id']),
+        djName: _string(
+            _nested(json['dj'], 'name') ?? json['djName'] ?? json['dj_name']),
+        djAvatarUrl: _string(
+          _nestedAny(json['dj'], const ['avatarUrl', 'avatar_url']) ??
+              json['djAvatarUrl'] ??
+              json['dj_avatar_url'],
+        ),
+        type: _string(json['type']),
+        note: _string(json['note']),
+        rating: _int(json['rating']),
+        attendedAt: _string(json['attendedAt'] ?? json['attended_at']),
+        createdAt: _string(json['createdAt'] ?? json['created_at']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -112,8 +126,21 @@ class WebCheckin {
   }
 
   @override
-  int get hashCode => Object.hash(id, userId, eventId, eventName,
-      eventCoverUrl, djId, djName, djAvatarUrl, type, note, rating, attendedAt, createdAt);
+  int get hashCode => Object.hash(
+        id,
+        userId,
+        eventId,
+        eventName,
+        eventCoverUrl,
+        djId,
+        djName,
+        djAvatarUrl,
+        type,
+        note,
+        rating,
+        attendedAt,
+        createdAt,
+      );
 
   @override
   String toString() =>
@@ -134,13 +161,12 @@ class MyCheckinsOverviewResponse {
   factory MyCheckinsOverviewResponse.fromJson(Map<String, dynamic> json) =>
       MyCheckinsOverviewResponse(
         stats: MyCheckinsOverviewStats.fromJson(
-            json['stats'] as Map<String, dynamic>),
-        timeline: (json['timeline'] as List<dynamic>? ?? [])
-            .map((e) =>
-                MyCheckinsOverviewTimelineSection.fromJson(e as Map<String, dynamic>))
-            .toList(),
+          json['stats'] as Map<String, dynamic>? ?? const {},
+        ),
+        timeline: _timelineSections(json['timeline']),
         gallerySummary: MyCheckinsOverviewGallerySummary.fromJson(
-            json['gallerySummary'] as Map<String, dynamic>),
+          json['gallerySummary'] as Map<String, dynamic>? ?? const {},
+        ),
       );
 
   Map<String, dynamic> toJson() => {
@@ -190,10 +216,10 @@ class MyCheckinsOverviewStats {
 
   factory MyCheckinsOverviewStats.fromJson(Map<String, dynamic> json) =>
       MyCheckinsOverviewStats(
-        totalCheckins: json['totalCheckins'] as int,
-        uniqueEvents: json['uniqueEvents'] as int,
-        uniqueDJs: json['uniqueDJs'] as int,
-        totalDays: json['totalDays'] as int,
+        totalCheckins: _int(json['totalCheckins'] ?? json['eventCount']),
+        uniqueEvents: _int(json['uniqueEvents'] ?? json['eventCount']),
+        uniqueDJs: _int(json['uniqueDJs'] ?? json['artistCount']),
+        totalDays: _int(json['totalDays']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -248,8 +274,18 @@ class MyCheckinsOverviewGallerySummary {
     Map<String, dynamic> json,
   ) =>
       MyCheckinsOverviewGallerySummary(
-        eventCount: json['eventCount'] as int,
-        artistCount: json['artistCount'] as int,
+        eventCount: _int(
+          json['eventCount'] ??
+              (json['topEvents'] is List<dynamic>
+                  ? (json['topEvents'] as List<dynamic>).length
+                  : null),
+        ),
+        artistCount: _int(
+          json['artistCount'] ??
+              (json['topArtists'] is List<dynamic>
+                  ? (json['topArtists'] as List<dynamic>).length
+                  : null),
+        ),
       );
 
   Map<String, dynamic> toJson() => {
@@ -295,10 +331,13 @@ class MyCheckinsOverviewTimelineSection {
     Map<String, dynamic> json,
   ) =>
       MyCheckinsOverviewTimelineSection(
-        year: json['year'] as int,
+        year: _int(json['year'], fallback: DateTime.now().year),
         items: (json['items'] as List<dynamic>? ?? [])
-            .map((e) =>
-                MyCheckinsOverviewTimelineItem.fromJson(e as Map<String, dynamic>))
+            .map(
+              (e) => MyCheckinsOverviewTimelineItem.fromJson(
+                e as Map<String, dynamic>,
+              ),
+            )
             .toList(),
       );
 
@@ -345,15 +384,17 @@ class MyCheckinsOverviewTimelineItem {
     required this.djCount,
   });
 
-  factory MyCheckinsOverviewTimelineItem.fromJson(
-    Map<String, dynamic> json,
-  ) =>
+  factory MyCheckinsOverviewTimelineItem.fromJson(Map<String, dynamic> json) =>
       MyCheckinsOverviewTimelineItem(
-        eventId: json['eventId'] as String,
-        eventName: json['eventName'] as String,
-        coverImageUrl: json['coverImageUrl'] as String,
-        date: json['date'] as String,
-        djCount: json['djCount'] as int,
+        eventId: _string(json['eventId'] ?? _nested(json['event'], 'id')),
+        eventName: _string(json['eventName'] ?? _nested(json['event'], 'name')),
+        coverImageUrl: _string(
+          json['coverImageUrl'] ?? _nested(json['event'], 'coverImageUrl'),
+        ),
+        date: _string(json['date'] ?? json['attendedAt']),
+        djCount: _int(
+          json['djCount'] ?? _nested(json['summary'], 'artistCount'),
+        ),
       );
 
   Map<String, dynamic> toJson() => {
@@ -397,4 +438,65 @@ class MyCheckinsOverviewTimelineItem {
   @override
   String toString() =>
       'MyCheckinsOverviewTimelineItem(eventId: $eventId, eventName: $eventName, date: $date)';
+}
+
+Object? _nested(Object? json, String key) {
+  if (json is Map<String, dynamic>) return json[key];
+  return null;
+}
+
+Object? _nestedAny(Object? json, List<String> keys) {
+  for (final key in keys) {
+    final value = _nested(json, key);
+    if (value != null) return value;
+  }
+  return null;
+}
+
+List<MyCheckinsOverviewTimelineSection> _timelineSections(Object? value) {
+  if (value is List<dynamic>) {
+    return value
+        .map(
+          (e) => MyCheckinsOverviewTimelineSection.fromJson(
+            e as Map<String, dynamic>,
+          ),
+        )
+        .toList();
+  }
+  if (value is Map<String, dynamic>) {
+    final items = value['items'];
+    if (items is List<dynamic>) {
+      final grouped = <int, List<MyCheckinsOverviewTimelineItem>>{};
+      for (final item in items) {
+        if (item is! Map<String, dynamic>) continue;
+        final parsed = MyCheckinsOverviewTimelineItem.fromJson(item);
+        final year =
+            DateTime.tryParse(parsed.date)?.year ?? DateTime.now().year;
+        grouped.putIfAbsent(year, () => []).add(parsed);
+      }
+      return grouped.entries
+          .map(
+            (entry) => MyCheckinsOverviewTimelineSection(
+              year: entry.key,
+              items: entry.value,
+            ),
+          )
+          .toList();
+    }
+    return [MyCheckinsOverviewTimelineSection.fromJson(value)];
+  }
+  return const [];
+}
+
+String _string(Object? value, {String fallback = ''}) {
+  if (value == null) return fallback;
+  if (value is String) return value;
+  return value.toString();
+}
+
+int _int(Object? value, {int fallback = 0}) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? fallback;
+  return fallback;
 }

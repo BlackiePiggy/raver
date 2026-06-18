@@ -17,6 +17,7 @@ enum GlobalSearchTab {
     'events': events,
     'djs': djs,
     'people_squads': peopleSquads,
+    'peopleSquads': peopleSquads,
     'posts': posts,
     'news': news,
     'sets': sets,
@@ -25,6 +26,7 @@ enum GlobalSearchTab {
     'festivals': festivals,
     'labels': labels,
     'genre_tree': genreTree,
+    'genreTree': genreTree,
   };
 
   static final _toSnakeCase = <GlobalSearchTab, String>{
@@ -103,14 +105,17 @@ class GlobalSearchItem {
 
   factory GlobalSearchItem.fromJson(Map<String, dynamic> json) =>
       GlobalSearchItem(
-        id: json['id'] as String,
-        type: GlobalSearchItemType.fromJson(json['type'] as String),
-        entityId: json['entityId'] as String,
-        title: json['title'] as String,
-        subtitle: json['subtitle'] as String?,
-        imageUrl: json['imageUrl'] as String?,
-        deeplink: json['deeplink'] as String?,
-        relevanceScore: (json['relevanceScore'] as num?)?.toDouble(),
+        id: _string(json['id']),
+        type: GlobalSearchItemType.fromJson(_string(json['type'])),
+        entityId: _string(json['entityId'] ?? json['entity_id']),
+        title: _string(json['title'] ?? json['name']),
+        subtitle: _nullableString(json['subtitle'] ?? json['sub_title']),
+        imageUrl: _nullableString(
+          json['imageUrl'] ?? json['image_url'] ?? json['coverImageUrl'],
+        ),
+        deeplink: _nullableString(json['deeplink'] ?? json['deepLink']),
+        relevanceScore:
+            _double(json['relevanceScore'] ?? json['relevance_score']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -177,16 +182,14 @@ class GlobalSearchResponse {
 
   factory GlobalSearchResponse.fromJson(Map<String, dynamic> json) =>
       GlobalSearchResponse(
-        query: json['query'] as String,
-        tab: GlobalSearchTab.fromJson(json['tab'] as String),
+        query: _string(json['query']),
+        tab: GlobalSearchTab.fromJson(_string(json['tab'])),
         items: (json['items'] as List<dynamic>? ?? [])
-            .map((e) =>
-                GlobalSearchItem.fromJson(e as Map<String, dynamic>))
+            .map((e) => GlobalSearchItem.fromJson(e as Map<String, dynamic>))
             .toList(),
-        countsByTab: json['countsByTab'] != null
-            ? (json['countsByTab'] as Map<String, dynamic>)
-                .map((k, v) => MapEntry(k, v as int))
-            : null,
+        countsByTab: _countsByTabFromJson(
+          json['countsByTab'] ?? json['counts_by_tab'],
+        ),
       );
 
   Map<String, dynamic> toJson() => {
@@ -223,4 +226,30 @@ class GlobalSearchResponse {
   @override
   String toString() =>
       'GlobalSearchResponse(query: $query, tab: $tab, items: ${items.length} items)';
+}
+
+String _string(Object? value) => value?.toString() ?? '';
+
+String? _nullableString(Object? value) {
+  final string = value?.toString().trim();
+  return string == null || string.isEmpty ? null : string;
+}
+
+int _int(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+double? _double(Object? value) {
+  if (value == null) return null;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString());
+}
+
+Map<String, int>? _countsByTabFromJson(Object? value) {
+  if (value is! Map) return null;
+  return {
+    for (final entry in value.entries) entry.key.toString(): _int(entry.value),
+  };
 }

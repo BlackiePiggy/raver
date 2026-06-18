@@ -1,5 +1,114 @@
 import 'package:flutter/foundation.dart' show listEquals;
 
+String? _localizedText(Object? value) {
+  if (value is! Map<String, dynamic>) return null;
+  return value['zh'] as String? ??
+      value['en'] as String? ??
+      value['ja'] as String? ??
+      value['enFull'] as String?;
+}
+
+WebEventManualLocation? _eventLocationFromJson(Map<String, dynamic> json) {
+  final explicit = json['location'];
+  if (explicit is Map<String, dynamic>) {
+    return WebEventManualLocation.fromJson(explicit);
+  }
+
+  final manual = json['manualLocation'];
+  if (manual is! Map<String, dynamic>) return null;
+
+  final point = json['locationPoint'];
+  final pointLocation = point is Map<String, dynamic>
+      ? point['location'] as Map<String, dynamic>?
+      : null;
+
+  return WebEventManualLocation(
+    name: _localizedText(manual['detailAddressI18n']) ??
+        json['venueDisplayAddress'] as String? ??
+        '',
+    address: _localizedText(manual['formattedAddressI18n']) ??
+        json['activityAddress'] as String? ??
+        json['venueDisplayAddress'] as String? ??
+        '',
+    city: json['city'] as String? ?? '',
+    country:
+        json['country'] as String? ?? _localizedText(json['countryI18n']) ?? '',
+    latitude: (json['latitude'] as num?)?.toDouble() ??
+        (pointLocation?['lat'] as num?)?.toDouble(),
+    longitude: (json['longitude'] as num?)?.toDouble() ??
+        (pointLocation?['lng'] as num?)?.toDouble(),
+  );
+}
+
+String _eventImageUrl(Map<String, dynamic> json, {required bool lineup}) {
+  final card = json['cardImageUrl'] as String?;
+  if (!lineup && card != null && card.isNotEmpty) return card;
+
+  final direct = lineup
+      ? json['lineupImageUrl'] as String?
+      : json['coverImageUrl'] as String?;
+  if (direct != null && direct.isNotEmpty) return direct;
+
+  final alternate = lineup
+      ? json['coverImageUrl'] as String?
+      : json['lineupImageUrl'] as String?;
+  if (alternate != null && alternate.isNotEmpty) return alternate;
+
+  final assets = json['imageAssets'];
+  if (assets is List && assets.isNotEmpty) {
+    final first = assets.first;
+    if (first is String && first.isNotEmpty) return first;
+    if (first is Map<String, dynamic>) {
+      final url = first['url'] as String? ??
+          first['imageUrl'] as String? ??
+          first['originalUrl'] as String?;
+      if (url != null && url.isNotEmpty) return url;
+    }
+  }
+
+  final wikiFestival = json['wikiFestival'];
+  if (wikiFestival is Map<String, dynamic>) {
+    final background = wikiFestival['backgroundUrl'] as String?;
+    if (background != null && background.isNotEmpty) return background;
+    final avatar = wikiFestival['avatarUrl'] as String?;
+    if (avatar != null && avatar.isNotEmpty) return avatar;
+  }
+
+  return '';
+}
+
+int _intFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+  }
+  return 0;
+}
+
+String _stringFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is String) return value;
+    if (value is num || value is bool) return value.toString();
+  }
+  return '';
+}
+
+bool? _boolFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is bool) return value;
+    if (value is String) {
+      final normalized = value.toLowerCase();
+      if (normalized == 'true') return true;
+      if (normalized == 'false') return false;
+    }
+  }
+  return null;
+}
+
 class WebEvent {
   final String id;
   final String name;
@@ -21,6 +130,14 @@ class WebEvent {
   final int favoriteCount;
   final int checkinCount;
   final bool? isFavorited;
+
+  /// First ticket URL, kept as a compatibility accessor for editor screens.
+  String? get ticketUrl => ticketTiers == null || ticketTiers!.isEmpty
+      ? null
+      : ticketTiers!.first.url;
+
+  /// Optional venue capacity when provided by future API versions.
+  int? get maxCapacity => null;
 
   const WebEvent({
     required this.id,
@@ -46,18 +163,23 @@ class WebEvent {
   });
 
   factory WebEvent.fromJson(Map<String, dynamic> json) => WebEvent(
-        id: json['id'] as String,
-        name: json['name'] as String,
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
         nameI18n: json['nameI18n'] != null
             ? WebBiText.fromJson(json['nameI18n'] as Map<String, dynamic>)
             : null,
-        slug: json['slug'] as String,
-        description: json['description'] as String,
-        coverImageUrl: json['coverImageUrl'] as String,
-        lineupImageUrl: json['lineupImageUrl'] as String,
-        eventType: json['eventType'] as String,
-        startDate: json['startDate'] as String,
-        endDate: json['endDate'] as String,
+        slug: json['slug'] as String? ?? json['id'] as String? ?? '',
+        description: json['description'] as String? ??
+            _localizedText(json['descriptionI18n']) ??
+            '',
+        coverImageUrl: _eventImageUrl(json, lineup: false),
+        lineupImageUrl: _eventImageUrl(json, lineup: true),
+        eventType:
+            json['eventType'] as String? ?? json['event_type'] as String? ?? '',
+        startDate:
+            json['startDate'] as String? ?? json['start_date'] as String? ?? '',
+        endDate:
+            json['endDate'] as String? ?? json['end_date'] as String? ?? '',
         schedule: json['schedule'] != null
             ? WebEventSchedule.fromJson(
                 json['schedule'] as Map<String, dynamic>)
@@ -66,28 +188,34 @@ class WebEvent {
             ?.map((e) => WebEventWeek.fromJson(e as Map<String, dynamic>))
             .toList(),
         ticketTiers: (json['ticketTiers'] as List<dynamic>?)
-            ?.map((e) =>
-                WebEventTicketTier.fromJson(e as Map<String, dynamic>))
+            ?.map((e) => WebEventTicketTier.fromJson(e as Map<String, dynamic>))
             .toList(),
-        lineupSlots: (json['lineupSlots'] as List<dynamic>?)
-            ?.map((e) =>
-                WebEventLineupSlot.fromJson(e as Map<String, dynamic>))
+        lineupSlots: (json['lineupSlots'] as List<dynamic>? ??
+                json['lineup_slots'] as List<dynamic>?)
+            ?.map((e) => WebEventLineupSlot.fromJson(e as Map<String, dynamic>))
             .toList(),
-        lineupArtists: (json['lineupArtists'] as List<dynamic>?)
-            ?.map((e) =>
-                WebEventLineupArtist.fromJson(e as Map<String, dynamic>))
+        lineupArtists: (json['lineupArtists'] as List<dynamic>? ??
+                json['lineup_artists'] as List<dynamic>?)
+            ?.map(
+                (e) => WebEventLineupArtist.fromJson(e as Map<String, dynamic>))
             .toList(),
-        location: json['location'] != null
-            ? WebEventManualLocation.fromJson(
-                json['location'] as Map<String, dynamic>)
-            : null,
+        location: _eventLocationFromJson(json),
         contributors: (json['contributors'] as List<dynamic>?)
             ?.map((e) =>
                 WebContributorProfile.fromJson(e as Map<String, dynamic>))
             .toList(),
-        favoriteCount: json['favoriteCount'] as int,
-        checkinCount: json['checkinCount'] as int,
-        isFavorited: json['isFavorited'] as bool?,
+        favoriteCount: _intFromJson(
+          json,
+          const ['favoriteCount', 'favorite_count'],
+        ),
+        checkinCount: _intFromJson(
+          json,
+          const ['checkinCount', 'checkin_count'],
+        ),
+        isFavorited: _boolFromJson(
+          json,
+          const ['isFavorited', 'is_favorited', 'favorited'],
+        ),
       );
 
   Map<String, dynamic> toJson() => {
@@ -230,9 +358,17 @@ class WebEventSchedule {
 
   factory WebEventSchedule.fromJson(Map<String, dynamic> json) =>
       WebEventSchedule(
-        mode: json['mode'] as String,
-        timezoneId: json['timezoneId'] as String,
-        timezoneName: json['timezoneName'] as String,
+        mode: json['mode'] as String? ?? '',
+        timezoneId: json['timezoneId'] as String? ??
+            json['timezone_id'] as String? ??
+            json['timeZone'] as String? ??
+            json['time_zone'] as String? ??
+            '',
+        timezoneName: json['timezoneName'] as String? ??
+            json['timezone_name'] as String? ??
+            json['timeZone'] as String? ??
+            json['time_zone'] as String? ??
+            '',
       );
 
   Map<String, dynamic> toJson() => {
@@ -281,9 +417,9 @@ class WebEventWeek {
   });
 
   factory WebEventWeek.fromJson(Map<String, dynamic> json) => WebEventWeek(
-        startDate: json['startDate'] as String,
-        endDate: json['endDate'] as String,
-        days: (json['days'] as List<dynamic>)
+        startDate: json['startDate'] as String? ?? '',
+        endDate: json['endDate'] as String? ?? '',
+        days: (json['days'] as List<dynamic>? ?? [])
             .map((e) => WebEventDay.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
@@ -334,22 +470,14 @@ class WebEventDay {
   });
 
   factory WebEventDay.fromJson(Map<String, dynamic> json) => WebEventDay(
-        id: json['id'] as String,
-        date: json['date'] as String,
-        label: json['label'] as String,
+        id: json['id'] as String? ?? json['eventDayId'] as String? ?? '',
+        date: json['date'] as String? ?? '',
+        label: json['label'] as String? ?? json['weekday'] as String? ?? '',
       );
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'date': date,
-        'label': label,
-      };
+  Map<String, dynamic> toJson() => {'id': id, 'date': date, 'label': label};
 
-  WebEventDay copyWith({
-    String? id,
-    String? date,
-    String? label,
-  }) =>
+  WebEventDay copyWith({String? id, String? date, String? label}) =>
       WebEventDay(
         id: id ?? this.id,
         date: date ?? this.date,
@@ -389,11 +517,11 @@ class WebEventTicketTier {
 
   factory WebEventTicketTier.fromJson(Map<String, dynamic> json) =>
       WebEventTicketTier(
-        name: json['name'] as String,
-        price: json['price'] as String,
-        currency: json['currency'] as String,
-        url: json['url'] as String,
-        description: json['description'] as String,
+        name: json['name'] as String? ?? '',
+        price: json['price']?.toString() ?? '',
+        currency: json['currency'] as String? ?? '',
+        url: json['url'] as String? ?? '',
+        description: json['description'] as String? ?? '',
       );
 
   Map<String, dynamic> toJson() => {
@@ -457,12 +585,24 @@ class WebEventLineupSlot {
 
   factory WebEventLineupSlot.fromJson(Map<String, dynamic> json) =>
       WebEventLineupSlot(
-        id: json['id'] as String,
-        stageName: json['stageName'] as String,
-        startTime: json['startTime'] as String,
-        endTime: json['endTime'] as String,
-        artistName: json['artistName'] as String,
-        djId: json['djId'] as String,
+        id: _stringFromJson(json, const ['id', 'slotId', 'slot_id']),
+        stageName: _stringFromJson(
+          json,
+          const ['stageName', 'stage_name', 'stage'],
+        ),
+        startTime: _stringFromJson(
+          json,
+          const ['startTime', 'start_time', 'startsAt', 'starts_at'],
+        ),
+        endTime: _stringFromJson(
+          json,
+          const ['endTime', 'end_time', 'endsAt', 'ends_at'],
+        ),
+        artistName: _stringFromJson(
+          json,
+          const ['artistName', 'artist_name', 'name'],
+        ),
+        djId: _stringFromJson(json, const ['djId', 'dj_id']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -531,14 +671,23 @@ class WebEventLineupArtist {
 
   factory WebEventLineupArtist.fromJson(Map<String, dynamic> json) =>
       WebEventLineupArtist(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        djId: json['djId'] as String,
-        avatarUrl: json['avatarUrl'] as String,
-        isB2B: json['isB2B'] as bool,
-        members: (json['members'] as List<dynamic>?)
-            ?.map((e) => WebEventLineupArtistMember.fromJson(
-                e as Map<String, dynamic>))
+        id: _stringFromJson(json, const ['id', 'artistId', 'artist_id']),
+        name:
+            _stringFromJson(json, const ['name', 'artistName', 'artist_name']),
+        djId: _stringFromJson(json, const ['djId', 'dj_id']),
+        avatarUrl: _stringFromJson(
+          json,
+          const ['avatarUrl', 'avatar_url', 'avatar'],
+        ),
+        isB2B: _boolFromJson(json, const ['isB2B', 'is_b2b', 'b2b']) ?? false,
+        members: (json['members'] as List<dynamic>? ??
+                json['b2bMembers'] as List<dynamic>? ??
+                json['b2b_members'] as List<dynamic>?)
+            ?.map(
+              (e) => WebEventLineupArtistMember.fromJson(
+                e as Map<String, dynamic>,
+              ),
+            )
             .toList(),
       );
 
@@ -593,26 +742,18 @@ class WebEventLineupArtistMember {
   final String name;
   final String djId;
 
-  const WebEventLineupArtistMember({
-    required this.name,
-    required this.djId,
-  });
+  const WebEventLineupArtistMember({required this.name, required this.djId});
 
   factory WebEventLineupArtistMember.fromJson(Map<String, dynamic> json) =>
       WebEventLineupArtistMember(
-        name: json['name'] as String,
-        djId: json['djId'] as String,
+        name:
+            _stringFromJson(json, const ['name', 'artistName', 'artist_name']),
+        djId: _stringFromJson(json, const ['djId', 'dj_id']),
       );
 
-  Map<String, dynamic> toJson() => {
-        'name': name,
-        'djId': djId,
-      };
+  Map<String, dynamic> toJson() => {'name': name, 'djId': djId};
 
-  WebEventLineupArtistMember copyWith({
-    String? name,
-    String? djId,
-  }) =>
+  WebEventLineupArtistMember copyWith({String? name, String? djId}) =>
       WebEventLineupArtistMember(
         name: name ?? this.name,
         djId: djId ?? this.djId,
@@ -630,8 +771,7 @@ class WebEventLineupArtistMember {
   int get hashCode => Object.hash(name, djId);
 
   @override
-  String toString() =>
-      'WebEventLineupArtistMember(name: $name, djId: $djId)';
+  String toString() => 'WebEventLineupArtistMember(name: $name, djId: $djId)';
 }
 
 class WebEventManualLocation {
@@ -653,10 +793,10 @@ class WebEventManualLocation {
 
   factory WebEventManualLocation.fromJson(Map<String, dynamic> json) =>
       WebEventManualLocation(
-        name: json['name'] as String,
-        address: json['address'] as String,
-        city: json['city'] as String,
-        country: json['country'] as String,
+        name: json['name'] as String? ?? '',
+        address: json['address'] as String? ?? '',
+        city: json['city'] as String? ?? '',
+        country: json['country'] as String? ?? '',
         latitude: (json['latitude'] as num?)?.toDouble(),
         longitude: (json['longitude'] as num?)?.toDouble(),
       );
@@ -714,12 +854,7 @@ class WebBiText {
   final String? ja;
   final String? enFull;
 
-  const WebBiText({
-    this.en,
-    this.zh,
-    this.ja,
-    this.enFull,
-  });
+  const WebBiText({this.en, this.zh, this.ja, this.enFull});
 
   factory WebBiText.fromJson(Map<String, dynamic> json) => WebBiText(
         en: json['en'] as String?,
@@ -735,12 +870,7 @@ class WebBiText {
         if (enFull != null) 'enFull': enFull,
       };
 
-  WebBiText copyWith({
-    String? en,
-    String? zh,
-    String? ja,
-    String? enFull,
-  }) =>
+  WebBiText copyWith({String? en, String? zh, String? ja, String? enFull}) =>
       WebBiText(
         en: en ?? this.en,
         zh: zh ?? this.zh,
@@ -762,8 +892,7 @@ class WebBiText {
   int get hashCode => Object.hash(en, zh, ja, enFull);
 
   @override
-  String toString() =>
-      'WebBiText(en: $en, zh: $zh, ja: $ja, enFull: $enFull)';
+  String toString() => 'WebBiText(en: $en, zh: $zh, ja: $ja, enFull: $enFull)';
 }
 
 class WebContributorProfile {
@@ -781,10 +910,11 @@ class WebContributorProfile {
 
   factory WebContributorProfile.fromJson(Map<String, dynamic> json) =>
       WebContributorProfile(
-        userId: json['userId'] as String,
-        displayName: json['displayName'] as String,
-        avatarUrl: json['avatarUrl'] as String,
-        contributionCount: json['contributionCount'] as int,
+        userId: json['userId'] as String? ?? json['id'] as String? ?? '',
+        displayName: json['displayName'] as String? ?? '',
+        avatarUrl:
+            json['avatarUrl'] as String? ?? json['avatarURL'] as String? ?? '',
+        contributionCount: json['contributionCount'] as int? ?? 0,
       );
 
   Map<String, dynamic> toJson() => {
@@ -829,25 +959,20 @@ class WebContributorProfile {
 class EventFavoriteStatus {
   final bool isFavorited;
 
-  const EventFavoriteStatus({
-    required this.isFavorited,
-  });
+  const EventFavoriteStatus({required this.isFavorited});
 
   factory EventFavoriteStatus.fromJson(Map<String, dynamic> json) =>
       EventFavoriteStatus(
-        isFavorited: json['isFavorited'] as bool,
+        isFavorited: json['isFavorited'] as bool? ??
+            json['is_favorited'] as bool? ??
+            json['favorited'] as bool? ??
+            false,
       );
 
-  Map<String, dynamic> toJson() => {
-        'isFavorited': isFavorited,
-      };
+  Map<String, dynamic> toJson() => {'isFavorited': isFavorited};
 
-  EventFavoriteStatus copyWith({
-    bool? isFavorited,
-  }) =>
-      EventFavoriteStatus(
-        isFavorited: isFavorited ?? this.isFavorited,
-      );
+  EventFavoriteStatus copyWith({bool? isFavorited}) =>
+      EventFavoriteStatus(isFavorited: isFavorited ?? this.isFavorited);
 
   @override
   bool operator ==(Object other) {

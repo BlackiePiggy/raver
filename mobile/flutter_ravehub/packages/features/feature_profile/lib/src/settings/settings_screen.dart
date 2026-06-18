@@ -2,10 +2,64 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
+import 'package:raver_platform/raver_platform.dart';
+
+import '../_shared/profile_service_locator.dart';
 
 /// Application settings screen.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
+  static const _termsUrl = 'https://ravehub.top/legal/terms';
+  static const _privacyUrl = 'https://ravehub.top/legal/privacy';
+  static const _dataRequestsUrl = 'https://ravehub.top/legal/data-requests';
+
+  Future<void> _openExternalLink(BuildContext context, String url) async {
+    try {
+      await UrlLauncherService.openExternalUrl(url);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            lt(
+              '无法打开链接，请稍后重试',
+              'Unable to open the link. Please try again.',
+              'リンクを開けませんでした。もう一度お試しください。',
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    try {
+      final refreshToken =
+          await ProfileServiceLocator.tokenStore?.readRefreshToken();
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await ProfileServiceLocator.profileRepository.logout(
+          refreshToken: refreshToken,
+        );
+      }
+      await ProfileServiceLocator.clearAccountSession();
+      if (!context.mounted) return;
+      context.go('/login');
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            lt(
+              '退出登录失败，请稍后重试',
+              'Logout failed. Please try again.',
+              'ログアウトに失敗しました。もう一度お試しください。',
+            ),
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,6 +126,24 @@ class SettingsScreen extends StatelessWidget {
           // Section: About
           _SectionHeader(title: lt('其他', 'Other', 'その他')),
           _SettingsItem(
+            icon: Icons.description_outlined,
+            title: lt('用户协议', 'Terms of Service', '利用規約'),
+            onTap: () => _openExternalLink(context, _termsUrl),
+            theme: theme,
+          ),
+          _SettingsItem(
+            icon: Icons.privacy_tip_outlined,
+            title: lt('隐私政策', 'Privacy Policy', 'プライバシーポリシー'),
+            onTap: () => _openExternalLink(context, _privacyUrl),
+            theme: theme,
+          ),
+          _SettingsItem(
+            icon: Icons.assignment_outlined,
+            title: lt('数据请求', 'Data Requests', 'データリクエスト'),
+            onTap: () => _openExternalLink(context, _dataRequestsUrl),
+            theme: theme,
+          ),
+          _SettingsItem(
             icon: Icons.info_outline,
             title: lt('关于', 'About', 'アプリについて'),
             onTap: () => context.push('/profile/settings/about'),
@@ -88,7 +160,8 @@ class SettingsScreen extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                  border: Border.all(
+                      color: Colors.redAccent.withValues(alpha: 0.3)),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
@@ -145,8 +218,7 @@ class SettingsScreen extends StatelessWidget {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              // Clear tokens and navigate to login
-              context.go('/login');
+              _logout(context);
             },
             child: Text(
               lt('退出', 'Log Out', 'ログアウト'),

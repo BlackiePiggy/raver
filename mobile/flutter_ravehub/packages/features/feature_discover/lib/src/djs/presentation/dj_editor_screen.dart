@@ -99,7 +99,7 @@ class _DjEditorScreenState extends State<DjEditorScreen> {
   }
 
   Future<void> _pickAvatar() async {
-    final path = await _mediaPicker.pickImage();
+    final path = await _mediaPicker.pickImageInstance();
     if (path != null) {
       _vm.uploadAvatar(path);
     }

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:raver_models/raver_models.dart';
+import 'package:raver_network/raver_network.dart';
 
 import 'event_discussion_models.dart';
 
@@ -30,13 +31,21 @@ class LineupImportMatch {
   /// Avatar URL for the matched DJ, if available.
   final String? avatarUrl;
 
-  factory LineupImportMatch.fromJson(Map<String, dynamic> json) =>
-      LineupImportMatch(
-        djName: json['djName'] as String,
-        djId: json['djId'] as String?,
-        confidence: (json['confidence'] as num).toDouble(),
-        avatarUrl: json['avatarUrl'] as String?,
-      );
+  factory LineupImportMatch.fromJson(Map<String, dynamic> json) {
+    final name = _firstString(
+      json,
+      const ['djName', 'dj_name', 'musician', 'artist', 'name', 'dj'],
+    );
+    return LineupImportMatch(
+      djName: name ?? '',
+      djId: _firstString(json, const ['djId', 'djID', 'dj_id']),
+      confidence: _numberAsDouble(json['confidence']) ?? 1,
+      avatarUrl: _firstString(
+        json,
+        const ['avatarUrl', 'avatarURL', 'avatar_url', 'imageUrl', 'imageURL'],
+      ),
+    );
+  }
 }
 
 class EventsApiService {
@@ -61,15 +70,19 @@ class EventsApiService {
       if (wikiFestivalId != null) 'wikiFestivalId': wikiFestivalId,
     };
 
-    final response = await _dio.get<Map<String, dynamic>>(
+    final response = await _dio.get<dynamic>(
       '/v1/events',
       queryParameters: queryParameters,
     );
-
-    return BFFListPage.fromJson(
-      response.data!,
-      (json) => WebEvent.fromJson(json! as Map<String, dynamic>),
+    final pageData = LiveApiPayload.listPage<WebEvent>(
+      response.data,
+      WebEvent.fromJson,
     );
+    final pagination = response.extra[kPaginationExtraKey];
+    if (pagination is Map<String, dynamic>) {
+      return pageData.copyWith(pagination: BFFPagination.fromJson(pagination));
+    }
+    return pageData;
   }
 
   Future<List<WebEvent>> fetchRecommendedEvents({
@@ -81,91 +94,203 @@ class EventsApiService {
       if (statuses != null) 'statuses': statuses.join(','),
     };
 
-    final response = await _dio.get<Map<String, dynamic>>(
+    final response = await _dio.get<dynamic>(
       '/v1/events/recommendations',
       queryParameters: queryParameters,
     );
-
-    final items = response.data!['items'] as List<dynamic>? ?? [];
-    return items
-        .map((e) => WebEvent.fromJson(e as Map<String, dynamic>))
+    return LiveApiPayload.items(response.data)
+        .whereType<Map<String, dynamic>>()
+        .map(WebEvent.fromJson)
         .toList();
   }
 
   Future<WebEvent> fetchEvent({required String id}) async {
-    final response = await _dio.get<Map<String, dynamic>>(
-      '/v1/events/$id',
-    );
-    return WebEvent.fromJson(response.data!);
+    final response = await _dio.get<dynamic>('/v1/events/$id');
+    return WebEvent.fromJson(LiveApiPayload.object(response.data));
   }
 
   Future<WebEvent> fetchEventSummary({required String id}) async {
-    final response = await _dio.get<Map<String, dynamic>>(
+    final response = await _dio.get<dynamic>(
       '/v1/events/$id/summary',
     );
-    return WebEvent.fromJson(response.data!);
+    return WebEvent.fromJson(LiveApiPayload.object(response.data));
   }
 
   Future<List<WebEventLineupArtist>> fetchEventLineup({
     required String eventId,
   }) async {
-    final response = await _dio.get<Map<String, dynamic>>(
+    final response = await _dio.get<dynamic>(
       '/v1/events/$eventId/lineup',
     );
-    final items = response.data!['items'] as List<dynamic>? ?? [];
-    return items
-        .map((e) => WebEventLineupArtist.fromJson(e as Map<String, dynamic>))
+    return LiveApiPayload.items(response.data)
+        .whereType<Map<String, dynamic>>()
+        .map(WebEventLineupArtist.fromJson)
         .toList();
   }
 
   Future<List<WebEventLineupSlot>> fetchEventTimetable({
     required String eventId,
   }) async {
-    final response = await _dio.get<Map<String, dynamic>>(
+    final response = await _dio.get<dynamic>(
       '/v1/events/$eventId/timetable',
     );
-    final items = response.data!['items'] as List<dynamic>? ?? [];
-    return items
-        .map((e) => WebEventLineupSlot.fromJson(e as Map<String, dynamic>))
+    return LiveApiPayload.items(response.data)
+        .whereType<Map<String, dynamic>>()
+        .map(WebEventLineupSlot.fromJson)
         .toList();
+  }
+
+  Future<FeedPage> fetchEventPosts({
+    required String eventId,
+    int limit = 20,
+    String mode = 'latest',
+    String? cursor,
+  }) async {
+    final response = await _dio.get<dynamic>(
+      '/v1/feed',
+      queryParameters: {
+        'limit': limit,
+        if (mode.trim().isNotEmpty) 'mode': mode.trim(),
+        if (eventId.trim().isNotEmpty) 'eventId': eventId.trim(),
+        if (cursor != null && cursor.trim().isNotEmpty) 'cursor': cursor.trim(),
+      },
+    );
+    return FeedPage(
+      posts: LiveApiPayload.items(
+        response.data,
+        itemKeys: const ['posts', 'items', 'list', 'data'],
+      ).whereType<Map<String, dynamic>>().map(Post.fromJson).toList(),
+      nextCursor: LiveApiPayload.cursor(response.data),
+    );
+  }
+
+  Future<List<WebDJSet>> fetchEventSets({
+    required String eventId,
+    String eventName = '',
+    int limit = 200,
+  }) async {
+    final trimmedEventId = eventId.trim();
+    final trimmedEventName = eventName.trim();
+    final response = await _dio.get<dynamic>(
+      '/v1/dj-sets',
+      queryParameters: {
+        'page': 1,
+        'limit': limit.clamp(1, 200),
+        'sortBy': 'latest',
+        if (trimmedEventId.isNotEmpty) 'eventId': trimmedEventId,
+        if (trimmedEventName.isNotEmpty) 'eventName': trimmedEventName,
+      },
+    );
+    return LiveApiPayload.items(response.data)
+        .whereType<Map<String, dynamic>>()
+        .map(WebDJSet.fromJson)
+        .toList();
+  }
+
+  Future<List<WebRatingEvent>> fetchEventRatingEvents({
+    required String eventId,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final response = await _dio.get<dynamic>(
+      '/v1/events/$eventId/rating-events',
+      queryParameters: {
+        'page': page.clamp(1, 1 << 31),
+        'limit': limit.clamp(1, 100),
+      },
+    );
+    return LiveApiPayload.items(response.data)
+        .whereType<Map<String, dynamic>>()
+        .map(WebRatingEvent.fromJson)
+        .toList();
+  }
+
+  Future<NewsPage> fetchEventNews({
+    required String eventId,
+    int limit = 20,
+    String? cursor,
+  }) async {
+    final response = await _dio.get<dynamic>(
+      '/v1/news/bound',
+      queryParameters: {
+        'limit': limit.clamp(1, 100),
+        if (eventId.trim().isNotEmpty) 'eventId': eventId.trim(),
+        if (cursor != null && cursor.trim().isNotEmpty) 'cursor': cursor.trim(),
+      },
+    );
+    return NewsPage(
+      articles: LiveApiPayload.items(
+        response.data,
+        itemKeys: const ['articles', 'items', 'list', 'data'],
+      ).whereType<Map<String, dynamic>>().map(NewsArticle.fromJson).toList(),
+      nextCursor: LiveApiPayload.cursor(response.data),
+    );
   }
 
   Future<EventFavoriteStatus> fetchFavoriteStatus({
     required String eventId,
   }) async {
-    final response = await _dio.get<Map<String, dynamic>>(
+    final response = await _dio.get<dynamic>(
       '/v1/events/$eventId/favorite',
     );
-    return EventFavoriteStatus.fromJson(response.data!);
+    return EventFavoriteStatus.fromJson(LiveApiPayload.object(response.data));
   }
 
-  Future<EventFavoriteStatus> favoriteEvent({
-    required String eventId,
-  }) async {
-    final response = await _dio.post<Map<String, dynamic>>(
+  Future<EventFavoriteStatus> favoriteEvent({required String eventId}) async {
+    final response = await _dio.post<dynamic>(
       '/v1/events/$eventId/favorite',
     );
-    return EventFavoriteStatus.fromJson(response.data!);
+    return EventFavoriteStatus.fromJson(LiveApiPayload.object(response.data));
   }
 
   Future<void> unfavoriteEvent({required String eventId}) async {
     await _dio.delete<void>('/v1/events/$eventId/favorite');
   }
 
+  Future<ShareLinkPayload> resolveShareLink({
+    required WebEvent event,
+    String channel = 'system_share',
+  }) async {
+    final canonicalUrl = 'https://ravehub.top/events/${event.id}';
+    final response = await _dio.post<dynamic>(
+      '/v1/share-links/resolve',
+      data: {
+        'targetType': 'event',
+        'targetId': event.id,
+        'channel': channel,
+        'preferPermanent': true,
+        'targetSeed': {
+          'title': event.name,
+          if (event.description.isNotEmpty) 'subtitle': event.description,
+          if (event.coverImageUrl.isNotEmpty) 'imageUrl': event.coverImageUrl,
+          'canonicalUrl': canonicalUrl,
+          'deepLink': 'raver://events/${event.id}',
+          'fallbackUrl': canonicalUrl,
+          'previewType': 'event_card',
+          'visibility': 'public',
+        },
+      },
+    );
+    return ShareLinkPayload.fromJson(LiveApiPayload.object(response.data));
+  }
+
   Future<GlobalSearchResponse> searchGlobal({
     required String query,
     required String tab,
     required int limit,
+    String locale = 'en',
   }) async {
-    final response = await _dio.get<Map<String, dynamic>>(
-      '/v1/search/global',
+    final keyword = query.trim();
+    final response = await _dio.get<dynamic>(
+      '/v1/search',
       queryParameters: {
-        'query': query,
+        if (keyword.isNotEmpty) 'q': keyword,
         'tab': tab,
-        'limit': limit,
+        'limit': limit.clamp(1, 80),
+        'locale': locale,
       },
     );
-    return GlobalSearchResponse.fromJson(response.data!);
+    return GlobalSearchResponse.fromJson(LiveApiPayload.object(response.data));
   }
 
   // ---------------------------------------------------------------------------
@@ -176,48 +301,87 @@ class EventsApiService {
     required String eventId,
     String? cursor,
   }) async {
-    final response = await _dio.get<Map<String, dynamic>>(
+    final response = await _dio.get<dynamic>(
       '/v1/events/$eventId/discussion',
-      queryParameters: {
-        if (cursor != null) 'cursor': cursor,
-      },
+      queryParameters: {if (cursor != null) 'cursor': cursor},
     );
-    return EventDiscussionPage.fromJson(response.data!);
+    return EventDiscussionPage.fromJson(LiveApiPayload.object(response.data));
   }
 
   Future<EventDiscussionComment> postComment({
     required String eventId,
     required String content,
   }) async {
-    final response = await _dio.post<Map<String, dynamic>>(
+    final response = await _dio.post<dynamic>(
       '/v1/events/$eventId/discussion',
       data: {'content': content},
     );
-    return EventDiscussionComment.fromJson(response.data!);
+    return EventDiscussionComment.fromJson(
+      LiveApiPayload.object(response.data),
+    );
   }
 
   // ---------------------------------------------------------------------------
   // Check-in
   // ---------------------------------------------------------------------------
 
-  Future<EventCheckinResult> checkin({
-    required String eventId,
-  }) async {
-    final response = await _dio.post<Map<String, dynamic>>(
+  Future<EventCheckinResult> checkin({required String eventId}) async {
+    final response = await _dio.post<dynamic>(
       '/v1/events/$eventId/checkin',
     );
-    return EventCheckinResult.fromJson(response.data!);
+    return EventCheckinResult.fromJson(LiveApiPayload.object(response.data));
   }
 
   Future<EventCheckinList> fetchCheckins({
     required String eventId,
     int limit = 10,
   }) async {
-    final response = await _dio.get<Map<String, dynamic>>(
+    final response = await _dio.get<dynamic>(
       '/v1/events/$eventId/checkins',
       queryParameters: {'limit': limit},
     );
-    return EventCheckinList.fromJson(response.data!);
+    return EventCheckinList.fromJson(LiveApiPayload.object(response.data));
+  }
+
+  Future<BFFListPage<WebCheckin>> fetchEventRelatedCheckins({
+    required String eventId,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final response = await _dio.get<dynamic>(
+      '/v1/checkins',
+      queryParameters: {
+        'page': page.clamp(1, 1 << 31),
+        'limit': limit.clamp(1, 100),
+        if (eventId.trim().isNotEmpty) 'eventId': eventId.trim(),
+      },
+    );
+    final pageData = LiveApiPayload.listPage<WebCheckin>(
+      response.data,
+      WebCheckin.fromJson,
+    );
+    final pagination = response.extra[kPaginationExtraKey];
+    if (pagination is Map<String, dynamic>) {
+      return pageData.copyWith(pagination: BFFPagination.fromJson(pagination));
+    }
+    return pageData;
+  }
+
+  Future<void> reportEvent({
+    required String eventId,
+    required String reason,
+    String? detail,
+  }) async {
+    await _dio.post<void>(
+      '/v1/reports',
+      data: {
+        'targetType': 'event',
+        'targetId': eventId,
+        'reason': reason,
+        if (detail != null && detail.trim().isNotEmpty) 'detail': detail.trim(),
+        'source': 'flutter_event_detail',
+      },
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -225,34 +389,49 @@ class EventsApiService {
   // ---------------------------------------------------------------------------
 
   Future<WebEvent> createEvent(Map<String, dynamic> payload) async {
-    final response = await _dio.post<Map<String, dynamic>>(
+    final response = await _dio.post<dynamic>(
       '/v1/events',
       data: payload,
     );
-    return WebEvent.fromJson(response.data!);
+    return WebEvent.fromJson(LiveApiPayload.object(response.data));
   }
 
   Future<WebEvent> updateEvent(String id, Map<String, dynamic> payload) async {
-    final response = await _dio.put<Map<String, dynamic>>(
+    final response = await _dio.put<dynamic>(
       '/v1/events/$id',
       data: payload,
     );
-    return WebEvent.fromJson(response.data!);
+    return WebEvent.fromJson(LiveApiPayload.object(response.data));
   }
 
   Future<void> deleteEvent(String id) async {
     await _dio.delete<void>('/v1/events/$id');
   }
 
-  Future<String> uploadEventPoster(String localPath) async {
+  Future<String> uploadEventPoster(
+    String localPath, {
+    String? eventId,
+    String? draftId,
+    String? usage,
+    ProgressCallback? onSendProgress,
+    CancelToken? cancelToken,
+  }) async {
     final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(localPath),
+      'image': await MultipartFile.fromFile(localPath),
+      if (eventId != null && eventId.isNotEmpty) 'eventId': eventId,
+      if (draftId != null && draftId.isNotEmpty) 'draftId': draftId,
+      if (usage != null && usage.isNotEmpty) 'usage': usage,
     });
-    final response = await _dio.post<Map<String, dynamic>>(
-      '/v1/upload/events/poster',
+    final response = await _dio.post<dynamic>(
+      '/v1/events/upload-image',
       data: formData,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
     );
-    return response.data!['url'] as String;
+    return _urlFromUploadPayload(
+      response.data,
+      fallbackError: 'Event image upload response did not include a URL.',
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -260,23 +439,60 @@ class EventsApiService {
   // ---------------------------------------------------------------------------
 
   /// Upload a lineup poster image for AI OCR DJ matching.
-  ///
-  /// Sends the image to `POST /v1/events/{eventId}/lineup/import-image`
-  /// and returns a list of matched DJs with confidence scores.
   Future<List<LineupImportMatch>> importLineupFromImage({
-    required String eventId,
     required File imageFile,
+    DateTime? startDate,
+    DateTime? endDate,
   }) async {
     final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(imageFile.path),
+      'image': await MultipartFile.fromFile(imageFile.path),
+      if (startDate != null) 'startDate': startDate.toIso8601String(),
+      if (endDate != null) 'endDate': endDate.toIso8601String(),
     });
-    final response = await _dio.post<Map<String, dynamic>>(
-      '/v1/events/$eventId/lineup/import-image',
+    final response = await _dio.post<dynamic>(
+      '/v1/events/lineup/import-image',
       data: formData,
+      options: Options(contentType: 'multipart/form-data'),
     );
-    final items = response.data!['matches'] as List<dynamic>? ?? [];
-    return items
-        .map((e) => LineupImportMatch.fromJson(e as Map<String, dynamic>))
+    return LiveApiPayload.items(
+      response.data,
+      itemKeys: const [
+        'lineupInfo',
+        'lineup_info',
+        'matches',
+        'items',
+        'list',
+        'data',
+      ],
+    )
+        .whereType<Map<String, dynamic>>()
+        .map(LineupImportMatch.fromJson)
+        .where((match) => match.djName.trim().isNotEmpty)
         .toList();
   }
+}
+
+String? _firstString(Map<String, dynamic> json, Iterable<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+  }
+  return null;
+}
+
+double? _numberAsDouble(Object? value) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value);
+  return null;
+}
+
+String _urlFromUploadPayload(dynamic payload, {required String fallbackError}) {
+  final object = LiveApiPayload.object(payload);
+  final url = object['url'] ??
+      object['imageUrl'] ??
+      object['imageURL'] ??
+      object['posterUrl'] ??
+      object['posterURL'];
+  if (url is String && url.isNotEmpty) return url;
+  throw StateError(fallbackError);
 }

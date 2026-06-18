@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:raver_design_system/raver_design_system.dart';
-import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_models/raver_models.dart';
 
 /// Displays the profile header: avatar, display name, EDMTI tag, and bio.
@@ -24,8 +23,7 @@ class ProfileHeader extends StatelessWidget {
         GestureDetector(
           onTap: onAvatarTap,
           child: ClipOval(
-            child: profile.avatarUrl != null &&
-                    profile.avatarUrl!.isNotEmpty
+            child: profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty
                 ? RemoteCoverImage(
                     url: profile.avatarUrl!,
                     width: 84,

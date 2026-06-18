@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:raver_auth/raver_auth.dart';
 import 'package:raver_core/raver_core.dart';
 
 import '../profile_me/data/profile_api.dart';
@@ -10,10 +11,14 @@ import '../personality/data/personality_api.dart';
 import '../follow_list/data/follow_api.dart';
 import '../virtual_assets/data/virtual_asset_api.dart';
 
+typedef AccountSessionClearedCallback = Future<void> Function();
+
 class ProfileServiceLocator {
   ProfileServiceLocator._();
 
   static Dio? _dio;
+  static SessionTokenStore? _tokenStore;
+  static AccountSessionClearedCallback? _accountSessionClearedCallback;
 
   static Dio get dio {
     _dio ??= Dio(
@@ -27,8 +32,28 @@ class ProfileServiceLocator {
     return _dio!;
   }
 
-  static void configureDio(Dio dio) {
+  static void configureDio(
+    Dio dio, {
+    SessionTokenStore? tokenStore,
+    AccountSessionClearedCallback? onAccountSessionCleared,
+  }) {
     _dio = dio;
+    _tokenStore = tokenStore;
+    _accountSessionClearedCallback = onAccountSessionCleared;
+    _profileApi = null;
+    _profileRepository = null;
+    _checkinApi = null;
+    _publishesApi = null;
+    _quizApi = null;
+    _personalityApi = null;
+    _followApi = null;
+    _virtualAssetApi = null;
+  }
+
+  static SessionTokenStore? get tokenStore => _tokenStore;
+
+  static Future<void> clearAccountSession() async {
+    await _accountSessionClearedCallback?.call();
   }
 
   // Profile
@@ -45,8 +70,7 @@ class ProfileServiceLocator {
 
   // Publishes
   static PublishesApi? _publishesApi;
-  static PublishesApi get publishesApi =>
-      _publishesApi ??= PublishesApi(dio);
+  static PublishesApi get publishesApi => _publishesApi ??= PublishesApi(dio);
 
   // Quiz
   static QuizApi? _quizApi;

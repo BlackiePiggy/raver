@@ -49,22 +49,51 @@ class AuthApi {
   }
 
   /// Sends a verification code to the given email address.
-  Future<void> sendEmailCode({required String email}) async {
-    await _dio.post<void>(
-      '/v1/auth/sms/send',
-      data: {'email': email},
+  ///
+  /// Returns the server-provided cooldown duration in seconds.
+  Future<int> sendEmailCode({
+    required String email,
+    String scene = 'login',
+  }) async {
+    final response = await _dio.post<dynamic>(
+      '/v1/auth/email/send',
+      data: {'email': email, 'scene': scene},
     );
+    return _authCodeCooldownSeconds(response.data);
   }
 
   /// Sends an SMS verification code to the given phone number.
-  Future<void> sendSmsCode({
+  ///
+  /// Returns the server-provided cooldown duration in seconds.
+  Future<int> sendSmsCode({
     required String phone,
     required String countryCode,
+    String scene = 'login',
   }) async {
-    await _dio.post<void>(
+    final response = await _dio.post<dynamic>(
       '/v1/auth/sms/send',
-      data: {'phone': phone, 'countryCode': countryCode},
+      data: {'phone': _normalizedPhone(phone, countryCode), 'scene': scene},
     );
+    return _authCodeCooldownSeconds(response.data);
+  }
+
+  /// Checks whether a display name can be used during registration.
+  Future<bool> checkDisplayNameAvailability({
+    required String displayName,
+  }) async {
+    final response = await _dio.get<dynamic>(
+      '/v1/auth/display-name/check',
+      queryParameters: {'displayName': displayName},
+    );
+    final payload = response.data;
+    if (payload is Map<String, dynamic>) {
+      final data = payload['data'];
+      if (data is Map<String, dynamic>) {
+        return data['available'] as bool? ?? false;
+      }
+      return payload['available'] as bool? ?? false;
+    }
+    return false;
   }
 
   /// Registers a new user account.
@@ -75,6 +104,8 @@ class AuthApi {
     required String displayName,
     required String email,
     required String password,
+    int? birthYear,
+    String? regionCode,
   }) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/v1/auth/register',
@@ -82,6 +113,8 @@ class AuthApi {
         'displayName': displayName,
         'email': email,
         'password': password,
+        if (birthYear != null) 'birthYear': birthYear,
+        if (regionCode != null) 'regionCode': regionCode,
       },
     );
     return response.data!;
@@ -126,5 +159,25 @@ class AuthApi {
       data: {'firebaseIdToken': firebaseIdToken},
     );
     return response.data!;
+  }
+
+  static int _authCodeCooldownSeconds(dynamic payload) {
+    final expiresInSeconds = switch (payload) {
+      {'expiresInSeconds': final int seconds} => seconds,
+      {'data': {'expiresInSeconds': final int seconds}} => seconds,
+      _ => throw const FormatException(
+          'Auth code response did not include expiresInSeconds',
+        ),
+    };
+    return expiresInSeconds.clamp(1, 120);
+  }
+
+  static String _normalizedPhone(String phone, String countryCode) {
+    final trimmedPhone = phone.trim();
+    final trimmedCountryCode = countryCode.trim();
+    if (trimmedPhone.startsWith('+') || trimmedCountryCode.isEmpty) {
+      return trimmedPhone;
+    }
+    return '$trimmedCountryCode$trimmedPhone';
   }
 }

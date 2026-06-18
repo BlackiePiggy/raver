@@ -10,21 +10,12 @@ import 'package:ravehub/di/app_providers.dart';
 /// Any path starting with one of these prefixes will trigger a redirect to
 /// `/login` when the user is unauthenticated.
 const _protectedPrefixes = <String>[
-  '/discover',
-  '/circle',
   '/inbox',
   '/profile',
-  '/events',
-  '/djs',
-  '/sets',
-  '/news',
-  '/labels',
-  '/festivals',
-  '/rankings',
-  '/genres',
-  '/search',
-  '/users',
   '/settings',
+  '/search',
+  '/circle/compose',
+  '/circle/squads',
 ];
 
 /// Routes that are only meaningful for unauthenticated users.

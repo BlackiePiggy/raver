@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:raver_models/raver_models.dart';
 
 import '../../data/dj_api.dart';
 
@@ -129,7 +128,7 @@ class DjEditorViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final url = await _djApi.uploadDjAvatar(localPath);
+      final url = await _djApi.uploadDjAvatar(localPath, djId: _djId);
       _avatarUrl = url;
     } catch (e) {
       _errorMessage = e.toString();

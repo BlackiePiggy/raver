@@ -1,22 +1,17 @@
 // Integration test entry point for RaveHub.
 // Run with: flutter test integration_test/ --device-id <device>
 //
-// These tests exercise realistic user flows end-to-end on a real device or
-// emulator. Mock providers are injected via ProviderScope overrides to avoid
-// actual network calls while still verifying the full widget tree, navigation,
-// and state management.
+// These tests exercise realistic public flows end-to-end on a real device or
+// emulator against the live BFF service surface.
 
-import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'flows/auth_flow_test.dart' as auth;
-import 'flows/discover_flow_test.dart' as discover;
-import 'flows/post_flow_test.dart' as post;
+import 'flows/clean_launch_flow_test.dart' as clean_launch;
+import 'flows/public_live_flow_test.dart' as public_live;
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  auth.main();
-  discover.main();
-  post.main();
+  clean_launch.main();
+  public_live.main();
 }

@@ -13,12 +13,14 @@ class EventFilterResult {
     this.city,
     this.dateRange,
     this.selectedTypes = const [],
+    this.status = EventStatusFilter.all,
     this.brand,
   });
 
   final String? city;
   final DateTimeRange? dateRange;
   final List<EventTypeFilter> selectedTypes;
+  final EventStatusFilter status;
   final String? brand;
 }
 
@@ -51,6 +53,7 @@ class _EventFilterSheetState extends State<EventFilterSheet> {
   late final TextEditingController _cityController;
   late final TextEditingController _brandController;
   DateTimeRange? _dateRange;
+  late EventStatusFilter _selectedStatus;
   final Set<EventTypeFilter> _selectedTypes = {};
 
   @override
@@ -60,6 +63,7 @@ class _EventFilterSheetState extends State<EventFilterSheet> {
     _cityController = TextEditingController(text: initial?.city ?? '');
     _brandController = TextEditingController(text: initial?.brand ?? '');
     _dateRange = initial?.dateRange;
+    _selectedStatus = initial?.status ?? EventStatusFilter.all;
     if (initial != null) {
       _selectedTypes.addAll(initial.selectedTypes);
     }
@@ -77,6 +81,7 @@ class _EventFilterSheetState extends State<EventFilterSheet> {
       _cityController.clear();
       _brandController.clear();
       _dateRange = null;
+      _selectedStatus = EventStatusFilter.all;
       _selectedTypes.clear();
     });
   }
@@ -88,6 +93,7 @@ class _EventFilterSheetState extends State<EventFilterSheet> {
           : _cityController.text.trim(),
       dateRange: _dateRange,
       selectedTypes: _selectedTypes.toList(),
+      status: _selectedStatus,
       brand: _brandController.text.trim().isEmpty
           ? null
           : _brandController.text.trim(),
@@ -209,9 +215,8 @@ class _EventFilterSheetState extends State<EventFilterSheet> {
                             Text(
                               _dateRange != null
                                   ? '${_formatDate(_dateRange!.start)} ~ ${_formatDate(_dateRange!.end)}'
-                                  : lt('选择日期范围',
-                                      'Select date range',
-                                      '日付範囲を選択'),
+                                  : lt(
+                                      '选择日期范围', 'Select date range', '日付範囲を選択'),
                               style: RaverTypography.body(
                                 size: 14,
                                 color: _dateRange != null
@@ -222,6 +227,51 @@ class _EventFilterSheetState extends State<EventFilterSheet> {
                           ],
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Status
+                    _buildSectionTitle(
+                      theme,
+                      lt('活动状态', 'Status', 'ステータス'),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: EventStatusFilter.values.map((status) {
+                        final isSelected = _selectedStatus == status;
+                        return GestureDetector(
+                          onTap: () => setState(() => _selectedStatus = status),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected ? theme.accent : theme.card,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isSelected
+                                    ? theme.accent
+                                    : theme.cardBorder,
+                              ),
+                            ),
+                            child: Text(
+                              status.label,
+                              style: RaverTypography.label(
+                                size: 13,
+                                color: isSelected
+                                    ? Colors.white
+                                    : theme.primaryText,
+                                weight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
                     const SizedBox(height: 20),
 
@@ -254,9 +304,7 @@ class _EventFilterSheetState extends State<EventFilterSheet> {
                               vertical: 8,
                             ),
                             decoration: BoxDecoration(
-                              color: isSelected
-                                  ? theme.accent
-                                  : theme.card,
+                              color: isSelected ? theme.accent : theme.card,
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color: isSelected

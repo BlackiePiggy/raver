@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
-import 'package:raver_core/raver_core.dart';
 
+import 'discover_dio.dart';
 import '../events/data/events_api_service.dart';
 import '../events/data/events_repository.dart';
 import '../djs/data/dj_api.dart';
@@ -14,20 +14,16 @@ import '../search/data/recent_search_store.dart';
 import '../search/data/search_api_service.dart';
 import '../search/data/search_repository.dart';
 
+typedef CurrentUserIdProvider = String? Function();
+
 class DiscoverServiceLocator {
   DiscoverServiceLocator._();
 
   static Dio? _dio;
+  static CurrentUserIdProvider? _currentUserIdProvider;
 
   static Dio get dio {
-    _dio ??= Dio(
-      BaseOptions(
-        baseUrl: AppConfig.bffBaseUrl,
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: {'Content-Type': 'application/json'},
-      ),
-    );
+    _dio ??= createDiscoverDio();
     return _dio!;
   }
 
@@ -35,9 +31,16 @@ class DiscoverServiceLocator {
     _dio = dio;
   }
 
+  static void configureCurrentUserIdProvider(
+    CurrentUserIdProvider provider,
+  ) {
+    _currentUserIdProvider = provider;
+  }
+
+  static String? get currentUserId => _currentUserIdProvider?.call();
+
   static EventsApiService? _eventsApi;
-  static EventsApiService get eventsApi =>
-      _eventsApi ??= EventsApiService(dio);
+  static EventsApiService get eventsApi => _eventsApi ??= EventsApiService(dio);
 
   static EventsRepository? _eventsRepository;
   static EventsRepository get eventsRepository =>
@@ -65,15 +68,21 @@ class DiscoverServiceLocator {
   static GenreApi get genreApi => _genreApi ??= GenreApi(dio);
 
   static SearchApiService? _searchApi;
-  static SearchApiService get searchApi =>
-      _searchApi ??= SearchApiService(dio);
+  static SearchApiService get searchApi => _searchApi ??= SearchApiService(dio);
 
   static SearchRepository? _searchRepository;
   static SearchRepository get searchRepository =>
       _searchRepository ??= SearchRepository(searchApi);
 
+  static void configureSearchRepository(SearchRepository repository) {
+    _searchRepository = repository;
+  }
+
   static RecentSearchStore? _recentSearchStore;
   static RecentSearchStore get recentSearchStore =>
       _recentSearchStore ??= RecentSearchStore();
-}
 
+  static void configureRecentSearchStore(RecentSearchStore store) {
+    _recentSearchStore = store;
+  }
+}

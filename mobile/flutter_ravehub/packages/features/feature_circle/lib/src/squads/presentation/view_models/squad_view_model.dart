@@ -45,7 +45,7 @@ class SquadViewModel extends ChangeNotifier {
           ? const LoadPhase.empty()
           : LoadPhase.success(_mySquads);
     } catch (e) {
-      _mySquadsPhase = LoadPhase.failure(e);
+      _mySquadsPhase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -59,7 +59,7 @@ class SquadViewModel extends ChangeNotifier {
           ? const LoadPhase.empty()
           : LoadPhase.success(_recommendedSquads);
     } catch (e) {
-      _recommendedPhase = LoadPhase.failure(e);
+      _recommendedPhase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -93,14 +93,25 @@ class SquadViewModel extends ChangeNotifier {
   Future<SquadProfile?> createSquad({
     required String name,
     required String description,
-    String? coverImageUrl,
+    String? avatarLocalPath,
   }) async {
     try {
-      final squad = await _repository.createSquad(
+      var squad = await _repository.createSquad(
         name: name,
         description: description,
-        coverImageUrl: coverImageUrl,
       );
+      if (avatarLocalPath != null && avatarLocalPath.isNotEmpty) {
+        try {
+          final avatarUrl = await _repository.uploadSquadAvatar(
+            squadId: squad.id,
+            localPath: avatarLocalPath,
+          );
+          squad = squad.copyWith(avatarUrl: avatarUrl);
+        } catch (_) {
+          // The squad was created successfully; keep it visible even if the
+          // optional avatar upload fails.
+        }
+      }
       _mySquads.insert(0, squad);
       _mySquadsPhase = LoadPhase.success(_mySquads);
       notifyListeners();
@@ -144,7 +155,7 @@ class SquadProfileViewModel extends ChangeNotifier {
       _loadMembers();
       _loadActivities();
     } catch (e) {
-      _phase = LoadPhase.failure(e);
+      _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }

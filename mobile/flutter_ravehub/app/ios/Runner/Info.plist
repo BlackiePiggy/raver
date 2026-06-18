@@ -18,6 +18,17 @@
 	<string>ravehub</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>raver</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleShortVersionString</key>
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
@@ -26,6 +37,20 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>RaveHub needs permission to save QR codes and share cards to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>RaveHub needs permission to access your photo library when saving generated images.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>RaveHub needs camera access to scan QR codes and open share links.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>RaveHub uses your location for check-ins, route planning, and nearby event recommendations.</string>
+	<key>FlutterDeepLinkingEnabled</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

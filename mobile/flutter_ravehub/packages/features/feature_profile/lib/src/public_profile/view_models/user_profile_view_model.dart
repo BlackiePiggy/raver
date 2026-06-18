@@ -41,7 +41,7 @@ class UserProfileViewModel extends ChangeNotifier {
       _phase = LoadPhase.success(_profile!);
       await _loadPosts();
     } catch (e) {
-      _phase = LoadPhase.failure(e);
+      _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -53,7 +53,7 @@ class UserProfileViewModel extends ChangeNotifier {
       await _loadPosts();
     } catch (e) {
       if (_profile == null) {
-        _phase = LoadPhase.failure(e);
+        _phase = LoadPhase.fromError(e);
       }
     }
     notifyListeners();

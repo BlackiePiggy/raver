@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
@@ -5,6 +7,8 @@ import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_models/raver_models.dart';
 
 import '../../_shared/discover_service_locator.dart';
+import '../data/recent_search_store.dart';
+import 'search_result_route_resolver.dart';
 import 'search_results_view_model.dart';
 import 'widgets/search_result_card.dart';
 
@@ -19,23 +23,32 @@ class SearchResultsScreen extends StatefulWidget {
 
 class _SearchResultsScreenState extends State<SearchResultsScreen>
     with SingleTickerProviderStateMixin {
-  late final GlobalSearchResultsViewModel _viewModel;
+  GlobalSearchResultsViewModel? _viewModel;
   late final TabController _tabController;
   final TextEditingController _queryController = TextEditingController();
+  late final RecentSearchStore _recentStore;
+  Timer? _debounceTimer;
 
   static const _tabs = GlobalSearchTab.values;
+  static const _searchDebounceDuration = Duration(milliseconds: 350);
 
   @override
   void initState() {
     super.initState();
-    _viewModel = GlobalSearchResultsViewModel(
-      initialQuery: widget.initialQuery,
-      repository: DiscoverServiceLocator.searchRepository,
-    );
     _tabController = TabController(length: _tabs.length, vsync: this);
     _queryController.text = widget.initialQuery;
-    _viewModel.addListener(_rebuild);
-    _viewModel.loadInitial();
+    _queryController.addListener(_onQueryChanged);
+    _recentStore = DiscoverServiceLocator.recentSearchStore
+      ..addListener(_rebuild)
+      ..initialize();
+    if (_isAuthenticated) {
+      _viewModel = GlobalSearchResultsViewModel(
+        initialQuery: widget.initialQuery,
+        repository: DiscoverServiceLocator.searchRepository,
+      )
+        ..addListener(_rebuild)
+        ..loadInitial();
+    }
   }
 
   void _rebuild() {
@@ -44,40 +57,61 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
 
   @override
   void dispose() {
-    _viewModel.removeListener(_rebuild);
+    _debounceTimer?.cancel();
+    _viewModel?.removeListener(_rebuild);
+    _recentStore.removeListener(_rebuild);
     _tabController.dispose();
+    _queryController.removeListener(_onQueryChanged);
     _queryController.dispose();
-    _viewModel.dispose();
+    _viewModel?.dispose();
     super.dispose();
   }
 
+  void _onQueryChanged() {
+    if (!_isAuthenticated) return;
+
+    final query = _queryController.text.trim();
+    _debounceTimer?.cancel();
+    if (query.isEmpty) {
+      _viewModel?.clearSearch();
+      return;
+    }
+    _debounceTimer = Timer(_searchDebounceDuration, () {
+      _submitQuery(query, recordRecent: false);
+    });
+  }
+
   void _onSubmit() {
+    if (!_isAuthenticated) {
+      _goToLogin();
+      return;
+    }
     final query = _queryController.text.trim();
     if (query.isEmpty) return;
-    DiscoverServiceLocator.recentSearchStore.record(query);
-    _viewModel.submitSearch(query);
+    _debounceTimer?.cancel();
+    _submitQuery(query, recordRecent: true);
+    _tabController.animateTo(0);
+  }
+
+  void _submitQuery(String query, {required bool recordRecent}) {
+    if (recordRecent) _recentStore.record(query);
+    _viewModel!.submitSearch(query);
+  }
+
+  void _useRecentSearch(String query) {
+    _queryController.text = query;
+    _queryController.selection = TextSelection.collapsed(offset: query.length);
+    _debounceTimer?.cancel();
+    _submitQuery(query, recordRecent: true);
     _tabController.animateTo(0);
   }
 
   void _onItemTap(GlobalSearchItem item) {
-    final route = _routeForItem(item);
+    final route = routeForSearchResult(item);
     if (route != null) {
       context.push(route);
     }
   }
-
-  String? _routeForItem(GlobalSearchItem item) => switch (item.type) {
-        GlobalSearchItemType.event => '/events/${item.entityId}',
-        GlobalSearchItemType.dj => '/djs/${item.entityId}',
-        GlobalSearchItemType.set => '/sets/${item.entityId}',
-        GlobalSearchItemType.news => '/news/${item.entityId}',
-        GlobalSearchItemType.label => '/labels/${item.entityId}',
-        GlobalSearchItemType.festival => '/festivals/${item.entityId}',
-        GlobalSearchItemType.rankingBoard ||
-        GlobalSearchItemType.rankingEntry =>
-          '/rankings/${item.entityId}',
-        _ => null,
-      };
 
   @override
   Widget build(BuildContext context) {
@@ -95,13 +129,28 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _buildTabBar(theme),
-          Expanded(child: _buildTabContent(theme)),
-        ],
-      ),
+      body: _isAuthenticated
+          ? Column(
+              children: [
+                if (_hasActiveQuery) _buildTabBar(theme),
+                Expanded(
+                  child: _hasActiveQuery
+                      ? _buildTabContent(theme)
+                      : _buildRecentSearchState(theme),
+                ),
+              ],
+            )
+          : _buildLoginRequired(theme),
     );
+  }
+
+  bool get _isAuthenticated => DiscoverServiceLocator.currentUserId != null;
+  bool get _hasActiveQuery => _queryController.text.trim().isNotEmpty;
+
+  void _goToLogin() {
+    final query = _queryController.text.trim();
+    final returnTo = query.isEmpty ? '/search' : '/search?q=$query';
+    context.go('/login?returnTo=${Uri.encodeComponent(returnTo)}');
   }
 
   Widget _buildSearchField(RaverThemeData theme) {
@@ -141,7 +190,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
         weight: FontWeight.w400,
       ),
       tabs: _tabs.map((tab) {
-        final count = _viewModel.countForTab(tab);
+        final count = _viewModel!.countForTab(tab);
         final label = _tabLabel(tab);
         return Tab(
           text: count > 0 ? '$label ($count)' : label,
@@ -154,10 +203,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
     return TabBarView(
       controller: _tabController,
       children: _tabs.map((tab) {
-        final phase = _viewModel.phaseByTab[tab] ?? SearchLoadPhase.idle;
+        final phase = _viewModel!.phaseByTab[tab] ?? SearchLoadPhase.idle;
 
         return switch (phase) {
-          SearchLoadPhase.idle || SearchLoadPhase.loading =>
+          SearchLoadPhase.idle ||
+          SearchLoadPhase.loading =>
             const SearchSkeleton(),
           SearchLoadPhase.failed => _buildErrorState(tab, theme),
           SearchLoadPhase.empty => _buildEmptyState(theme),
@@ -175,13 +225,13 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
       children: [
         _buildSummaryStrip(theme),
         const SizedBox(height: 12),
-        if (_viewModel.topMatches.isNotEmpty) ...[
+        if (_viewModel!.topMatches.isNotEmpty) ...[
           Text(
             lt('最佳匹配', 'Top Matches', 'ベストマッチ'),
             style: RaverTypography.title(size: 16, color: theme.primaryText),
           ),
           const SizedBox(height: 8),
-          ..._viewModel.topMatches.map(
+          ..._viewModel!.topMatches.map(
             (item) => Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: SearchResultCard(
@@ -192,8 +242,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
           ),
           const SizedBox(height: 16),
         ],
-        ..._viewModel.previewTabs.map((tab) {
-          final items = _viewModel.itemsForTab(tab).take(3).toList();
+        ..._viewModel!.previewTabs.map((tab) {
+          final items = _viewModel!.itemsForTab(tab).take(3).toList();
           if (items.isEmpty) return const SizedBox.shrink();
 
           return Column(
@@ -217,7 +267,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
                   ),
                   const Spacer(),
                   Text(
-                    '${_viewModel.countForTab(tab)}',
+                    '${_viewModel!.countForTab(tab)}',
                     style: RaverTypography.caption(
                       color: theme.secondaryText,
                     ),
@@ -243,7 +293,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
   }
 
   Widget _buildDomainTabContent(GlobalSearchTab tab, RaverThemeData theme) {
-    final items = _viewModel.itemsForTab(tab);
+    final items = _viewModel!.itemsForTab(tab);
 
     return ListView.separated(
       padding: const EdgeInsets.all(16),
@@ -274,9 +324,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
           Expanded(
             child: Text(
               lt(
-                '找到与 "${_viewModel.query}" 相关的内容',
-                'Results for "${_viewModel.query}"',
-                '「${_viewModel.query}」の検索結果',
+                '找到与 "${_viewModel!.query}" 相关的内容',
+                'Results for "${_viewModel!.query}"',
+                '「${_viewModel!.query}」の検索結果',
               ),
               style: RaverTypography.label(
                 size: 14,
@@ -294,7 +344,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              '${_viewModel.allItems.length}',
+              '${_viewModel!.allItems.length}',
               style: RaverTypography.caption(
                 color: Colors.white,
                 weight: FontWeight.w600,
@@ -342,6 +392,140 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
     );
   }
 
+  Widget _buildRecentSearchState(RaverThemeData theme) {
+    final recentQueries = _recentStore.queries;
+    if (recentQueries.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  color: theme.accent.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.search, size: 34, color: theme.accent),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                lt('搜索 RaveHub', 'Search RaveHub', 'RaveHubを検索'),
+                style: RaverTypography.title(
+                  size: 18,
+                  color: theme.primaryText,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                lt(
+                  '输入关键词搜索活动、DJ、Sets、榜单和圈子内容。',
+                  'Search events, DJs, sets, rankings, and community posts.',
+                  'イベント、DJ、Sets、ランキング、投稿を検索できます。',
+                ),
+                textAlign: TextAlign.center,
+                style: RaverTypography.body(
+                  size: 14,
+                  color: theme.secondaryText,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(
+          lt('最近搜索', 'Recent Searches', '最近の検索'),
+          style: RaverTypography.title(size: 16, color: theme.primaryText),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: recentQueries
+              .map(
+                (query) => ActionChip(
+                  avatar: Icon(
+                    Icons.history,
+                    size: 16,
+                    color: theme.secondaryText,
+                  ),
+                  label: Text(query),
+                  labelStyle: RaverTypography.label(
+                    size: 13,
+                    color: theme.primaryText,
+                    weight: FontWeight.w600,
+                  ),
+                  backgroundColor: theme.card,
+                  side: BorderSide(color: theme.cardBorder),
+                  onPressed: () => _useRecentSearch(query),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoginRequired(RaverThemeData theme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                color: theme.accent.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.lock,
+                size: 30,
+                color: theme.accent,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              lt('请先登录', 'Login Required', 'ログインが必要です'),
+              textAlign: TextAlign.center,
+              style: RaverTypography.title(
+                size: 18,
+                color: theme.primaryText,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              lt(
+                '登录后才能使用全局聚合搜索。',
+                'Log in to use global search.',
+                'グローバル検索を使うにはログインしてください。',
+              ),
+              textAlign: TextAlign.center,
+              style: RaverTypography.body(
+                size: 14,
+                color: theme.secondaryText,
+              ),
+            ),
+            const SizedBox(height: 20),
+            PrimaryButton(
+              label: lt('去登录', 'Sign In', 'ログイン'),
+              onPressed: _goToLogin,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildErrorState(GlobalSearchTab tab, RaverThemeData theme) {
     return Center(
       child: Column(
@@ -358,7 +542,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            _viewModel.errorMessage ??
+            _viewModel!.errorMessage ??
                 lt('搜索失败', 'Search Failed', '検索に失敗しました'),
             style: RaverTypography.body(
               size: 14,
@@ -368,10 +552,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
           ),
           const SizedBox(height: 16),
           GestureDetector(
-            onTap: () => _viewModel.retryTab(tab),
+            onTap: () => _viewModel!.retryTab(tab),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: theme.accent,
                 borderRadius: BorderRadius.circular(20),
@@ -402,20 +585,15 @@ class _SearchResultsScreenState extends State<SearchResultsScreen>
         GlobalSearchTab.all => lt('全部', 'All', 'すべて'),
         GlobalSearchTab.events => lt('活动', 'Events', 'イベント'),
         GlobalSearchTab.djs => 'DJ',
-        GlobalSearchTab.peopleSquads =>
-          lt('用户/小队', 'People', 'ユーザー'),
+        GlobalSearchTab.peopleSquads => lt('用户/小队', 'People', 'ユーザー'),
         GlobalSearchTab.posts => lt('圈子', 'Posts', '投稿'),
         GlobalSearchTab.news => lt('资讯', 'News', 'ニュース'),
         GlobalSearchTab.sets => 'Sets',
-        GlobalSearchTab.rankings =>
-          lt('榜单', 'Rankings', 'ランキング'),
+        GlobalSearchTab.rankings => lt('榜单', 'Rankings', 'ランキング'),
         GlobalSearchTab.ratings => lt('打分', 'Ratings', '評価'),
-        GlobalSearchTab.festivals =>
-          lt('品牌', 'Brands', 'ブランド'),
-        GlobalSearchTab.labels =>
-          lt('厂牌', 'Labels', 'レーベル'),
-        GlobalSearchTab.genreTree =>
-          lt('风格树', 'Genres', 'ジャンル'),
+        GlobalSearchTab.festivals => lt('品牌', 'Brands', 'ブランド'),
+        GlobalSearchTab.labels => lt('厂牌', 'Labels', 'レーベル'),
+        GlobalSearchTab.genreTree => lt('风格树', 'Genres', 'ジャンル'),
       };
 
   static IconData _iconForTab(GlobalSearchTab tab) => switch (tab) {

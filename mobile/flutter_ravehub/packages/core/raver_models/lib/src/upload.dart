@@ -23,15 +23,15 @@ class UploadMediaResponse {
 
   factory UploadMediaResponse.fromJson(Map<String, dynamic> json) =>
       UploadMediaResponse(
-        url: json['url'] as String,
-        originalUrl: json['originalUrl'] as String,
-        mediumUrl: json['mediumUrl'] as String,
-        smallUrl: json['smallUrl'] as String,
-        fileName: json['fileName'] as String,
-        mimeType: json['mimeType'] as String,
-        size: json['size'] as int,
-        width: json['width'] as int,
-        height: json['height'] as int,
+        url: _uploadString(json['url']),
+        originalUrl: _uploadString(json['originalUrl']),
+        mediumUrl: _uploadString(json['mediumUrl']),
+        smallUrl: _uploadString(json['smallUrl']),
+        fileName: _uploadString(json['fileName']),
+        mimeType: _uploadString(json['mimeType']),
+        size: _uploadInt(json['size']),
+        width: _uploadInt(json['width']),
+        height: _uploadInt(json['height']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -83,4 +83,13 @@ class UploadMediaResponse {
   @override
   String toString() =>
       'UploadMediaResponse(url: $url, fileName: $fileName, mimeType: $mimeType, size: $size)';
+}
+
+String _uploadString(Object? value) => value?.toString() ?? '';
+
+int _uploadInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? 0;
+  return 0;
 }

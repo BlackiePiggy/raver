@@ -20,6 +20,8 @@ dependencies:
     path: ../../core/raver_design_system
   raver_i18n:
     path: ../../core/raver_i18n
+  raver_platform:
+    path: ../../core/raver_platform
   flutter:
     sdk: flutter
   flutter_riverpod: ^2.5.0

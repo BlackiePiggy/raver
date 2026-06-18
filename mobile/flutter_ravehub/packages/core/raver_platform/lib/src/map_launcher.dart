@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Launches external map applications for turn-by-turn navigation.
@@ -29,13 +28,11 @@ class MapLauncher {
     required double longitude,
     String? label,
   }) async {
-    final encodedLabel = label != null ? Uri.encodeComponent(label) : '';
-    final query = label != null ? '&q=$encodedLabel' : '';
-
-    if (Platform.isIOS) {
-      // Apple Maps URL scheme.
-      final appleMapsUri = Uri.parse(
-        'https://maps.apple.com/?ll=$latitude,$longitude$query',
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      final appleMapsUri = appleMapsCoordinateUri(
+        latitude: latitude,
+        longitude: longitude,
+        label: label,
       );
       if (await canLaunchUrl(appleMapsUri)) {
         await launchUrl(appleMapsUri, mode: LaunchMode.externalApplication);
@@ -43,11 +40,12 @@ class MapLauncher {
       }
     }
 
-    if (Platform.isAndroid) {
-      // Android geo intent -- opens the default maps app.
-      final geoUri = label != null
-          ? Uri.parse('geo:$latitude,$longitude?q=$latitude,$longitude($encodedLabel)')
-          : Uri.parse('geo:$latitude,$longitude');
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      final geoUri = androidGeoCoordinateUri(
+        latitude: latitude,
+        longitude: longitude,
+        label: label,
+      );
       if (await canLaunchUrl(geoUri)) {
         await launchUrl(geoUri, mode: LaunchMode.externalApplication);
         return;
@@ -84,9 +82,129 @@ class MapLauncher {
     // -----------------------------------------------------------------------
 
     // Fallback: open Google Maps in the browser.
-    final webUri = Uri.parse(
-      'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude',
+    final webUri = googleMapsSearchUri(query: '$latitude,$longitude');
+    await launchUrl(webUri, mode: LaunchMode.externalApplication);
+  }
+
+  /// Opens an external map app/search page for a free-form address or venue.
+  static Future<void> openSearch({required String query}) async {
+    final trimmedQuery = query.trim();
+    if (trimmedQuery.isEmpty) {
+      throw ArgumentError.value(query, 'query', 'Map query cannot be empty');
+    }
+
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      final appleMapsUri = appleMapsSearchUri(query: trimmedQuery);
+      if (await canLaunchUrl(appleMapsUri)) {
+        await launchUrl(appleMapsUri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    }
+
+    final webUri = googleMapsSearchUri(query: trimmedQuery);
+    await launchUrl(webUri, mode: LaunchMode.externalApplication);
+  }
+
+  /// Opens turn-by-turn directions for a free-form destination.
+  ///
+  /// When [originQuery] is null or blank, the native maps app/browser uses the
+  /// user's current location as the origin.
+  static Future<void> openRoute({
+    String? originQuery,
+    required String destinationQuery,
+  }) async {
+    final destination = destinationQuery.trim();
+    if (destination.isEmpty) {
+      throw ArgumentError.value(
+        destinationQuery,
+        'destinationQuery',
+        'Route destination cannot be empty',
+      );
+    }
+
+    final origin = originQuery?.trim();
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      final appleMapsUri = appleMapsRouteUri(
+        originQuery: origin?.isEmpty ?? true ? null : origin,
+        destinationQuery: destination,
+      );
+      if (await canLaunchUrl(appleMapsUri)) {
+        await launchUrl(appleMapsUri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    }
+
+    final webUri = googleMapsRouteUri(
+      originQuery: origin?.isEmpty ?? true ? null : origin,
+      destinationQuery: destination,
     );
     await launchUrl(webUri, mode: LaunchMode.externalApplication);
   }
+
+  static Uri appleMapsCoordinateUri({
+    required double latitude,
+    required double longitude,
+    String? label,
+  }) {
+    final queryParameters = <String, String>{
+      'll': '$latitude,$longitude',
+      if (label != null && label.trim().isNotEmpty) 'q': label.trim(),
+    };
+    return Uri.https('maps.apple.com', '/', queryParameters);
+  }
+
+  static Uri androidGeoCoordinateUri({
+    required double latitude,
+    required double longitude,
+    String? label,
+  }) {
+    if (label == null || label.trim().isEmpty) {
+      return Uri.parse('geo:$latitude,$longitude');
+    }
+    final encodedLabel = Uri.encodeComponent(label.trim());
+    return Uri.parse(
+      'geo:$latitude,$longitude?q=$latitude,$longitude($encodedLabel)',
+    );
+  }
+
+  static Uri appleMapsSearchUri({required String query}) =>
+      Uri.https('maps.apple.com', '/', {'q': query.trim()});
+
+  static Uri appleMapsRouteUri({
+    String? originQuery,
+    required String destinationQuery,
+  }) {
+    final origin = originQuery?.trim();
+    return Uri.https('maps.apple.com', '/', {
+      if (origin != null && origin.isNotEmpty) 'saddr': origin,
+      'daddr': destinationQuery.trim(),
+      'dirflg': 'd',
+    });
+  }
+
+  static Uri googleMapsSearchUri({required String query}) => Uri.https(
+    'www.google.com',
+    '/maps/search/',
+    {'api': '1', 'query': query.trim()},
+  );
+
+  static Uri googleMapsRouteUri({
+    String? originQuery,
+    required String destinationQuery,
+  }) {
+    final origin = originQuery?.trim();
+    return Uri.https('www.google.com', '/maps/dir/', {
+      'api': '1',
+      if (origin != null && origin.isNotEmpty) 'origin': origin,
+      'destination': destinationQuery.trim(),
+      'travelmode': 'driving',
+    });
+  }
+
+  /// Backwards-compatible alias for [openInMaps].
+  static Future<void> launchNavigation({
+    required double latitude,
+    required double longitude,
+    String? label,
+  }) => openInMaps(latitude: latitude, longitude: longitude, label: label);
 }

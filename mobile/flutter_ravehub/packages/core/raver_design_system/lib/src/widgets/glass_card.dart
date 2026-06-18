@@ -45,12 +45,8 @@ class GlassCard extends StatelessWidget {
     final theme = context.raver;
     final brightness = Theme.of(context).brightness;
 
-    final effectiveFillOpacity = fillOpacity ??
-        (brightness == Brightness.light ? 0.70 : 0.45);
-
-    final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(borderRadius),
-    );
+    final effectiveFillOpacity =
+        fillOpacity ?? (brightness == Brightness.light ? 0.70 : 0.45);
 
     return Padding(
       padding: margin ?? EdgeInsets.zero,

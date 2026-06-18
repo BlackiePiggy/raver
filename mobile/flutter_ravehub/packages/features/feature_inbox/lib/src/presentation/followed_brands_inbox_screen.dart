@@ -6,6 +6,8 @@ import 'package:raver_models/raver_models.dart';
 
 import '../data/inbox_service_locator.dart';
 import 'view_models/inbox_view_model.dart';
+import 'widgets/followed_update_tile.dart';
+import 'widgets/refreshable_empty_state.dart';
 
 /// Inbox screen listing updates from followed brands.
 class FollowedBrandsInboxScreen extends StatefulWidget {
@@ -16,8 +18,7 @@ class FollowedBrandsInboxScreen extends StatefulWidget {
       _FollowedBrandsInboxScreenState();
 }
 
-class _FollowedBrandsInboxScreenState
-    extends State<FollowedBrandsInboxScreen> {
+class _FollowedBrandsInboxScreenState extends State<FollowedBrandsInboxScreen> {
   late final InboxViewModel _viewModel;
   final ScrollController _scrollController = ScrollController();
 
@@ -30,8 +31,6 @@ class _FollowedBrandsInboxScreenState
     _viewModel.addListener(_rebuild);
     _viewModel.loadFollowedBrands();
     _scrollController.addListener(_onScroll);
-
-    _viewModel.markAsRead(category: 'followed_brands', ids: []);
   }
 
   void _rebuild() {
@@ -69,13 +68,16 @@ class _FollowedBrandsInboxScreenState
       body: LoadPhaseBuilder<List<FollowedBrandNotificationItem>>(
         phase: _viewModel.followedBrandsPhase,
         onLoading: () => const _FollowedBrandsSkeleton(),
-        onEmpty: () => EmptyStateView(
-          icon: Icons.storefront_outlined,
-          title: lt('暂无更新', 'No Updates', '更新はありません'),
-          subtitle: lt(
-            '您关注的厂牌暂无变更',
-            'Brands you follow have no updates yet',
-            'フォロー中のブランドの更新はまだありません',
+        onEmpty: () => RefreshableEmptyState(
+          onRefresh: _viewModel.refreshFollowedBrands,
+          child: EmptyStateView(
+            icon: Icons.storefront_outlined,
+            title: lt('暂无更新', 'No Updates', '更新はありません'),
+            subtitle: lt(
+              '您关注的厂牌暂无变更',
+              'Brands you follow have no updates yet',
+              'フォロー中のブランドの更新はまだありません',
+            ),
           ),
         ),
         onFailure: (error) => ErrorStateView(
@@ -89,6 +91,7 @@ class _FollowedBrandsInboxScreenState
           onRefresh: _viewModel.refreshFollowedBrands,
           child: ListView.separated(
             controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             itemCount: _viewModel.followedBrands.length +
                 (_viewModel.canLoadMoreFollowedBrands ? 1 : 0),
@@ -102,139 +105,38 @@ class _FollowedBrandsInboxScreenState
               }
 
               final item = _viewModel.followedBrands[index];
-              return _FollowedBrandTile(
-                item: item,
-                onTap: () => context.push('/festivals/${item.brandId}'),
+              return FollowedUpdateTile(
+                entityName: item.brandName,
+                updateType: item.type,
+                updateTitle: item.newsTitle,
+                summary: item.newsSummary,
+                occurredAt: item.occurredAt,
+                isRead: item.isRead,
+                imageUrl: item.imageUrl.isNotEmpty
+                    ? item.imageUrl
+                    : item.newsCoverImageUrl,
+                placeholderIcon: Icons.storefront,
+                onTap: () {
+                  _viewModel.markFollowedBrandRead(item.id);
+                  context.push(
+                    '/inbox/changes/brand/${item.brandId}',
+                    extra: {
+                      'entityName': item.brandName,
+                      'changeType': item.type,
+                      'summary': item.newsSummary,
+                      'imageUrl': item.newsCoverImageUrl,
+                      'updateTitle': item.newsTitle,
+                      'targetType': item.type,
+                      'targetId': item.newsId,
+                    },
+                  );
+                },
               );
             },
           ),
         ),
       ),
     );
-  }
-}
-
-class _FollowedBrandTile extends StatelessWidget {
-  const _FollowedBrandTile({required this.item, required this.onTap});
-
-  final FollowedBrandNotificationItem item;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.raver;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: theme.card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: theme.cardBorder),
-        ),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: item.imageUrl.isNotEmpty
-                  ? RemoteCoverImage(
-                      url: item.imageUrl,
-                      width: 48,
-                      height: 48,
-                    )
-                  : Container(
-                      width: 48,
-                      height: 48,
-                      color: theme.cardBorder,
-                      child: Icon(
-                        Icons.storefront,
-                        color: theme.secondaryText,
-                      ),
-                    ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.brandName,
-                    style: RaverTypography.label(
-                      size: 14,
-                      color: theme.primaryText,
-                      weight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color:
-                              const Color(0xFFC278F2).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          item.changeType,
-                          style: RaverTypography.caption(
-                            color: const Color(0xFFC278F2),
-                            weight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          item.summary,
-                          style: RaverTypography.caption(
-                            color: theme.secondaryText,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _formatRelativeTime(item.createdAt),
-                    style: RaverTypography.caption(
-                      color: theme.secondaryText,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.chevron_right,
-              size: 20,
-              color: theme.secondaryText,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static String _formatRelativeTime(String iso) {
-    try {
-      final dt = DateTime.parse(iso);
-      final diff = DateTime.now().difference(dt);
-      if (diff.inMinutes < 1) return lt('刚刚', 'just now', 'たった今');
-      if (diff.inMinutes < 60) return '${diff.inMinutes}m';
-      if (diff.inHours < 24) return '${diff.inHours}h';
-      if (diff.inDays < 30) return '${diff.inDays}d';
-      return '${dt.month}/${dt.day}';
-    } catch (_) {
-      return iso;
-    }
   }
 }
 

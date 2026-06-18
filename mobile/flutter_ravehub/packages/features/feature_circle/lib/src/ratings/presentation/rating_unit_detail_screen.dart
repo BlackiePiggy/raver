@@ -3,8 +3,11 @@ import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
 import 'package:raver_models/raver_models.dart';
+import 'package:raver_platform/raver_platform.dart';
 
-import '../view_models/rating_view_model.dart';
+import 'view_models/rating_view_model.dart';
+import 'widgets/create_rating_unit_sheet.dart';
+import 'widgets/rating_share_card.dart';
 import '../../_shared/circle_service_locator.dart';
 
 /// Detail screen for a single rating unit with voting and comments.
@@ -19,8 +22,7 @@ class RatingUnitDetailScreen extends StatefulWidget {
   final String unitId;
 
   @override
-  State<RatingUnitDetailScreen> createState() =>
-      _RatingUnitDetailScreenState();
+  State<RatingUnitDetailScreen> createState() => _RatingUnitDetailScreenState();
 }
 
 class _RatingUnitDetailScreenState extends State<RatingUnitDetailScreen> {
@@ -65,9 +67,7 @@ class _RatingUnitDetailScreenState extends State<RatingUnitDetailScreen> {
     final success = await _viewModel.vote();
     if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(lt('投票成功', 'Vote submitted', '投票しました')),
-        ),
+        SnackBar(content: Text(lt('投票成功', 'Vote submitted', '投票しました'))),
       );
     }
   }
@@ -78,6 +78,89 @@ class _RatingUnitDetailScreenState extends State<RatingUnitDetailScreen> {
     final success = await _viewModel.sendComment(text);
     if (success) {
       _commentController.clear();
+    }
+  }
+
+  void _showEditUnitSheet(WebRatingUnit unit) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CreateRatingUnitSheet(
+        initialName: unit.name,
+        initialDescription: unit.description,
+        initialDjId: unit.djId,
+        initialImageUrl: unit.imageUrl,
+        title: lt('编辑评分单元', 'Edit Rating Unit', '評価ユニットを編集'),
+        submitLabel: lt('保存', 'Save', '保存'),
+        onUploadImage: (localPath) =>
+            CircleServiceLocator.ratingRepository.uploadRatingImage(
+          localPath: localPath,
+          ratingEventId: widget.ratingId,
+          ratingUnitId: unit.id,
+          usage: 'rating_unit_image',
+        ),
+        onSubmit: (name, description, djId, imageUrl) async {
+          final success = await _viewModel.updateUnit(
+            name: name,
+            description: description,
+            djId: djId,
+            imageUrl: imageUrl.isEmpty ? null : imageUrl,
+          );
+          if (!mounted) return;
+          if (success) {
+            Navigator.of(context).pop();
+            _showSnack(lt('已保存', 'Saved', '保存しました'));
+          } else {
+            _showSnack(lt('保存失败', 'Failed to save', '保存に失敗しました'));
+          }
+        },
+      ),
+    );
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _shareRatingUnit(WebRatingUnit unit) async {
+    final fallbackUrl =
+        'https://ravehub.top/circle/ratings/${widget.ratingId}/units/${unit.id}';
+    try {
+      final payload = await CircleServiceLocator.ratingRepository
+          .resolveRatingUnitShareLink(
+        ratingId: widget.ratingId,
+        unit: unit,
+        channel: 'system_share',
+      );
+      final shareUrl = payload.shortUrl.isNotEmpty
+          ? payload.shortUrl
+          : (payload.url.isNotEmpty ? payload.url : fallbackUrl);
+      final score = unit.rating ?? 0;
+      final bytes = await ShareCardGenerator.capture(
+        card: RatingShareCard(
+          title: unit.name,
+          subtitle:
+              unit.description.isNotEmpty ? unit.description : unit.djName,
+          kindLabel: lt('评分单元', 'Rating Unit', '評価ユニット'),
+          scoreLabel: score <= 0
+              ? lt('暂无评分', 'No Ratings', '評価なし')
+              : '${score.toStringAsFixed(1)}/10',
+          metricLabel: '${unit.ratingCount} ${lt("票", "votes", "票")}',
+          shortUrl: shareUrl,
+        ),
+        size: const Size(390, 520),
+      );
+      await ShareService.shareBytes(
+        bytes,
+        fileName: 'ravehub-rating-unit-${unit.id}.png',
+        mimeType: 'image/png',
+        text: shareUrl,
+      );
+    } catch (_) {
+      await ShareService.shareUrl(fallbackUrl, subject: unit.name);
     }
   }
 
@@ -97,6 +180,18 @@ class _RatingUnitDetailScreenState extends State<RatingUnitDetailScreen> {
           unit?.name ?? lt('评分单元', 'Rating Unit', '評価ユニット'),
           style: RaverTypography.title(size: 17, color: theme.primaryText),
         ),
+        actions: [
+          if (unit != null)
+            IconButton(
+              icon: Icon(Icons.ios_share_outlined, color: theme.primaryText),
+              onPressed: () => _shareRatingUnit(unit),
+            ),
+          if (unit != null)
+            IconButton(
+              icon: Icon(Icons.edit_outlined, color: theme.primaryText),
+              onPressed: () => _showEditUnitSheet(unit),
+            ),
+        ],
         elevation: 0,
       ),
       body: unit == null
@@ -107,12 +202,8 @@ class _RatingUnitDetailScreenState extends State<RatingUnitDetailScreen> {
                   child: CustomScrollView(
                     controller: _scrollController,
                     slivers: [
-                      SliverToBoxAdapter(
-                        child: _buildUnitInfo(unit, theme),
-                      ),
-                      SliverToBoxAdapter(
-                        child: _buildVotingSection(theme),
-                      ),
+                      SliverToBoxAdapter(child: _buildUnitInfo(unit, theme)),
+                      SliverToBoxAdapter(child: _buildVotingSection(theme)),
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -143,10 +234,15 @@ class _RatingUnitDetailScreenState extends State<RatingUnitDetailScreen> {
           CircleAvatar(
             radius: 32,
             backgroundColor: theme.cardBorder,
-            backgroundImage: unit.djAvatarUrl.isNotEmpty
-                ? NetworkImage(unit.djAvatarUrl)
+            backgroundImage: (unit.imageUrl.isNotEmpty
+                        ? unit.imageUrl
+                        : unit.djAvatarUrl)
+                    .isNotEmpty
+                ? NetworkImage(
+                    unit.imageUrl.isNotEmpty ? unit.imageUrl : unit.djAvatarUrl,
+                  )
                 : null,
-            child: unit.djAvatarUrl.isEmpty
+            child: unit.imageUrl.isEmpty && unit.djAvatarUrl.isEmpty
                 ? Icon(Icons.person, size: 32, color: theme.secondaryText)
                 : null,
           ),
@@ -157,8 +253,9 @@ class _RatingUnitDetailScreenState extends State<RatingUnitDetailScreen> {
               children: [
                 Text(
                   unit.name,
-                  style: RaverTypography.headline(color: theme.primaryText)
-                      .copyWith(fontSize: 20),
+                  style: RaverTypography.headline(
+                    color: theme.primaryText,
+                  ).copyWith(fontSize: 20),
                 ),
                 Text(
                   unit.djName,
@@ -167,6 +264,18 @@ class _RatingUnitDetailScreenState extends State<RatingUnitDetailScreen> {
                     color: theme.secondaryText,
                   ),
                 ),
+                if (unit.description.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    unit.description,
+                    style: RaverTypography.body(
+                      size: 13,
+                      color: theme.secondaryText,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ),
           ),
@@ -179,8 +288,9 @@ class _RatingUnitDetailScreenState extends State<RatingUnitDetailScreen> {
                   const SizedBox(width: 4),
                   Text(
                     (unit.rating ?? 0).toStringAsFixed(1),
-                    style: RaverTypography.headline(color: theme.primaryText)
-                        .copyWith(fontSize: 24),
+                    style: RaverTypography.headline(
+                      color: theme.primaryText,
+                    ).copyWith(fontSize: 24),
                   ),
                 ],
               ),
@@ -294,10 +404,7 @@ class _RatingUnitDetailScreenState extends State<RatingUnitDetailScreen> {
           child: Center(
             child: Text(
               lt('暂无评论', 'No comments yet', 'コメントはまだありません'),
-              style: RaverTypography.body(
-                size: 14,
-                color: theme.secondaryText,
-              ),
+              style: RaverTypography.body(size: 14, color: theme.secondaryText),
             ),
           ),
         ),
@@ -335,9 +442,7 @@ class _RatingUnitDetailScreenState extends State<RatingUnitDetailScreen> {
       ),
       decoration: BoxDecoration(
         color: theme.background,
-        border: Border(
-          top: BorderSide(color: theme.cardBorder, width: 0.5),
-        ),
+        border: Border(top: BorderSide(color: theme.cardBorder, width: 0.5)),
       ),
       child: Row(
         children: [
@@ -352,11 +457,7 @@ class _RatingUnitDetailScreenState extends State<RatingUnitDetailScreen> {
               child: TextField(
                 controller: _commentController,
                 decoration: InputDecoration(
-                  hintText: lt(
-                    '写评论...',
-                    'Write a comment...',
-                    'コメントを書く...',
-                  ),
+                  hintText: lt('写评论...', 'Write a comment...', 'コメントを書く...'),
                   hintStyle: RaverTypography.body(
                     size: 14,
                     color: theme.secondaryText,
@@ -364,10 +465,7 @@ class _RatingUnitDetailScreenState extends State<RatingUnitDetailScreen> {
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 10),
                 ),
-                style: RaverTypography.body(
-                  size: 14,
-                  color: theme.primaryText,
-                ),
+                style: RaverTypography.body(size: 14, color: theme.primaryText),
               ),
             ),
           ),
@@ -399,10 +497,7 @@ class _RatingUnitDetailScreenState extends State<RatingUnitDetailScreen> {
 }
 
 class _RatingCommentTile extends StatelessWidget {
-  const _RatingCommentTile({
-    required this.comment,
-    required this.theme,
-  });
+  const _RatingCommentTile({required this.comment, required this.theme});
 
   final WebRatingComment comment;
   final RaverThemeData theme;

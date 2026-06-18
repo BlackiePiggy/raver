@@ -14,17 +14,29 @@ import '../ratings/presentation/rating_hub_screen.dart';
 class CircleHomeScreen extends StatelessWidget {
   const CircleHomeScreen({super.key});
 
+  static const _tabColors = [
+    Color(0xFFF24D61),
+    Color(0xFF4DABF7),
+    Color(0xFF946EF2),
+    Color(0xFFFAB536),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: context.raver.background,
       body: SafeArea(
+        bottom: false,
         child: RaverScrollableTabPager(
           tabs: [
             lt('动态', 'Feed', 'フィード'),
             lt('小队', 'Squads', 'スクワッド'),
             lt('ID', 'ID', 'ID'),
-            lt('评分', 'Ratings', '評価'),
+            lt('打分', 'Ratings', '評価'),
           ],
+          indicatorColors: _tabColors,
+          showsDivider: false,
+          tabSpacing: 24,
           pages: const [
             FeedScreen(),
             SquadHallScreen(),

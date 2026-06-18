@@ -44,63 +44,91 @@ class _GenresRootScreenState extends ConsumerState<GenresRootScreen>
     final state = ref.watch(genreSunburstProvider);
 
     ref.listen(genreSunburstProvider, (prev, next) {
-      if ((prev?.isLoading ?? true) && !next.isLoading && next.roots.isNotEmpty) {
+      if ((prev?.isLoading ?? true) &&
+          !next.isLoading &&
+          next.roots.isNotEmpty) {
         _expandController.forward(from: 0);
       }
     });
 
     if (state.isLoading) {
-      return const Center(child: CircularProgressIndicator.adaptive());
+      return _buildRefreshable(
+        const Center(child: CircularProgressIndicator.adaptive()),
+      );
     }
 
     if (state.error != null) {
-      return ErrorStateView(
-        title: lt('加载失败', 'Failed to load', 'ロードに失敗しました'),
-        description: state.error,
-        onRetry: () => ref.read(genreSunburstProvider.notifier).loadTree(),
+      return _buildRefreshable(
+        ErrorStateView(
+          title: lt('加载失败', 'Failed to load', 'ロードに失敗しました'),
+          description: state.error,
+          onRetry: () => ref.read(genreSunburstProvider.notifier).loadTree(),
+        ),
       );
     }
 
     if (state.roots.isEmpty) {
-      return EmptyStateView(
-        icon: Icons.donut_large_outlined,
-        title: lt('暂无流派数据', 'No genres yet', 'ジャンルデータなし'),
+      return _buildRefreshable(
+        EmptyStateView(
+          icon: Icons.donut_large_outlined,
+          title: lt('暂无流派数据', 'No genres yet', 'ジャンルデータなし'),
+        ),
       );
     }
 
-    return Column(
-      children: [
-        Expanded(
-          flex: 3,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: AnimatedBuilder(
-              animation: _expandAnimation,
-              builder: (context, _) {
-                return GestureDetector(
-                  onTapUp: (details) => _onTapSunburst(details, context),
-                  child: RepaintBoundary(
-                    child: CustomPaint(
-                      painter: GenreSunburstPainter(
-                        roots: state.roots,
-                        expandProgress: _expandAnimation.value,
-                        selectedId: state.selectedGenreId,
-                        isDark: Theme.of(context).brightness == Brightness.dark,
+    return _buildRefreshable(
+      Column(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: AnimatedBuilder(
+                animation: _expandAnimation,
+                builder: (context, _) {
+                  return GestureDetector(
+                    onTapUp: (details) => _onTapSunburst(details, context),
+                    child: RepaintBoundary(
+                      child: CustomPaint(
+                        painter: GenreSunburstPainter(
+                          roots: state.roots,
+                          expandProgress: _expandAnimation.value,
+                          selectedId: state.selectedGenreId,
+                          isDark:
+                              Theme.of(context).brightness == Brightness.dark,
+                        ),
+                        size: Size.infinite,
                       ),
-                      size: Size.infinite,
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
-        ),
-        if (state.selectedGenreId != null)
-          Expanded(
-            flex: 1,
-            child: _SelectedGenreBar(genreId: state.selectedGenreId!),
+          if (state.selectedGenreId != null)
+            Expanded(
+              flex: 1,
+              child: _SelectedGenreBar(genreId: state.selectedGenreId!),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRefreshable(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return RefreshIndicator(
+          onRefresh: () => ref.read(genreSunburstProvider.notifier).loadTree(),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(
+              height: constraints.maxHeight,
+              child: child,
+            ),
           ),
-      ],
+        );
+      },
     );
   }
 
@@ -124,7 +152,7 @@ class _GenresRootScreenState extends ConsumerState<GenresRootScreen>
       isDark: Theme.of(context).brightness == Brightness.dark,
     );
 
-    final sector = painter.hitTest(localPos, canvasSize);
+    final sector = painter.sectorAt(localPos, canvasSize);
     if (sector != null) {
       ref.read(genreSunburstProvider.notifier).selectGenre(sector.node.id);
     }
@@ -142,33 +170,36 @@ class _SelectedGenreBar extends ConsumerWidget {
 
     if (node == null) return const SizedBox.shrink();
 
-    return GlassCard(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  node.name,
-                  style: RaverTypography.title(),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: InkWell(
+        onTap: () => context.push('/genres/$genreId'),
+        borderRadius: BorderRadius.circular(16),
+        child: GlassCard(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      node.name,
+                      style: RaverTypography.title(),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      lt('点击查看详情', 'Tap to view details', '詳細を表示'),
+                      style: RaverTypography.caption(),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  lt('点击查看详情', 'Tap to view details', '詳細を表示'),
-                  style: RaverTypography.caption(),
-                ),
-              ],
-            ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded, size: 18),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.arrow_forward_ios_rounded, size: 18),
-            onPressed: () => context.push('/genres/$genreId'),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -229,7 +229,7 @@ class GenreSunburstPainter extends CustomPainter {
       isDark != oldDelegate.isDark ||
       maxDepth != oldDelegate.maxDepth;
 
-  SunburstSector? hitTest(Offset localPosition, Size size) {
+  SunburstSector? sectorAt(Offset localPosition, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final maxRadius = math.min(size.width, size.height) / 2 - 8;
     final ringWidth = maxRadius / (maxDepth + 0.5);

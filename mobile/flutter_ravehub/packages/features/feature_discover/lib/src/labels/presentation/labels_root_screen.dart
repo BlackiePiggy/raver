@@ -8,11 +8,33 @@ import 'package:raver_models/raver_models.dart';
 
 import 'label_view_model.dart';
 
-class LabelsRootScreen extends ConsumerWidget {
+class LabelsRootScreen extends ConsumerStatefulWidget {
   const LabelsRootScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LabelsRootScreen> createState() => _LabelsRootScreenState();
+}
+
+class _LabelsRootScreenState extends ConsumerState<LabelsRootScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: RaverMotion.normal,
+      curve: RaverMotion.curve,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(labelsProvider);
 
     if (state.isLoading && state.labels.isEmpty) {
@@ -34,18 +56,23 @@ class LabelsRootScreen extends ConsumerWidget {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () => ref.read(labelsProvider.notifier).loadLabels(),
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: state.labels.length,
-        itemBuilder: (context, index) {
-          final label = state.labels[index];
-          return _LabelTile(
-            label: label,
-            onTap: () => context.push('/labels/${label.id}'),
-          );
-        },
+    return RaverTabReselectionListener(
+      tabIndex: 0,
+      onReselected: _scrollToTop,
+      child: RefreshIndicator(
+        onRefresh: () => ref.read(labelsProvider.notifier).loadLabels(),
+        child: ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemCount: state.labels.length,
+          itemBuilder: (context, index) {
+            final label = state.labels[index];
+            return _LabelTile(
+              label: label,
+              onTap: () => context.push('/labels/${label.id}'),
+            );
+          },
+        ),
       ),
     );
   }

@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
+import 'package:raver_models/raver_models.dart';
+import 'package:raver_platform/raver_platform.dart';
 
+import '../data/organizer_api.dart';
 import 'organizer_view_model.dart';
 
 class FestivalDetailScreen extends ConsumerWidget {
@@ -18,6 +21,38 @@ class FestivalDetailScreen extends ConsumerWidget {
     return Scaffold(
       body: _buildBody(context, ref, state),
     );
+  }
+
+  Future<void> _shareFestival(
+    BuildContext context,
+    WidgetRef ref,
+    LearnFestival festival,
+  ) async {
+    final fallbackUrl = 'https://ravehub.top/festivals/${festival.id}';
+    try {
+      final payload = await ref
+          .read(organizerApiProvider)
+          .resolveShareLink(festival: festival, channel: 'system_share');
+      final shareUrl = payload.shortUrl.isNotEmpty
+          ? payload.shortUrl
+          : (payload.url.isNotEmpty ? payload.url : fallbackUrl);
+      await ShareService.shareUrl(shareUrl, subject: festival.name);
+    } catch (_) {
+      await ShareService.shareUrl(fallbackUrl, subject: festival.name);
+    }
+  }
+
+  Future<void> _openExternalUrl(BuildContext context, String url) async {
+    try {
+      await UrlLauncherService.openExternalUrl(url);
+    } catch (e) {
+      if (!context.mounted) return;
+      ToastBanner.show(
+        context,
+        message: e.toString(),
+        type: ToastType.error,
+      );
+    }
   }
 
   Widget _buildBody(
@@ -55,8 +90,8 @@ class FestivalDetailScreen extends ConsumerWidget {
               ? FlexibleSpaceBar(
                   title: Text(
                     festival.name,
-                    style: RaverTypography.title()
-                        .copyWith(color: Colors.white),
+                    style:
+                        RaverTypography.title().copyWith(color: Colors.white),
                   ),
                   background: CachedNetworkImage(
                     imageUrl: festival.imageUrls!.first,
@@ -67,6 +102,13 @@ class FestivalDetailScreen extends ConsumerWidget {
                 )
               : null,
           title: hasImages ? null : Text(festival.name),
+          actions: [
+            IconButton(
+              tooltip: lt('分享', 'Share', '共有'),
+              icon: const Icon(Icons.share_outlined),
+              onPressed: () => _shareFestival(context, ref, festival),
+            ),
+          ],
         ),
         SliverPadding(
           padding: const EdgeInsets.all(16),
@@ -91,12 +133,33 @@ class FestivalDetailScreen extends ConsumerWidget {
                       children: [
                         const Icon(Icons.people_outline, size: 18),
                         const SizedBox(width: 6),
-                        Text(
-                          '${festival.followerCount} ${lt("关注者", "followers", "フォロワー")}',
-                          style: RaverTypography.body(),
+                        Expanded(
+                          child: Text(
+                            '${festival.followerCount} ${lt("关注者", "followers", "フォロワー")}',
+                            style: RaverTypography.body(),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        _FestivalFollowButton(
+                          isFollowing: festival.isFollowing ?? false,
+                          isLoading: state.isFollowLoading,
+                          onPressed: () => ref
+                              .read(
+                                festivalDetailProvider(festivalId).notifier,
+                              )
+                              .toggleFollow(),
                         ),
                       ],
                     ),
+                    if (state.followError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        state.followError!,
+                        style: RaverTypography.caption().copyWith(
+                          color: Colors.red.shade300,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -107,8 +170,7 @@ class FestivalDetailScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               Text(festival.introduction, style: RaverTypography.body()),
-              if (festival.genres != null &&
-                  festival.genres!.isNotEmpty) ...[
+              if (festival.genres != null && festival.genres!.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 Text(
                   lt('流派', 'Genres', 'ジャンル'),
@@ -123,8 +185,7 @@ class FestivalDetailScreen extends ConsumerWidget {
                       .toList(),
                 ),
               ],
-              if (festival.aliases != null &&
-                  festival.aliases!.isNotEmpty) ...[
+              if (festival.aliases != null && festival.aliases!.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 Text(
                   lt('别名', 'Also known as', '別名'),
@@ -136,8 +197,7 @@ class FestivalDetailScreen extends ConsumerWidget {
                   style: RaverTypography.body(),
                 ),
               ],
-              if (festival.links != null &&
-                  festival.links!.isNotEmpty) ...[
+              if (festival.links != null && festival.links!.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 Text(
                   lt('链接', 'Links', 'リンク'),
@@ -147,20 +207,34 @@ class FestivalDetailScreen extends ConsumerWidget {
                 ...festival.links!.map(
                   (link) => Padding(
                     padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.link, size: 16),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            link.label,
-                            style: RaverTypography.label().copyWith(
-                              color: RaverColors.accent(
-                                  Theme.of(context).brightness),
+                    child: InkWell(
+                      onTap: link.url.isEmpty
+                          ? null
+                          : () => _openExternalUrl(context, link.url),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.link, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                link.label.isEmpty ? link.url : link.label,
+                                style: RaverTypography.label().copyWith(
+                                  color: RaverColors.accent(
+                                    Theme.of(context).brightness,
+                                  ),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
+                            if (link.url.isNotEmpty)
+                              const Icon(Icons.open_in_new_rounded, size: 16),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -169,6 +243,49 @@ class FestivalDetailScreen extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _FestivalFollowButton extends StatelessWidget {
+  const _FestivalFollowButton({
+    required this.isFollowing,
+    required this.isLoading,
+    required this.onPressed,
+  });
+
+  final bool isFollowing;
+  final bool isLoading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = RaverColors.accent(Theme.of(context).brightness);
+    return TextButton(
+      onPressed: isLoading ? null : onPressed,
+      style: TextButton.styleFrom(
+        backgroundColor: isFollowing ? accent.withValues(alpha: 0.45) : accent,
+        foregroundColor: Colors.white,
+        disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        minimumSize: const Size(64, 34),
+        shape: const StadiumBorder(),
+      ),
+      child: isLoading
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : Text(
+              isFollowing
+                  ? lt('已关注', 'Following', 'フォロー中')
+                  : lt('关注', 'Follow', 'フォロー'),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
     );
   }
 }

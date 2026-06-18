@@ -34,8 +34,7 @@ class Session {
       Session(
         token: token ?? this.token,
         refreshToken: refreshToken ?? this.refreshToken,
-        accessTokenExpiresIn:
-            accessTokenExpiresIn ?? this.accessTokenExpiresIn,
+        accessTokenExpiresIn: accessTokenExpiresIn ?? this.accessTokenExpiresIn,
         user: user ?? this.user,
       );
 
@@ -77,7 +76,7 @@ class UserSummary {
         id: json['id'] as String,
         username: json['username'] as String,
         displayName: json['displayName'] as String,
-        avatarUrl: json['avatarUrl'] as String?,
+        avatarUrl: json['avatarUrl'] as String? ?? json['avatarURL'] as String?,
         bio: json['bio'] as String?,
       );
 
@@ -128,6 +127,7 @@ class UserProfile {
   final String username;
   final String displayName;
   final String? avatarUrl;
+  final String? backgroundUrl;
   final String? bio;
   final int followerCount;
   final int followingCount;
@@ -142,6 +142,7 @@ class UserProfile {
     required this.username,
     required this.displayName,
     this.avatarUrl,
+    this.backgroundUrl,
     this.bio,
     required this.followerCount,
     required this.followingCount,
@@ -153,18 +154,48 @@ class UserProfile {
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
-        id: json['id'] as String,
-        username: json['username'] as String,
-        displayName: json['displayName'] as String,
-        avatarUrl: json['avatarUrl'] as String?,
-        bio: json['bio'] as String?,
-        followerCount: json['followerCount'] as int,
-        followingCount: json['followingCount'] as int,
-        friendCount: json['friendCount'] as int,
-        postCount: (json['postCount'] as int?) ?? 0,
-        ageBand: json['ageBand'] as String,
-        isFollowing: json['isFollowing'] as bool?,
-        isBlocked: json['isBlocked'] as bool?,
+        id: _stringFromJson(json, const ['id']),
+        username: _stringFromJson(json, const ['username']),
+        displayName: _stringFromJson(
+          json,
+          const ['displayName', 'display_name', 'name'],
+        ),
+        avatarUrl: _optionalStringFromJson(
+          json,
+          const ['avatarUrl', 'avatarURL', 'avatar_url'],
+        ),
+        backgroundUrl: json['backgroundUrl'] as String? ??
+            json['backgroundURL'] as String? ??
+            json['background_url'] as String? ??
+            json['backgroundImageUrl'] as String? ??
+            json['backgroundImageURL'] as String? ??
+            json['background_image_url'] as String?,
+        bio: _optionalStringFromJson(json, const ['bio']),
+        followerCount: _intFromJson(
+          json,
+          const ['followerCount', 'follower_count', 'followers'],
+        ),
+        followingCount: _intFromJson(
+          json,
+          const ['followingCount', 'following_count', 'followings'],
+        ),
+        friendCount: _intFromJson(
+          json,
+          const ['friendCount', 'friend_count', 'friends'],
+        ),
+        postCount: _intFromJson(
+          json,
+          const ['postCount', 'post_count', 'posts'],
+        ),
+        ageBand: _stringFromJson(json, const ['ageBand', 'age_band']),
+        isFollowing: _optionalBoolFromJson(
+          json,
+          const ['isFollowing', 'is_following'],
+        ),
+        isBlocked: _optionalBoolFromJson(
+          json,
+          const ['isBlocked', 'is_blocked'],
+        ),
       );
 
   Map<String, dynamic> toJson() => {
@@ -172,6 +203,7 @@ class UserProfile {
         'username': username,
         'displayName': displayName,
         if (avatarUrl != null) 'avatarUrl': avatarUrl,
+        if (backgroundUrl != null) 'backgroundUrl': backgroundUrl,
         if (bio != null) 'bio': bio,
         'followerCount': followerCount,
         'followingCount': followingCount,
@@ -187,6 +219,7 @@ class UserProfile {
     String? username,
     String? displayName,
     String? avatarUrl,
+    String? backgroundUrl,
     String? bio,
     int? followerCount,
     int? followingCount,
@@ -201,6 +234,7 @@ class UserProfile {
         username: username ?? this.username,
         displayName: displayName ?? this.displayName,
         avatarUrl: avatarUrl ?? this.avatarUrl,
+        backgroundUrl: backgroundUrl ?? this.backgroundUrl,
         bio: bio ?? this.bio,
         followerCount: followerCount ?? this.followerCount,
         followingCount: followingCount ?? this.followingCount,
@@ -219,6 +253,7 @@ class UserProfile {
         other.username == username &&
         other.displayName == displayName &&
         other.avatarUrl == avatarUrl &&
+        other.backgroundUrl == backgroundUrl &&
         other.bio == bio &&
         other.followerCount == followerCount &&
         other.followingCount == followingCount &&
@@ -234,6 +269,7 @@ class UserProfile {
         username,
         displayName,
         avatarUrl,
+        backgroundUrl,
         bio,
         followerCount,
         followingCount,
@@ -245,7 +281,7 @@ class UserProfile {
 
   @override
   String toString() =>
-      'UserProfile(id: $id, username: $username, displayName: $displayName, avatarUrl: $avatarUrl, bio: $bio, followerCount: $followerCount, followingCount: $followingCount, friendCount: $friendCount, ageBand: $ageBand, isFollowing: $isFollowing, isBlocked: $isBlocked)';
+      'UserProfile(id: $id, username: $username, displayName: $displayName, avatarUrl: $avatarUrl, backgroundUrl: $backgroundUrl, bio: $bio, followerCount: $followerCount, followingCount: $followingCount, friendCount: $friendCount, ageBand: $ageBand, isFollowing: $isFollowing, isBlocked: $isBlocked)';
 }
 
 class AuthSessionItem {
@@ -314,10 +350,53 @@ class AuthSessionItem {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, deviceInfo, ipAddress, lastActiveAt, createdAt, isCurrent);
+  int get hashCode => Object.hash(
+        id,
+        deviceInfo,
+        ipAddress,
+        lastActiveAt,
+        createdAt,
+        isCurrent,
+      );
 
   @override
   String toString() =>
       'AuthSessionItem(id: $id, deviceInfo: $deviceInfo, ipAddress: $ipAddress, lastActiveAt: $lastActiveAt, createdAt: $createdAt, isCurrent: $isCurrent)';
+}
+
+String _stringFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is String) return value;
+  }
+  return '';
+}
+
+String? _optionalStringFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is String) return value;
+  }
+  return null;
+}
+
+int _intFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+  }
+  return 0;
+}
+
+bool? _optionalBoolFromJson(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is bool) return value;
+  }
+  return null;
 }

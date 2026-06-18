@@ -95,8 +95,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   color: Colors.black.withValues(alpha: 0.4),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.arrow_back,
-                    color: Colors.white, size: 20),
+                child:
+                    const Icon(Icons.arrow_back, color: Colors.white, size: 20),
               ),
               onPressed: () => context.pop(),
             ),
@@ -107,17 +107,43 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
             ],
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      theme.accent.withValues(alpha: 0.3),
-                      theme.accent.withValues(alpha: 0.05),
-                    ],
+              background: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (profile.backgroundUrl != null &&
+                      profile.backgroundUrl!.isNotEmpty)
+                    RemoteCoverImage(
+                      url: profile.backgroundUrl!,
+                      fit: BoxFit.cover,
+                    )
+                  else
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            theme.accent.withValues(alpha: 0.3),
+                            theme.accent.withValues(alpha: 0.05),
+                          ],
+                        ),
+                      ),
+                    ),
+                  Container(color: Colors.black.withValues(alpha: 0.18)),
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      height: 64,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Colors.transparent, theme.background],
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
@@ -137,6 +163,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     child: Column(
                       children: [
                         ProfileStatsRow(
+                          postCount: profile.postCount,
                           followingCount: profile.followingCount,
                           followerCount: profile.followerCount,
                           friendCount: profile.friendCount,
@@ -146,6 +173,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           onFollowersTap: () => context.push(
                             '/users/${widget.userId}/follow-list/followers',
                           ),
+                          onFriendsTap: () => context.push(
+                            '/users/${widget.userId}/follow-list/friends',
+                          ),
                         ),
                         const SizedBox(height: 16),
 
@@ -154,15 +184,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           width: double.infinity,
                           child: _viewModel.isTogglingFollow
                               ? const Center(
-                                  child:
-                                      CircularProgressIndicator.adaptive(),
+                                  child: CircularProgressIndicator.adaptive(),
                                 )
                               : _viewModel.isFollowing
                                   ? OutlinedButton(
                                       onPressed: _viewModel.toggleFollow,
                                       style: OutlinedButton.styleFrom(
-                                        side: BorderSide(
-                                            color: theme.cardBorder),
+                                        side:
+                                            BorderSide(color: theme.cardBorder),
                                         shape: RoundedRectangleBorder(
                                           borderRadius:
                                               BorderRadius.circular(20),
@@ -171,8 +200,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                             vertical: 10),
                                       ),
                                       child: Text(
-                                        lt('已关注', 'Following',
-                                            'フォロー中'),
+                                        lt('已关注', 'Following', 'フォロー中'),
                                         style: RaverTypography.label(
                                           size: 14,
                                           color: theme.primaryText,
@@ -181,8 +209,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                       ),
                                     )
                                   : PrimaryButton(
-                                      label: lt(
-                                          '关注', 'Follow', 'フォロー'),
+                                      label: lt('关注', 'Follow', 'フォロー'),
                                       onPressed: _viewModel.toggleFollow,
                                       isExpanded: true,
                                       height: 40,
@@ -228,14 +255,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   if (index >= _viewModel.posts.length) {
                     return const Padding(
                       padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Center(
-                          child: CircularProgressIndicator.adaptive()),
+                      child:
+                          Center(child: CircularProgressIndicator.adaptive()),
                     );
                   }
                   final post = _viewModel.posts[index];
                   return Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                     child: PostCardView(
                       post: PostCardData(
                         id: post.id,
@@ -244,6 +271,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         content: post.content,
                         createdAt: post.createdAt,
                         images: post.images ?? [],
+                        videos: post.videos ?? [],
                         likeCount: post.likeCount,
                         commentCount: post.commentCount,
                         shareCount: post.shareCount,
@@ -277,8 +305,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               leading: Icon(Icons.flag_outlined, color: theme.primaryText),
               title: Text(
                 lt('举报', 'Report', '通報'),
-                style: RaverTypography.body(
-                    size: 16, color: theme.primaryText),
+                style: RaverTypography.body(size: 16, color: theme.primaryText),
               ),
               onTap: () {
                 Navigator.pop(ctx);
@@ -290,8 +317,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   const Icon(Icons.block_outlined, color: Colors.redAccent),
               title: Text(
                 lt('拉黑', 'Block', 'ブロック'),
-                style: RaverTypography.body(
-                    size: 16, color: Colors.redAccent),
+                style: RaverTypography.body(size: 16, color: Colors.redAccent),
               ),
               onTap: () {
                 Navigator.pop(ctx);
@@ -302,8 +328,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             ListTile(
               title: Text(
                 lt('取消', 'Cancel', 'キャンセル'),
-                style: RaverTypography.body(
-                    size: 16, color: theme.secondaryText),
+                style:
+                    RaverTypography.body(size: 16, color: theme.secondaryText),
                 textAlign: TextAlign.center,
               ),
               onTap: () => Navigator.pop(ctx),
@@ -324,11 +350,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           style: RaverTypography.title(color: theme.primaryText),
         ),
         content: Text(
-          lt('拉黑后将不再看到该用户的内容',
-              'You will no longer see content from this user',
+          lt('拉黑后将不再看到该用户的内容', 'You will no longer see content from this user',
               'ブロックすると、このユーザーのコンテンツが表示されなくなります'),
-          style: RaverTypography.body(
-              size: 14, color: theme.secondaryText),
+          style: RaverTypography.body(size: 14, color: theme.secondaryText),
         ),
         actions: [
           TextButton(

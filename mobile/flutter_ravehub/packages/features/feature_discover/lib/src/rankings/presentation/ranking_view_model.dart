@@ -68,19 +68,38 @@ class RankingDetailState {
   final int? selectedYear;
 }
 
+class RankingDetailRequest {
+  const RankingDetailRequest({required this.boardId, this.year});
+
+  final String boardId;
+  final int? year;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is RankingDetailRequest &&
+        other.boardId == boardId &&
+        other.year == year;
+  }
+
+  @override
+  int get hashCode => Object.hash(boardId, year);
+}
+
 class RankingDetailNotifier extends StateNotifier<RankingDetailState> {
-  RankingDetailNotifier(this._api, this._boardId)
+  RankingDetailNotifier(this._api, this._request)
       : super(const RankingDetailState()) {
-    _load();
+    _load(year: _request.year);
   }
 
   final RankingApi _api;
-  final String _boardId;
+  final RankingDetailRequest _request;
 
   Future<void> _load({int? year}) async {
     state = RankingDetailState(isLoading: true, selectedYear: year);
     try {
-      final detail = await _api.fetchRankingDetail(_boardId, year: year);
+      final detail =
+          await _api.fetchRankingDetail(_request.boardId, year: year);
       state = RankingDetailState(detail: detail, selectedYear: year);
     } catch (e) {
       state = RankingDetailState(error: e.toString(), selectedYear: year);
@@ -92,9 +111,9 @@ class RankingDetailNotifier extends StateNotifier<RankingDetailState> {
 }
 
 final rankingDetailProvider = StateNotifierProvider.autoDispose
-    .family<RankingDetailNotifier, RankingDetailState, String>(
-  (ref, boardId) {
+    .family<RankingDetailNotifier, RankingDetailState, RankingDetailRequest>(
+  (ref, request) {
     final api = ref.watch(rankingApiProvider);
-    return RankingDetailNotifier(api, boardId);
+    return RankingDetailNotifier(api, request);
   },
 );

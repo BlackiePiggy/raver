@@ -37,7 +37,7 @@ class CheckinViewModel extends ChangeNotifier {
       _phase = LoadPhase.success(_overview!);
       await _loadCheckins();
     } catch (e) {
-      _phase = LoadPhase.failure(e);
+      _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }
@@ -48,7 +48,7 @@ class CheckinViewModel extends ChangeNotifier {
       _phase = LoadPhase.success(_overview!);
       await _loadCheckins();
     } catch (e) {
-      if (_overview == null) _phase = LoadPhase.failure(e);
+      if (_overview == null) _phase = LoadPhase.fromError(e);
     }
     notifyListeners();
   }

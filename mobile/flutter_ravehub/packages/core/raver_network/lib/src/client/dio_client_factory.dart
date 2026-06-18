@@ -28,6 +28,7 @@ class DioClientFactory {
     required SessionTokenStore tokenStore,
     required AuthRefreshGate refreshGate,
     required String Function() languageProvider,
+    SessionExpiredCallback? onSessionExpired,
   }) {
     final dio = Dio(
       BaseOptions(
@@ -43,6 +44,7 @@ class DioClientFactory {
         tokenStore: tokenStore,
         refreshGate: refreshGate,
         dio: dio,
+        onSessionExpired: onSessionExpired,
       ),
       LanguageInterceptor(languageProvider: languageProvider),
       BffEnvelopeInterceptor(),

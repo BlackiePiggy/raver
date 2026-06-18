@@ -5,6 +5,7 @@ import 'package:raver_models/raver_models.dart';
 
 import '../data/inbox_service_locator.dart';
 import 'view_models/inbox_view_model.dart';
+import 'widgets/refreshable_empty_state.dart';
 
 /// Screen showing community alert notifications for a specific category.
 ///
@@ -72,9 +73,12 @@ class _AlertCategoryScreenState extends State<AlertCategoryScreen> {
       body: LoadPhaseBuilder<List<AppNotification>>(
         phase: _viewModel.alertsPhase,
         onLoading: () => const _AlertsSkeleton(),
-        onEmpty: () => EmptyStateView(
-          icon: Icons.notifications_none,
-          title: lt('暂无通知', 'No Notifications', '通知はありません'),
+        onEmpty: () => RefreshableEmptyState(
+          onRefresh: _viewModel.refreshAlerts,
+          child: EmptyStateView(
+            icon: Icons.notifications_none,
+            title: lt('暂无通知', 'No Notifications', '通知はありません'),
+          ),
         ),
         onFailure: (error) => ErrorStateView(
           title: lt('加载失败', 'Failed to Load', '読み込みに失敗しました'),
@@ -87,6 +91,7 @@ class _AlertCategoryScreenState extends State<AlertCategoryScreen> {
           onRefresh: _viewModel.refreshAlerts,
           child: ListView.separated(
             controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             itemCount: _viewModel.alerts.length +
                 (_viewModel.canLoadMoreAlerts ? 1 : 0),
@@ -158,9 +163,8 @@ class _AlertTile extends StatelessWidget {
                   style: RaverTypography.label(
                     size: 14,
                     color: theme.primaryText,
-                    weight: notification.isRead
-                        ? FontWeight.w400
-                        : FontWeight.w600,
+                    weight:
+                        notification.isRead ? FontWeight.w400 : FontWeight.w600,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

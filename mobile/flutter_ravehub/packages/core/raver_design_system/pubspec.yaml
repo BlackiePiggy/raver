@@ -14,6 +14,8 @@ dependencies:
     path: ../raver_models
   raver_i18n:
     path: ../raver_i18n
+  raver_platform:
+    path: ../raver_platform
   flutter:
     sdk: flutter
   cached_network_image: ^3.4.0

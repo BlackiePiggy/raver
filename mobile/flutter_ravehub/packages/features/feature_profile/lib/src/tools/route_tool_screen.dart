@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:raver_design_system/raver_design_system.dart';
 import 'package:raver_i18n/raver_i18n.dart';
+import 'package:raver_platform/raver_platform.dart';
 
 /// Route tool screen for navigation assistance.
 class RouteToolScreen extends StatefulWidget {
@@ -21,6 +22,48 @@ class _RouteToolScreenState extends State<RouteToolScreen> {
     _startController.dispose();
     _endController.dispose();
     super.dispose();
+  }
+
+  Future<void> _startNavigation() async {
+    final destination = _endController.text.trim();
+    if (destination.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(lt('请输入终点', 'Enter a destination', '目的地を入力してください')),
+        ),
+      );
+      return;
+    }
+
+    final origin = _useCurrentLocation ? null : _startController.text.trim();
+    if (!_useCurrentLocation && (origin == null || origin.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(lt('请输入起点', 'Enter a start location', '出発地を入力してください')),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await MapLauncher.openRoute(
+        originQuery: origin,
+        destinationQuery: destination,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            lt(
+              '无法打开地图应用，请稍后重试',
+              'Unable to open Maps. Please try again.',
+              'マップを開けませんでした。もう一度お試しください。',
+            ),
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -61,7 +104,9 @@ class _RouteToolScreenState extends State<RouteToolScreen> {
                 Text(
                   lt('使用当前位置', 'Use current location', '現在地を使用'),
                   style: RaverTypography.body(
-                      size: 14, color: theme.primaryText),
+                    size: 14,
+                    color: theme.primaryText,
+                  ),
                 ),
               ],
             ),
@@ -69,8 +114,7 @@ class _RouteToolScreenState extends State<RouteToolScreen> {
               TextField(
                 controller: _startController,
                 decoration: InputDecoration(
-                  hintText: lt('输入起点', 'Enter start location',
-                      '出発地を入力'),
+                  hintText: lt('输入起点', 'Enter start location', '出発地を入力'),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(color: theme.cardBorder),
@@ -97,8 +141,11 @@ class _RouteToolScreenState extends State<RouteToolScreen> {
             TextField(
               controller: _endController,
               decoration: InputDecoration(
-                hintText: lt('搜索场馆或活动', 'Search venue or event',
-                    '会場またはイベントを検索'),
+                hintText: lt(
+                  '搜索场馆或活动',
+                  'Search venue or event',
+                  '会場またはイベントを検索',
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: theme.cardBorder),
@@ -116,15 +163,7 @@ class _RouteToolScreenState extends State<RouteToolScreen> {
             PrimaryButton(
               label: lt('开始导航', 'Start Navigation', 'ナビ開始'),
               icon: Icons.navigation_outlined,
-              onPressed: () {
-                // TODO: Integrate MapLauncher
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(lt('导航功能开发中',
-                        'Navigation coming soon', 'ナビ機能開発中')),
-                  ),
-                );
-              },
+              onPressed: _startNavigation,
               isExpanded: true,
             ),
           ],

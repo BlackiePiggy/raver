@@ -1,0 +1,51 @@
+name: Flutter Guards
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+      - 'codex/**'
+
+jobs:
+  live-service-guards:
+    name: Live service guards
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Reject legacy social endpoints
+        run: bash app/scripts/validate_no_legacy_social_endpoints.sh
+
+      - name: Reject mocks and old endpoints
+        run: bash app/scripts/validate_no_mock_or_old_endpoints.sh
+
+  ios-simulator-build:
+    name: iOS simulator debug build
+    runs-on: macos-latest
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Dart and Flutter dependencies
+        run: flutter pub get
+
+      - name: Build iOS simulator app
+        run: flutter build ios --debug --simulator

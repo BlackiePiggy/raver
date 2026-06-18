@@ -17,5 +17,6 @@ dependencies:
 
 dev_dependencies:
   very_good_analysis: ^6.0.0
+  flutter_secure_storage: ^9.2.0
   flutter_test:
     sdk: flutter

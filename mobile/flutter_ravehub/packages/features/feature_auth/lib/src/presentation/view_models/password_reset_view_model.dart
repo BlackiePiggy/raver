@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../data/auth_api.dart';
+import '../../data/auth_error_message.dart';
 import '../../data/auth_service_locator.dart';
 
 /// Immutable snapshot of the password-reset form state.
@@ -83,7 +84,7 @@ class PasswordResetNotifier extends ChangeNotifier {
     } catch (e) {
       _state = _state.copyWith(
         isLoading: false,
-        errorMessage: e.toString(),
+        errorMessage: authUserFacingError(e),
       );
     }
     notifyListeners();

@@ -101,8 +101,7 @@ class _QuizFlowScreenState extends State<QuizFlowScreen> {
             const SizedBox(height: 16),
             Text(
               lt('正在提交...', 'Submitting...', '送信中...'),
-              style: RaverTypography.body(
-                  size: 16, color: theme.secondaryText),
+              style: RaverTypography.body(size: 16, color: theme.secondaryText),
             ),
           ],
         ),
@@ -129,8 +128,8 @@ class _QuizFlowScreenState extends State<QuizFlowScreen> {
                   ),
                   // Timer
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: _viewModel.remainingSeconds <= 10
                           ? Colors.redAccent.withValues(alpha: 0.12)
@@ -156,8 +155,7 @@ class _QuizFlowScreenState extends State<QuizFlowScreen> {
                 child: LinearProgressIndicator(
                   value: _viewModel.progress,
                   backgroundColor: theme.cardBorder,
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(theme.accent),
+                  valueColor: AlwaysStoppedAnimation<Color>(theme.accent),
                   minHeight: 6,
                 ),
               ),
@@ -207,10 +205,10 @@ class _QuizFlowScreenState extends State<QuizFlowScreen> {
               ],
               Expanded(
                 child: PrimaryButton(
-                  label: _viewModel.currentIndex ==
-                          _viewModel.totalQuestions - 1
-                      ? lt('提交', 'Submit', '送信')
-                      : lt('下一题', 'Next', '次の問題'),
+                  label:
+                      _viewModel.currentIndex == _viewModel.totalQuestions - 1
+                          ? lt('提交', 'Submit', '送信')
+                          : lt('下一题', 'Next', '次の問題'),
                   onPressed: _viewModel.currentAnswer != null
                       ? _viewModel.nextQuestion
                       : null,
@@ -230,7 +228,9 @@ class _QuizFlowScreenState extends State<QuizFlowScreen> {
     int questionIndex,
   ) {
     final text = question['text'] as String? ?? '';
+    final stemImageUrl = question['stemImageUrl'] as String?;
     final options = (question['options'] as List<dynamic>?) ?? [];
+    final optionImages = (question['optionImages'] as List<dynamic>?) ?? [];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -244,10 +244,27 @@ class _QuizFlowScreenState extends State<QuizFlowScreen> {
               color: theme.primaryText,
             ),
           ),
+          if (_isRenderableImageUrl(stemImageUrl)) ...[
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Image.network(
+                  stemImageUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 20),
           ...options.asMap().entries.map((entry) {
             final optionIndex = entry.key;
             final option = entry.value as String? ?? '';
+            final optionImageUrl = optionIndex < optionImages.length
+                ? optionImages[optionIndex] as String?
+                : null;
             final isSelected = _viewModel.currentAnswer == optionIndex;
 
             return Padding(
@@ -273,14 +290,10 @@ class _QuizFlowScreenState extends State<QuizFlowScreen> {
                         width: 28,
                         height: 28,
                         decoration: BoxDecoration(
-                          color: isSelected
-                              ? theme.accent
-                              : Colors.transparent,
+                          color: isSelected ? theme.accent : Colors.transparent,
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: isSelected
-                                ? theme.accent
-                                : theme.cardBorder,
+                            color: isSelected ? theme.accent : theme.cardBorder,
                             width: 2,
                           ),
                         ),
@@ -291,12 +304,33 @@ class _QuizFlowScreenState extends State<QuizFlowScreen> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(
-                          option,
-                          style: RaverTypography.body(
-                            size: 15,
-                            color: theme.primaryText,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (option.isNotEmpty)
+                              Text(
+                                option,
+                                style: RaverTypography.body(
+                                  size: 15,
+                                  color: theme.primaryText,
+                                ),
+                              ),
+                            if (_isRenderableImageUrl(optionImageUrl)) ...[
+                              if (option.isNotEmpty) const SizedBox(height: 10),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: AspectRatio(
+                                  aspectRatio: 16 / 9,
+                                  child: Image.network(
+                                    optionImageUrl!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        const SizedBox.shrink(),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ],
@@ -308,5 +342,11 @@ class _QuizFlowScreenState extends State<QuizFlowScreen> {
         ],
       ),
     );
+  }
+
+  bool _isRenderableImageUrl(String? value) {
+    if (value == null || value.trim().isEmpty) return false;
+    final uri = Uri.tryParse(value.trim());
+    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
   }
 }

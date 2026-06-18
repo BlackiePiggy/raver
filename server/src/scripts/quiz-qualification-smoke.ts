@@ -21,8 +21,32 @@ const main = async (): Promise<void> => {
   const { accountQualificationService } = await import('../services/account-qualification.service');
 
   const prisma = new PrismaClient();
+  let originalConfig:
+    | {
+        id: string;
+        isEnabled: boolean;
+        questionCount: number;
+        passCorrectCount: number;
+        dailyAttemptLimit: number;
+        defaultTimeLimitSec: number;
+        dailyLimitTimeZone: string;
+        allowRetakeAfterPass: boolean;
+        allowRestartDuringSession: boolean;
+        debugQuestionIds: string[];
+      }
+    | null = null;
   const TEMP_EMAIL = 'quiz-smoke-user@local.test';
   const TEMP_USERNAME = 'quiz_smoke_user';
+  const STANDARD_TEXT_QUESTION_COUNT = 15;
+  const STANDARD_IMAGE_QUESTION_COUNT = 5;
+  const STANDARD_QUESTION_COUNT = STANDARD_TEXT_QUESTION_COUNT + STANDARD_IMAGE_QUESTION_COUNT;
+  const SMOKE_IMAGE_DATA_URL =
+    'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%221%22 height=%221%22%3E%3C/svg%3E';
+
+  type SnapshotQuestion = {
+    questionId: string;
+    correctOptionId: string;
+  };
 
   const assert = (condition: boolean, message: string): void => {
     if (!condition) {
@@ -53,12 +77,55 @@ const main = async (): Promise<void> => {
     return created.id;
   };
 
+  const createSmokeQuestion = async (index: number, isImageQuestion: boolean): Promise<void> => {
+    const question = await prisma.quizQuestion.create({
+      data: {
+        status: QuizQuestionStatus.active,
+        type: QuizQuestionType.single_choice,
+        stemText: `Smoke question ${index + 1}`,
+        stemImageUrl: isImageQuestion ? SMOKE_IMAGE_DATA_URL : null,
+        timeLimitSec: 20,
+        sortOrder: 10_000 + index,
+      },
+      select: { id: true },
+    });
+
+    const optionA = await prisma.quizQuestionOption.create({
+      data: {
+        questionId: question.id,
+        text: 'Option A',
+        sortOrder: 0,
+      },
+      select: { id: true },
+    });
+
+    await prisma.quizQuestionOption.createMany({
+      data: [
+        {
+          questionId: question.id,
+          text: 'Option B',
+          sortOrder: 1,
+        },
+        {
+          questionId: question.id,
+          text: 'Option C',
+          sortOrder: 2,
+        },
+      ],
+    });
+
+    await prisma.quizQuestion.update({
+      where: { id: question.id },
+      data: { correctOptionId: optionA.id },
+    });
+  };
+
   const ensureQuizPool = async (): Promise<void> => {
-    const config = await prisma.quizConfig.upsert({
+    await prisma.quizConfig.upsert({
       where: { id: 'default' },
       update: {
         isEnabled: true,
-        questionCount: 20,
+        questionCount: STANDARD_QUESTION_COUNT,
         passCorrectCount: 16,
         dailyAttemptLimit: 20,
         defaultTimeLimitSec: 20,
@@ -68,7 +135,7 @@ const main = async (): Promise<void> => {
       create: {
         id: 'default',
         isEnabled: true,
-        questionCount: 20,
+        questionCount: STANDARD_QUESTION_COUNT,
         passCorrectCount: 16,
         dailyAttemptLimit: 20,
         defaultTimeLimitSec: 20,
@@ -78,55 +145,45 @@ const main = async (): Promise<void> => {
       },
     });
 
-    const existingCount = await prisma.quizQuestion.count({
+    const existingQuestions = await prisma.quizQuestion.findMany({
       where: {
         status: QuizQuestionStatus.active,
         type: QuizQuestionType.single_choice,
+        correctOptionId: { not: null },
+      },
+      select: {
+        correctOptionId: true,
+        stemImageUrl: true,
+        options: {
+          select: {
+            id: true,
+            imageUrl: true,
+          },
+        },
       },
     });
+    const eligibleQuestions = existingQuestions.filter((question) => {
+      return question.options.some((option) => option.id === question.correctOptionId);
+    });
+    const imageQuestionCount = eligibleQuestions.filter((question) => {
+      return Boolean(question.stemImageUrl) || question.options.some((option) => Boolean(option.imageUrl));
+    }).length;
+    const textQuestionCount = eligibleQuestions.length - imageQuestionCount;
 
-    const needed = Math.max(0, config.questionCount - existingCount);
-    for (let index = 0; index < needed; index += 1) {
-      const question = await prisma.quizQuestion.create({
-        data: {
-          status: QuizQuestionStatus.active,
-          type: QuizQuestionType.single_choice,
-          stemText: `Smoke question ${index + 1}`,
-          timeLimitSec: 20,
-          sortOrder: 10_000 + index,
-        },
-        select: { id: true },
-      });
-
-      const optionA = await prisma.quizQuestionOption.create({
-        data: {
-          questionId: question.id,
-          text: 'Option A',
-          sortOrder: 0,
-        },
-        select: { id: true },
-      });
-
-      await prisma.quizQuestionOption.createMany({
-        data: [
-          {
-            questionId: question.id,
-            text: 'Option B',
-            sortOrder: 1,
-          },
-          {
-            questionId: question.id,
-            text: 'Option C',
-            sortOrder: 2,
-          },
-        ],
-      });
-
-      await prisma.quizQuestion.update({
-        where: { id: question.id },
-        data: { correctOptionId: optionA.id },
-      });
+    const textNeeded = Math.max(0, STANDARD_TEXT_QUESTION_COUNT - textQuestionCount);
+    const imageNeeded = Math.max(0, STANDARD_IMAGE_QUESTION_COUNT - imageQuestionCount);
+    for (let index = 0; index < textNeeded; index += 1) {
+      await createSmokeQuestion(index, false);
     }
+    for (let index = 0; index < imageNeeded; index += 1) {
+      await createSmokeQuestion(textNeeded + index, true);
+    }
+  };
+
+  const countImageQuestions = (questions: Array<{ stemImageUrl: string | null; options: Array<{ imageUrl: string | null }> }>): number => {
+    return questions.filter((question) => {
+      return Boolean(question.stemImageUrl) || question.options.some((option) => Boolean(option.imageUrl));
+    }).length;
   };
 
   const cleanupUserQuizState = async (userId: string): Promise<void> => {
@@ -135,8 +192,47 @@ const main = async (): Promise<void> => {
     await prisma.quizUserPolicyOverride.deleteMany({ where: { userId } });
   };
 
+  const readSnapshotQuestions = async (sessionId: string): Promise<SnapshotQuestion[]> => {
+    const session = await prisma.quizSession.findUnique({
+      where: { id: sessionId },
+      select: { questionSnapshot: true },
+    });
+    const raw = session?.questionSnapshot as unknown as { questions?: SnapshotQuestion[] } | null;
+    assert(Array.isArray(raw?.questions), 'session snapshot questions should be an array');
+    return raw?.questions ?? [];
+  };
+
   try {
     logStage('boot', { usingDirectUrl: Boolean(directDatabaseUrl) });
+
+    originalConfig = await prisma.quizConfig.upsert({
+      where: { id: 'default' },
+      update: {},
+      create: {
+        id: 'default',
+        isEnabled: true,
+        questionCount: STANDARD_QUESTION_COUNT,
+        passCorrectCount: 16,
+        dailyAttemptLimit: 3,
+        defaultTimeLimitSec: 20,
+        dailyLimitTimeZone: 'Asia/Shanghai',
+        allowRetakeAfterPass: true,
+        allowRestartDuringSession: true,
+        debugQuestionIds: [],
+      },
+      select: {
+        id: true,
+        isEnabled: true,
+        questionCount: true,
+        passCorrectCount: true,
+        dailyAttemptLimit: true,
+        defaultTimeLimitSec: true,
+        dailyLimitTimeZone: true,
+        allowRetakeAfterPass: true,
+        allowRestartDuringSession: true,
+        debugQuestionIds: true,
+      },
+    });
 
     logStage('ensureTestUser:start');
     const userId = await ensureTestUser();
@@ -173,7 +269,8 @@ const main = async (): Promise<void> => {
       sessionId: session.sessionId,
       questionCount: session.questions.length,
     });
-    assert(session.questions.length === 20, 'session should contain 20 questions');
+    assert(session.questions.length === STANDARD_QUESTION_COUNT, 'session should contain 20 questions');
+    assert(countImageQuestions(session.questions) === STANDARD_IMAGE_QUESTION_COUNT, 'session should contain 5 image questions');
     assert(
       session.questions.every((question) => !('correctOptionId' in (question as Record<string, unknown>))),
       'client session payload must not expose correctOptionId'
@@ -212,6 +309,10 @@ const main = async (): Promise<void> => {
       submitSession.questions.every((question) => !('correctOptionId' in (question as Record<string, unknown>))),
       'submit session payload must not expose correctOptionId'
     );
+    assert(
+      countImageQuestions(submitSession.questions) === STANDARD_IMAGE_QUESTION_COUNT,
+      'submit session should contain 5 image questions'
+    );
 
     logStage('getQuizStatus:afterSecondStart:start');
     const statusAfterSecondStart = await getQuizStatus(userId);
@@ -225,9 +326,11 @@ const main = async (): Promise<void> => {
       'active session id should match second session'
     );
 
+    const snapshotQuestions = await readSnapshotQuestions(submitSession.sessionId);
+    const snapshotById = new Map(snapshotQuestions.map((question) => [question.questionId, question]));
     const answers = submitSession.questions.map((question, index) => ({
       questionId: question.questionId,
-      optionId: index < 16 ? question.options[0]?.optionId ?? null : null,
+      optionId: index < 16 ? snapshotById.get(question.questionId)?.correctOptionId ?? null : null,
     }));
 
     logStage('submitQuizSession:start');
@@ -279,6 +382,29 @@ const main = async (): Promise<void> => {
     }
     process.exitCode = 1;
   } finally {
+    if (originalConfig) {
+      try {
+        await prisma.quizConfig.upsert({
+          where: { id: originalConfig.id },
+          update: {
+            isEnabled: originalConfig.isEnabled,
+            questionCount: originalConfig.questionCount,
+            passCorrectCount: originalConfig.passCorrectCount,
+            dailyAttemptLimit: originalConfig.dailyAttemptLimit,
+            defaultTimeLimitSec: originalConfig.defaultTimeLimitSec,
+            dailyLimitTimeZone: originalConfig.dailyLimitTimeZone,
+            allowRetakeAfterPass: originalConfig.allowRetakeAfterPass,
+            allowRestartDuringSession: originalConfig.allowRestartDuringSession,
+            debugQuestionIds: originalConfig.debugQuestionIds,
+          },
+          create: originalConfig,
+        });
+      } catch (restoreError) {
+        console.error('[quiz-qualification-smoke] failed to restore config', restoreError);
+        process.exitCode = 1;
+      }
+    }
+
     await prisma.$disconnect();
   }
 };
