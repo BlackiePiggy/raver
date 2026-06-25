@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowUpRight, X, Send } from 'lucide-react';
+import { ArrowUpRight, Instagram, Twitter, Linkedin, Mail, X, Send } from 'lucide-react';
 
 export const Footer = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -22,7 +22,7 @@ export const Footer = () => {
                 viewport={{ once: true }}
                 className="mb-10 text-5xl font-medium leading-none tracking-tight md:mb-12 md:text-8xl md:leading-[0.9] md:tracking-tighter"
               >
-                Let&apos;s <br />
+                Let's <br />
                 <span className="italic font-serif text-neutral-500">Talk</span>
               </motion.h2>
               
@@ -147,7 +147,7 @@ const ContactModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
                   <Send className="w-8 h-8 text-black" />
                 </motion.div>
                 <h3 className="text-3xl font-medium mb-2">Message Sent</h3>
-                <p className="text-neutral-400 font-light">We&apos;ll be in touch shortly.</p>
+                <p className="text-neutral-400 font-light">We'll be in touch shortly.</p>
               </div>
             ) : (
               <div className="mt-12">
@@ -157,7 +157,7 @@ const ContactModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
                   <span className="italic font-serif text-neutral-500">Project</span>
                 </h3>
                 <p className="text-neutral-400 font-light mb-12">
-                  Tell us about your vision. We&apos;ll help you build it.
+                  Tell us about your vision. We'll help you build it.
                 </p>
 
                 <form onSubmit={handleSubmit} className="space-y-12">

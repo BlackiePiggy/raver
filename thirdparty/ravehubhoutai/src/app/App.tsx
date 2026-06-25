@@ -27,7 +27,7 @@ const FullPageScrollController = () => {
     let isJumping = false;
     let lastJumpAt = 0;
     let gestureLocked = false;
-    let gestureUnlockTimer: number | undefined;
+    let gestureUnlockTimer: ReturnType<typeof window.setTimeout> | undefined;
     let touchStartX: number | null = null;
     let touchStartY: number | null = null;
     let touchLastX: number | null = null;

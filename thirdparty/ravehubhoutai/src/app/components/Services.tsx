@@ -10,13 +10,6 @@ import {
 
 const shouldPreloadNeighbor = (index: number, current: number) => Math.abs(index - current) === 1;
 
-const VideoLoadingOverlay = () => (
-  <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black/55 text-white backdrop-blur-[2px]">
-    <div className="h-8 w-8 rounded-full border-2 border-white/25 border-t-white animate-spin" />
-    <span className="text-[0.65rem] font-mono uppercase tracking-[0.22em] text-white/80">视频加载中</span>
-  </div>
-);
-
 const SmartPhoneVideo = ({
   src,
   active,
@@ -25,13 +18,10 @@ const SmartPhoneVideo = ({
   active: boolean;
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-
-    setLoading(video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA);
 
     if (!active) {
       video.pause();
@@ -45,25 +35,16 @@ const SmartPhoneVideo = ({
   }, [active, src]);
 
   return (
-    <>
-      <video
-        ref={videoRef}
-        src={src}
-        autoPlay={active}
-        loop
-        muted
-        playsInline
-        preload={active ? 'auto' : 'metadata'}
-        onLoadStart={() => setLoading(true)}
-        onWaiting={() => setLoading(true)}
-        onStalled={() => setLoading(true)}
-        onCanPlay={() => setLoading(false)}
-        onLoadedData={() => setLoading(false)}
-        onPlaying={() => setLoading(false)}
-        className="absolute inset-0 h-full w-full object-cover"
-      />
-      {loading && <VideoLoadingOverlay />}
-    </>
+    <video
+      ref={videoRef}
+      src={src}
+      autoPlay={active}
+      loop
+      muted
+      playsInline
+      preload={active ? 'auto' : 'metadata'}
+      className="absolute inset-0 w-full h-full object-cover"
+    />
   );
 };
 
@@ -198,81 +179,6 @@ const PhoneMockup = ({
   );
 };
 
-const getCapabilityGalleryImages = (item: Capability) => (
-  item.galleryImages.length > 0
-    ? item.galleryImages
-    : item.appScreen
-      ? [item.appScreen]
-      : []
-);
-
-const GalleryShowcase = ({
-  item,
-  compact = false,
-}: {
-  item: Capability;
-  compact?: boolean;
-}) => {
-  const [a, b] = item.accent;
-  const images = getCapabilityGalleryImages(item).slice(0, 8);
-
-  if (images.length === 0) {
-    return (
-      <div
-        className="flex min-h-[22rem] w-full items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-8 text-center text-sm text-neutral-500"
-        style={{ boxShadow: `0 0 42px ${item.glowColor}` }}
-      >
-        Gallery Screens
-      </div>
-    );
-  }
-
-  return (
-    <div className={`relative w-full ${compact ? 'max-w-[24rem]' : 'max-w-[58rem]'}`}>
-      <div
-        className="pointer-events-none absolute -inset-10 opacity-35 blur-3xl"
-        style={{ background: `radial-gradient(circle at 30% 20%, ${a}66, transparent 42%), radial-gradient(circle at 72% 80%, ${b}66, transparent 45%)` }}
-      />
-      <div className={`relative grid ${compact ? 'grid-cols-1 gap-3' : 'grid-cols-2 gap-3'}`}>
-        {images.map((src, index) => (
-          <motion.figure
-            key={src}
-            initial={{ opacity: 0, y: 18, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ delay: index * 0.035, duration: 0.35 }}
-            className="group relative overflow-hidden rounded-xl border border-white/12 bg-white/[0.035] shadow-[0_16px_38px_rgba(0,0,0,0.28)]"
-          >
-            <img
-              src={src}
-              alt={`${item.title} ${index + 1}`}
-              loading="lazy"
-              decoding="async"
-              className={`${compact ? 'aspect-[16/10]' : 'aspect-[16/9]'} h-full w-full object-cover transition duration-500 group-hover:scale-[1.025]`}
-            />
-            <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-inset ring-white/10" />
-          </motion.figure>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const CapabilityVisual = ({
-  item,
-  active = true,
-  mobile = false,
-}: {
-  item: Capability;
-  active?: boolean;
-  mobile?: boolean;
-}) => {
-  if (item.displayMode === 'gallery') {
-    return <GalleryShowcase item={item} compact={mobile} />;
-  }
-
-  return <PhoneMockup item={item} active={active} width={mobile ? 176 : 225} floating={!mobile} />;
-};
-
 const MobileServicesCarousel = ({
   item,
   current,
@@ -324,7 +230,7 @@ const MobileServicesCarousel = ({
           <ChevronRight className="h-5 w-5" />
         </button>
 
-        <div className={`relative overflow-visible ${item.displayMode === 'gallery' ? 'min-h-[88rem]' : 'min-h-[46rem]'}`}>
+        <div className="relative min-h-[36rem] overflow-hidden">
           <AnimatePresence mode="wait" custom={direction}>
             <motion.div
               key={item.id}
@@ -342,8 +248,8 @@ const MobileServicesCarousel = ({
               onDragEnd={onSwipeEnd}
               className="absolute inset-x-0 top-0 cursor-grab touch-pan-y select-none active:cursor-grabbing"
             >
-              <div className="flex justify-center pb-8 pt-8">
-                <CapabilityVisual item={item} active mobile />
+              <div className="flex justify-center pb-4 pt-1">
+                <PhoneMockup item={item} active width={190} floating={false} />
               </div>
 
               <article
@@ -492,7 +398,7 @@ export const Services = () => {
       ref={sectionRef}
       id="services"
       data-section-scroll="true"
-      className="relative h-screen overflow-y-auto overflow-x-hidden overscroll-contain bg-neutral-950 px-5 pb-24 pt-32 [-webkit-overflow-scrolling:touch] md:flex md:items-center md:px-6 md:py-10"
+      className="relative h-screen overflow-y-auto overflow-x-hidden overscroll-contain bg-neutral-950 px-5 py-24 [-webkit-overflow-scrolling:touch] md:flex md:items-center md:px-6 md:py-10"
     >
       <AdjacentCapabilityVideoPreloader capabilities={capabilities} current={current} />
       {/* 背景装饰 */}
@@ -509,7 +415,7 @@ export const Services = () => {
 
       <div className="container relative z-10 mx-auto">
         {/* ── 标题：核心 / 功能 错排 ── */}
-        <div className="mb-12 grid gap-6 md:mb-14 md:grid-cols-2 md:items-center md:gap-10">
+        <div className="mb-10 grid gap-6 md:mb-14 md:grid-cols-2 md:items-center md:gap-10">
           <div>
             <div className="mb-5 flex items-center gap-4 md:mb-6 md:gap-6">
               <div className="flex items-baseline gap-3">
@@ -571,9 +477,9 @@ export const Services = () => {
         )}
 
         {/* ── 轮播区域：窄桌面箭头下沉，宽屏箭头回到卡片两侧 ── */}
-        {isDesktop && <div className={`relative mx-auto hidden w-full md:block ${item.displayMode === 'gallery' ? 'max-w-[1480px]' : 'max-w-[1200px]'}`} style={{ perspective: 1400 }}>
+        {isDesktop && <div className="relative mx-auto hidden w-full max-w-[1200px] md:block" style={{ perspective: 1400 }}>
           {/* 卡片容器 */}
-          <div className={`relative overflow-visible px-0 ${item.displayMode === 'gallery' ? 'sm:px-[34px]' : 'sm:px-[76px]'}`} style={{ minHeight: item.displayMode === 'gallery' ? 660 : 430 }}>
+          <div className="relative overflow-visible px-0 sm:px-[76px]" style={{ minHeight: 348 }}>
             {/* 左箭头 */}
             <motion.button
               whileHover={{ scale: 1.08, background: 'linear-gradient(145deg, rgba(255,255,255,0.26), rgba(255,255,255,0.09))' }}
@@ -623,7 +529,7 @@ export const Services = () => {
                 <div
                   className="relative mx-auto flex items-center rounded-3xl h-full overflow-visible"
                   style={{
-                    width: item.displayMode === 'gallery' ? 'min(100%, 1420px)' : 'min(100%, 1040px)',
+                    width: 'min(100%, 1040px)',
                     background: 'linear-gradient(135deg, rgba(255,255,255,0.075) 0%, rgba(255,255,255,0.022) 100%)',
                     backdropFilter: 'blur(36px)',
                     WebkitBackdropFilter: 'blur(36px)',
@@ -638,7 +544,7 @@ export const Services = () => {
                   <div className="absolute -top-20 -left-20 w-72 h-72 rounded-full blur-[70px] opacity-25 pointer-events-none"
                     style={{ background: `radial-gradient(circle, ${a}, transparent)` }} />
 
-                  <div className={`${item.displayMode === 'gallery' ? 'w-[25%] max-w-[21rem] flex-none' : 'flex-1'} min-w-0 py-10 pl-10 pr-5 relative z-10`}>
+                  <div className="flex-1 min-w-0 py-10 pl-10 pr-8 relative z-10">
                     <div className="inline-flex items-center gap-2 mb-5 px-3 py-1 rounded-full text-xs font-mono tracking-widest"
                       style={{ background: `linear-gradient(90deg, ${a}25, ${b}10)`, border: `1px solid ${a}50`, color: a }}>
                       {item.id} / CAPABILITY
@@ -653,8 +559,8 @@ export const Services = () => {
                     </p>
                   </div>
 
-                  <div className={`${item.displayMode === 'gallery' ? 'min-w-0 flex-1' : 'flex-shrink-0'} py-8 pr-8 relative z-20`}>
-                    <CapabilityVisual item={item} active />
+                  <div className="flex-shrink-0 pr-8 relative z-20">
+                    <PhoneMockup item={item} active />
                   </div>
                 </div>
               </motion.div>

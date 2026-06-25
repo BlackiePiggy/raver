@@ -21,6 +21,22 @@ const nextConfig = {
     return {
       beforeFiles: [
         {
+          source: '/',
+          destination: '/ravehub-website/index.html',
+        },
+        {
+          source: '/work',
+          destination: '/ravehub-website/index.html',
+        },
+        {
+          source: '/work/:path*',
+          destination: '/ravehub-website/index.html',
+        },
+        {
+          source: '/admin/resources',
+          destination: '/ravehub-website/index.html',
+        },
+        {
           source: '/.well-known/apple-app-site-association',
           destination: `${backendOrigin}/.well-known/apple-app-site-association`,
         },

@@ -1,5 +1,5 @@
-import RavehubWebsiteClient from './ravehub-website-client';
+import { redirect } from 'next/navigation';
 
 export default function RootPage() {
-  return <RavehubWebsiteClient />;
+  redirect('/admin');
 }

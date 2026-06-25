@@ -6,7 +6,7 @@ import {
   CheckCircle2,
   Copy,
   Download,
-  Image as ImageIcon,
+  Image,
   Monitor,
   Plus,
   RefreshCcw,
@@ -23,7 +23,6 @@ import {
   resetCapabilities,
   saveCapabilities,
   type Capability,
-  type CapabilityDisplayMode,
   type CapabilityMediaType,
 } from '../data/capabilities';
 import { media } from '../data/media';
@@ -65,37 +64,6 @@ const getPhoneFrameDropShadow = (glowColor: string) => [
   `drop-shadow(0 0 14px ${glowColor})`,
   `drop-shadow(0 0 32px ${glowColor})`,
 ].join(' ');
-
-const VideoLoadingOverlay = () => (
-  <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black/55 text-white backdrop-blur-[2px]">
-    <div className="h-8 w-8 rounded-full border-2 border-white/25 border-t-white animate-spin" />
-    <span className="text-[0.65rem] font-mono uppercase tracking-[0.22em] text-white/80">视频加载中</span>
-  </div>
-);
-
-const PreviewVideo = ({ src }: { src: string }) => {
-  const [loading, setLoading] = useState(true);
-
-  return (
-    <>
-      <video
-        src={src}
-        className="h-full w-full object-cover"
-        controls
-        muted
-        playsInline
-        preload="metadata"
-        onLoadStart={() => setLoading(true)}
-        onWaiting={() => setLoading(true)}
-        onStalled={() => setLoading(true)}
-        onCanPlay={() => setLoading(false)}
-        onLoadedData={() => setLoading(false)}
-        onPlaying={() => setLoading(false)}
-      />
-      {loading && <VideoLoadingOverlay />}
-    </>
-  );
-};
 
 const getMediaCheck = async (url: string, type: CapabilityMediaType): Promise<MediaCheck> => {
   if (!url.trim()) {
@@ -147,8 +115,6 @@ const createCapability = (index: number): Capability => ({
   glowColor: 'rgba(6,182,212,0.4)',
   appScreen: '',
   appScreenType: 'image',
-  displayMode: 'phone',
-  galleryImages: [],
 });
 
 const swapItems = (items: Capability[], from: number, to: number) => {
@@ -158,21 +124,6 @@ const swapItems = (items: Capability[], from: number, to: number) => {
   next[to] = temp;
   return next;
 };
-
-const getGalleryImages = (item: Capability) => (
-  item.galleryImages.length > 0
-    ? item.galleryImages
-    : item.appScreen
-      ? [item.appScreen]
-      : []
-);
-
-const parseGalleryImages = (value: string) => (
-  value
-    .split(/\n|,/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-);
 
 const MediaPreview = ({
   item,
@@ -187,15 +138,20 @@ const MediaPreview = ({
 }) => {
   const [a, b] = item.accent;
   const isVideo = item.appScreenType === 'video';
-  const isGallery = item.displayMode === 'gallery';
-  const galleryImages = getGalleryImages(item).slice(0, 8);
   const icon = mediaCheck.status === 'ok'
     ? <CheckCircle2 className="h-4 w-4 text-emerald-300" />
     : <AlertTriangle className="h-4 w-4 text-amber-300" />;
 
   const mediaNode = item.appScreen ? (
     isVideo ? (
-      <PreviewVideo src={item.appScreen} />
+      <video
+        src={item.appScreen}
+        className="h-full w-full object-cover"
+        controls
+        muted
+        playsInline
+        preload="metadata"
+      />
     ) : (
       <img
         src={item.appScreen}
@@ -219,7 +175,7 @@ const MediaPreview = ({
       />
       <div className="relative" style={{ aspectRatio: '1403 / 2862' }}>
         <div
-            className="absolute overflow-hidden bg-black"
+          className="absolute overflow-hidden bg-black"
           style={{
             inset: '2.5% 5.1% 2.3%',
             borderRadius: '12% / 5.7%',
@@ -245,31 +201,6 @@ const MediaPreview = ({
           style={{ filter: getPhoneFrameDropShadow(`${a}88`) }}
         />
         <div className="pointer-events-none absolute inset-x-[9%] top-[1.1%] z-30 h-[2.8%] rounded-full bg-white/20 opacity-45 blur-md" />
-      </div>
-    </div>
-  );
-
-  const galleryPreview = (
-    <div
-      className="mx-auto w-full max-w-[34rem] overflow-hidden rounded-xl border border-white/10 bg-neutral-950/80 p-2"
-      style={{ boxShadow: `0 0 48px ${item.glowColor}` }}
-    >
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {galleryImages.length > 0 ? galleryImages.map((src, index) => (
-          <figure key={src} className="overflow-hidden rounded-lg border border-white/10 bg-black">
-            <img
-              src={src}
-              alt={`${item.title} ${index + 1}`}
-              loading="lazy"
-              decoding="async"
-              className="aspect-[16/10] h-full w-full object-cover"
-            />
-          </figure>
-        )) : (
-          <div className="col-span-full flex aspect-[16/10] items-center justify-center px-8 text-center text-sm text-neutral-500">
-            尚未设置画廊图片链接
-          </div>
-        )}
       </div>
     </div>
   );
@@ -308,9 +239,7 @@ const MediaPreview = ({
       </div>
 
       <div className="p-4 md:p-5">
-        {isGallery ? (
-          galleryPreview
-        ) : mode === 'mobile' ? (
+        {mode === 'mobile' ? (
           <div className="mx-auto flex max-h-[36rem] justify-center overflow-visible py-2">
             {phonePreview}
           </div>
@@ -319,7 +248,7 @@ const MediaPreview = ({
             className="mx-auto max-h-[25rem] w-full max-w-[34rem] overflow-hidden rounded-xl border border-white/10 bg-black p-2 transition-all"
             style={{ boxShadow: `0 0 48px ${item.glowColor}` }}
           >
-            <div className="relative aspect-[16/10] overflow-hidden rounded-lg bg-neutral-950">
+            <div className="aspect-[16/10] overflow-hidden rounded-lg bg-neutral-950">
               {mediaNode}
             </div>
           </div>
@@ -331,13 +260,13 @@ const MediaPreview = ({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs text-neutral-400">
-                  {isGallery ? 'gallery' : isVideo ? 'video' : 'image'}
+                  {isVideo ? 'video' : 'image'}
                 </span>
                 <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs text-neutral-400">
                   {formatBytes(mediaCheck.sizeBytes)}
                 </span>
                 <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs text-neutral-400">
-                  {isGallery ? '最多展示 8 张横向图' : getLimitLabel(item.appScreenType)}
+                  {getLimitLabel(item.appScreenType)}
                 </span>
               </div>
               <p className="mt-3 break-words text-sm leading-6 text-neutral-300">{mediaCheck.note}</p>
@@ -527,7 +456,7 @@ export const ResourceAdmin = () => {
                       <div className="flex items-center justify-between gap-3">
                         <span className="font-mono text-xs text-neutral-400">{item.id || String(index + 1).padStart(2, '0')}</span>
                         <span className="inline-flex items-center gap-1 text-xs text-neutral-400">
-                          {item.appScreenType === 'video' ? <Video className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
+                          {item.appScreenType === 'video' ? <Video className="h-3.5 w-3.5" /> : <Image className="h-3.5 w-3.5" />}
                           {item.appScreenType}
                         </span>
                       </div>
@@ -618,18 +547,6 @@ export const ResourceAdmin = () => {
                   </label>
 
                   <label>
-                    <span className={labelClass}>展示形式</span>
-                    <select
-                      value={selected.displayMode}
-                      onChange={(event) => updateSelected({ displayMode: event.target.value as CapabilityDisplayMode })}
-                      className={fieldClass}
-                    >
-                      <option value="phone">手机框展示</option>
-                      <option value="gallery">横向图片画廊</option>
-                    </select>
-                  </label>
-
-                  <label>
                     <span className={labelClass}>媒体类型</span>
                     <select
                       value={selected.appScreenType}
@@ -648,29 +565,9 @@ export const ResourceAdmin = () => {
                       value={selected.appScreen ?? ''}
                       onChange={(event) => updateSelected({ appScreen: event.target.value })}
                       className={fieldClass}
-                      placeholder="https://ravehubcn.oss-cn-beijing.aliyuncs.com/..."
+                      placeholder="https://ravehub.oss-ap-northeast-1.aliyuncs.com/..."
                     />
                   </label>
-
-                  {selected.displayMode === 'gallery' && (
-                    <label className="md:col-span-2">
-                      <span className={labelClass}>画廊图片链接 · {selected.galleryImages.length}/8</span>
-                      <textarea
-                        value={selected.galleryImages.join('\n')}
-                        onChange={(event) => {
-                          const galleryImages = parseGalleryImages(event.target.value).slice(0, 8);
-                          updateSelected({
-                            galleryImages,
-                            appScreen: galleryImages[0] ?? selected.appScreen,
-                            appScreenType: 'image',
-                          });
-                        }}
-                        className={`${fieldClass} min-h-44 resize-y font-mono text-xs leading-5`}
-                        placeholder="每行一个 OSS 图片链接，最多 8 张"
-                        spellCheck={false}
-                      />
-                    </label>
-                  )}
 
                   <div className="md:col-span-2">
                     <span className={labelClass}>主题色</span>
