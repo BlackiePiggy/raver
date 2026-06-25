@@ -149,6 +149,13 @@ export default function AdminOverviewPage() {
 
         <div className="grid gap-4 md:grid-cols-3">
           {rolePolicy.canAccessOperations && (
+            <Link href="/admin/resources" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
+              <div className="text-sm text-text-secondary">Website Resources</div>
+              <div className="mt-2 text-lg font-semibold">网页资源管理</div>
+              <div className="mt-2 text-sm leading-6 text-text-secondary">维护官网功能展示模块、媒体链接、主题色，并预览移动端与 Web 效果</div>
+            </Link>
+          )}
+          {rolePolicy.canAccessOperations && (
             <Link href="/admin/users" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
               <div className="text-sm text-text-secondary">User Admin</div>
               <div className="mt-2 text-lg font-semibold">用户管理</div>

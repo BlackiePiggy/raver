@@ -1,11 +1,26 @@
+# Ravehub Website
 
-  # 电音节管理系统UI复刻
+Ravehub landing website built with React, TypeScript, Vite, and Motion.
 
-  This is a code bundle for 电音节管理系统UI复刻. The original project is available at https://www.figma.com/design/qeg0WPjI3B6daue3gY76DV/%E7%94%B5%E9%9F%B3%E8%8A%82%E7%AE%A1%E7%90%86%E7%B3%BB%E7%BB%9FUI%E5%A4%8D%E5%88%BB.
+## Development
 
-  ## Running the code
+```bash
+npm install
+npm run dev
+```
 
-  Run `npm i` to install the dependencies.
+## Production Build
 
-  Run `npm run dev` to start the development server.
-  
+```bash
+npm run build
+```
+
+The production output is generated in `dist/`.
+
+## Vercel
+
+Use the default Vite settings:
+
+- Build Command: `npm run build`
+- Output Directory: `dist`
+- Install Command: `npm install`
