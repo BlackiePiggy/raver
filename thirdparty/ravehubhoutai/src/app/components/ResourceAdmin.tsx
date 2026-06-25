@@ -19,6 +19,7 @@ import {
 import {
   defaultCapabilities,
   loadCapabilities,
+  loadProjectCapabilities,
   normalizeCapabilities,
   resetCapabilities,
   saveCapabilities,
@@ -289,7 +290,7 @@ export const ResourceAdmin = () => {
   const [items, setItems] = useState<Capability[]>(loadCapabilities);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [jsonText, setJsonText] = useState(() => JSON.stringify(loadCapabilities(), null, 2));
-  const [message, setMessage] = useState('未保存的修改只会停留在当前页面，点击保存后首页生效。');
+  const [message, setMessage] = useState('未保存的修改只会停留在当前页面，点击保存后会写入项目配置文件。');
   const [previewMode, setPreviewMode] = useState<PreviewMode>('mobile');
   const [mediaCheck, setMediaCheck] = useState<MediaCheck>({
     status: 'idle',
@@ -297,6 +298,21 @@ export const ResourceAdmin = () => {
     note: '尚未设置媒体链接。',
   });
   const selected = items[selectedIndex] ?? items[0];
+
+  useEffect(() => {
+    let active = true;
+
+    loadProjectCapabilities().then((next) => {
+      if (!active) return;
+      setItems(next);
+      setSelectedIndex(0);
+      setJsonText(JSON.stringify(next, null, 2));
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!selected) {
@@ -378,25 +394,33 @@ export const ResourceAdmin = () => {
     setSelectedIndex(nextIndex);
   };
 
-  const save = () => {
+  const save = async () => {
     const normalized = normalizeCapabilities(items);
     if (mediaCheck.status === 'error') {
       setMessage(`当前模块资源未通过检查：${mediaCheck.note}`);
       return;
     }
 
-    saveCapabilities(normalized);
-    setItems(normalized);
-    setJsonText(JSON.stringify(normalized, null, 2));
-    setMessage(`已保存 ${normalized.length} 个功能展示模块，首页会使用最新配置。`);
+    try {
+      const saved = await saveCapabilities(normalized);
+      setItems(saved);
+      setJsonText(JSON.stringify(saved, null, 2));
+      setMessage(`已写入项目配置文件：${saved.length} 个功能展示模块。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '保存项目配置失败。');
+    }
   };
 
-  const reset = () => {
-    resetCapabilities();
-    setItems(defaultCapabilities);
-    setSelectedIndex(0);
-    setJsonText(JSON.stringify(defaultCapabilities, null, 2));
-    setMessage('已恢复默认功能展示配置。');
+  const reset = async () => {
+    try {
+      const saved = await resetCapabilities();
+      setItems(saved);
+      setSelectedIndex(0);
+      setJsonText(JSON.stringify(saved, null, 2));
+      setMessage('已恢复默认功能展示配置，并写入项目配置文件。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '恢复默认配置失败。');
+    }
   };
 
   const exportJson = () => {

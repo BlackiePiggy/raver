@@ -14,6 +14,7 @@ export interface Capability {
 
 export const capabilitiesStorageKey = 'ravehub.capabilities.v1';
 export const capabilitiesChangedEvent = 'ravehub:capabilities-changed';
+const capabilitiesApiPath = '/api/ravehub-website/capabilities';
 
 export const defaultCapabilities: Capability[] = [
   {
@@ -123,28 +124,46 @@ export const normalizeCapabilities = (value: unknown): Capability[] => {
 };
 
 export const loadCapabilities = () => {
+  return defaultCapabilities;
+};
+
+export const loadProjectCapabilities = async () => {
   if (typeof window === 'undefined') {
     return defaultCapabilities;
   }
 
-  const raw = window.localStorage.getItem(capabilitiesStorageKey);
-  if (!raw) {
-    return defaultCapabilities;
-  }
-
   try {
-    return normalizeCapabilities(JSON.parse(raw));
+    const url = `${import.meta.env.BASE_URL}capabilities.json`;
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) {
+      return defaultCapabilities;
+    }
+
+    return normalizeCapabilities(await response.json());
   } catch {
     return defaultCapabilities;
   }
 };
 
-export const saveCapabilities = (items: Capability[]) => {
-  window.localStorage.setItem(capabilitiesStorageKey, JSON.stringify(normalizeCapabilities(items)));
-  window.dispatchEvent(new CustomEvent(capabilitiesChangedEvent));
-};
+export const saveCapabilities = async (items: Capability[]) => {
+  const normalized = normalizeCapabilities(items);
+  const response = await fetch(capabilitiesApiPath, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(normalized),
+  });
 
-export const resetCapabilities = () => {
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(detail || '保存项目配置失败。');
+  }
+
   window.localStorage.removeItem(capabilitiesStorageKey);
   window.dispatchEvent(new CustomEvent(capabilitiesChangedEvent));
+  return normalized;
+};
+
+export const resetCapabilities = async () => {
+  window.localStorage.removeItem(capabilitiesStorageKey);
+  return saveCapabilities(defaultCapabilities);
 };

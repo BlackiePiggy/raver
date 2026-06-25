@@ -5,6 +5,7 @@ import { media } from '../data/media';
 import {
   capabilitiesChangedEvent,
   loadCapabilities,
+  loadProjectCapabilities,
   type Capability,
 } from '../data/capabilities';
 
@@ -339,14 +340,15 @@ export const Services = () => {
 
   useEffect(() => {
     const syncCapabilities = () => {
-      setCapabilities(loadCapabilities());
+      void loadProjectCapabilities().then((next) => {
+        setCapabilities(next);
+      });
     };
 
-    window.addEventListener('storage', syncCapabilities);
+    syncCapabilities();
     window.addEventListener(capabilitiesChangedEvent, syncCapabilities);
 
     return () => {
-      window.removeEventListener('storage', syncCapabilities);
       window.removeEventListener(capabilitiesChangedEvent, syncCapabilities);
     };
   }, []);
