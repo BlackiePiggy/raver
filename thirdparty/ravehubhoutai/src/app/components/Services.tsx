@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence, type PanInfo } from 'motion/react';
+import { motion, AnimatePresence, type Transition } from 'motion/react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { media } from '../data/media';
 import {
@@ -187,9 +187,8 @@ const MobileServicesCarousel = ({
   total,
   onGo,
   onJump,
-  onSwipeEnd,
   cardVariants,
-  springTransition,
+  carouselTransition,
   capabilities,
 }: {
   item: Capability;
@@ -198,13 +197,12 @@ const MobileServicesCarousel = ({
   total: number;
   onGo: (dir: number) => void;
   onJump: (index: number) => void;
-  onSwipeEnd: (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => void;
   cardVariants: {
-    enter: (dir: number) => { x: number; opacity: number; scale: number; rotateY: number };
-    center: { x: number; opacity: number; scale: number; rotateY: number };
-    exit: (dir: number) => { x: number; opacity: number; scale: number; rotateY: number };
+    enter: (dir: number) => { x: number; opacity: number; scale: number };
+    center: { x: number; opacity: number; scale: number };
+    exit: (dir: number) => { x: number; opacity: number; scale: number };
   };
-  springTransition: { type: 'spring'; stiffness: number; damping: number; mass: number };
+  carouselTransition: Transition;
   capabilities: Capability[];
 }) => {
   const [a, b] = item.accent;
@@ -240,14 +238,9 @@ const MobileServicesCarousel = ({
               initial="enter"
               animate="center"
               exit="exit"
-              transition={springTransition}
-              drag="x"
-              dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={0.12}
-              dragMomentum={false}
-              dragSnapToOrigin
-              onDragEnd={onSwipeEnd}
-              className="absolute inset-x-0 top-0 cursor-grab touch-pan-y select-none active:cursor-grabbing"
+              transition={carouselTransition}
+              className="absolute inset-x-0 top-0 select-none"
+              style={{ willChange: 'transform, opacity' }}
             >
               <div className="flex justify-center pb-4 pt-1">
                 <PhoneMockup item={item} active width={190} floating={false} />
@@ -317,7 +310,6 @@ export const Services = () => {
   const total = capabilities.length;
   const item = capabilities[current];
   const [a, b] = item.accent;
-  const swipeThreshold = 70;
 
   const go = (dir: number) => {
     setDirection(dir);
@@ -373,26 +365,13 @@ export const Services = () => {
     };
   }, []);
 
-  const handleSwipeEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    const swipePower = Math.abs(info.offset.x) + Math.abs(info.velocity.x) * 0.35;
-
-    if (info.offset.x < -swipeThreshold || (info.velocity.x < -320 && swipePower > swipeThreshold)) {
-      go(1);
-      return;
-    }
-
-    if (info.offset.x > swipeThreshold || (info.velocity.x > 320 && swipePower > swipeThreshold)) {
-      go(-1);
-    }
-  };
-
-  // 提高响应速度，缩短切换耗时，同时保留一次轻微回弹
-  const springTransition = { type: 'spring' as const, stiffness: 430, damping: 28, mass: 0.72 };
+  // Keep the carousel responsive by avoiding drag physics and 3D transforms.
+  const carouselTransition: Transition = { type: 'tween', duration: 0.26, ease: [0.22, 1, 0.36, 1] };
 
   const cardVariants = {
-    enter: (dir: number) => ({ x: dir > 0 ? 140 : -140, opacity: 0, scale: 0.86, rotateY: dir > 0 ? 10 : -10 }),
-    center: { x: 0, opacity: 1, scale: 1, rotateY: 0 },
-    exit: (dir: number) => ({ x: dir > 0 ? -100 : 100, opacity: 0, scale: 0.9, rotateY: dir > 0 ? -6 : 6 }),
+    enter: (dir: number) => ({ x: dir > 0 ? 72 : -72, opacity: 0, scale: 0.97 }),
+    center: { x: 0, opacity: 1, scale: 1 },
+    exit: (dir: number) => ({ x: dir > 0 ? -56 : 56, opacity: 0, scale: 0.98 }),
   };
 
   return (
@@ -405,14 +384,14 @@ export const Services = () => {
       <AdjacentCapabilityVideoPreloader capabilities={capabilities} current={current} />
       {/* 背景装饰 */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <motion.div animate={{ rotate: 360 }} transition={{ duration: 60, repeat: Infinity, ease: 'linear' }}
+        <div
           className="absolute -top-[20%] -right-[10%] w-[700px] h-[700px] border border-white/[0.04] rounded-full" style={{ borderStyle: 'dashed' }} />
-        <motion.div animate={{ rotate: -360 }} transition={{ duration: 90, repeat: Infinity, ease: 'linear' }}
+        <div
           className="absolute bottom-[5%] -left-[8%] w-[500px] h-[500px] border border-white/[0.03] rounded-full" />
         {/* accent 大光晕随卡片变化 */}
-        <motion.div key={current} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.9 }}
+        <motion.div key={current} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }}
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] rounded-full blur-[130px]"
-          style={{ background: `radial-gradient(ellipse, ${item.glowColor}, transparent 70%)` }} />
+          style={{ background: `radial-gradient(ellipse, ${item.glowColor}, transparent 70%)`, willChange: 'opacity' }} />
       </div>
 
       <div className="container relative z-10 mx-auto">
@@ -471,15 +450,14 @@ export const Services = () => {
             total={total}
             onGo={go}
             onJump={jumpTo}
-            onSwipeEnd={handleSwipeEnd}
             cardVariants={cardVariants}
-            springTransition={springTransition}
+            carouselTransition={carouselTransition}
             capabilities={capabilities}
           />
         )}
 
         {/* ── 轮播区域：窄桌面箭头下沉，宽屏箭头回到卡片两侧 ── */}
-        {isDesktop && <div className="relative mx-auto hidden w-full max-w-[1200px] md:block" style={{ perspective: 1400 }}>
+        {isDesktop && <div className="relative mx-auto hidden w-full max-w-[1200px] md:block">
           {/* 卡片容器 */}
           <div className="relative overflow-visible px-0 sm:px-[76px]" style={{ minHeight: 348 }}>
             {/* 左箭头 */}
@@ -516,16 +494,9 @@ export const Services = () => {
                 initial="enter"
                 animate="center"
                 exit="exit"
-                transition={springTransition}
-                className="absolute inset-0 cursor-grab active:cursor-grabbing select-none touch-pan-y"
-                style={{ transformStyle: 'preserve-3d' }}
-                drag="x"
-                dragConstraints={{ left: 0, right: 0 }}
-                dragElastic={0.12}
-                dragMomentum={false}
-                dragSnapToOrigin
-                whileDrag={{ scale: 0.985, cursor: 'grabbing' }}
-                onDragEnd={handleSwipeEnd}
+                transition={carouselTransition}
+                className="absolute inset-0 select-none"
+                style={{ willChange: 'transform, opacity' }}
               >
                 {/* 果冻卡片 */}
                 <div
