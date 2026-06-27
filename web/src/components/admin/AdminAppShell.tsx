@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import useOverlayBodyLock from '@/hooks/useOverlayBodyLock';
 import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
 import { getVisibleAdminNavGroups, isAdminHrefActive } from '@/lib/admin/navigation';
+import { createLoginHref } from '@/lib/auth/login-redirect';
 import AdminSearchField from '@/components/admin/AdminSearchField';
 
 type AdminAppShellProps = {
@@ -635,6 +636,7 @@ export default function AdminAppShell({
 }: AdminAppShellProps) {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const policy = useMemo(() => getAdminCmsRolePolicy(user), [user]);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -646,6 +648,7 @@ export default function AdminAppShell({
   const resolvedAvatarUrl = user?.avatarUrl?.trim() || user?.avatarURL?.trim() || null;
   const authActionLabel = user ? 'Sign out' : 'Sign in';
   const authActionTone = user ? 'danger' : 'success';
+  const loginHref = createLoginHref(pathname);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -687,7 +690,7 @@ export default function AdminAppShell({
                   logout();
                   return;
                 }
-                router.push('/login');
+                router.push(loginHref);
               }}
               authActionLabel={authActionLabel}
               authActionTone={authActionTone}
@@ -708,7 +711,7 @@ export default function AdminAppShell({
             logout();
             return;
           }
-          router.push('/login');
+          router.push(loginHref);
         }}
         activeTab={settingsTab}
         setActiveTab={setSettingsTab}

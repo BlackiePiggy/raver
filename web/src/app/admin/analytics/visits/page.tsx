@@ -99,7 +99,7 @@ export default function AdminWebsiteVisitsPage() {
       <AdminAppShell title="访客记录" description="登录后可查看官网访客记录。">
         <div className="admin-shell-panel p-8">
           <p className="text-lg">请先登录后访问运营后台。</p>
-          <Link href="/login" className="mt-4 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
+          <Link href="/login?next=%2Fadmin" className="mt-4 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             去登录
           </Link>
         </div>

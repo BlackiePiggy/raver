@@ -199,7 +199,7 @@ export default function PreRegistrationAdminPage() {
       <AdminAppShell title="预登记管理后台" description="登录后可进入预登记和抽签运营面板。">
         <div className="admin-shell-panel mx-auto max-w-5xl p-8">
           <p className="text-lg">请先登录后访问预登记管理后台。</p>
-          <Link href="/login" className="mt-4 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
+          <Link href="/login?next=%2Fadmin" className="mt-4 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             去登录
           </Link>
         </div>

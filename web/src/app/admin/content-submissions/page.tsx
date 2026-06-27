@@ -39,7 +39,7 @@ export default function ContentSubmissionsAdminPage() {
                 打开结构化审核台
               </Link>
             ) : (
-              <Link href="/login" className="rounded-full bg-[#071110] px-4 py-2 text-sm font-semibold text-white">
+              <Link href="/login?next=%2Fadmin" className="rounded-full bg-[#071110] px-4 py-2 text-sm font-semibold text-white">
                 去登录
               </Link>
             )}

@@ -8,6 +8,7 @@ import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
+import { resolveLoginRedirectPath } from '@/lib/auth/login-redirect';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -37,7 +38,7 @@ export default function LoginPage() {
       await login(identifier, password);
       const searchParams = new URLSearchParams(window.location.search);
       const next = searchParams.get('next');
-      router.push(next && next.startsWith('/') ? next : '/');
+      router.push(resolveLoginRedirectPath(next));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

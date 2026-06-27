@@ -41,7 +41,7 @@ export default function AdminContentCmsPage() {
       <AdminAppShell title="内容后台需要登录" description="请先登录后访问统一内容控制台。">
         <div className="admin-shell-panel p-8">
           <p className="text-lg font-semibold text-[#071110]">请先登录后访问内容后台。</p>
-          <Link href="/login" className="mt-5 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
+          <Link href="/login?next=%2Fadmin" className="mt-5 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             去登录
           </Link>
         </div>

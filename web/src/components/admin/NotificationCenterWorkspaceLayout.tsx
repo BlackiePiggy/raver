@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import AdminContentLayout from '@/components/admin/AdminContentLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
+import { createLoginHref } from '@/lib/auth/login-redirect';
 
 type NotificationCenterWorkspaceLayoutProps = {
   title: string;
@@ -36,6 +37,7 @@ export default function NotificationCenterWorkspaceLayout({
   const pathname = usePathname();
   const { user, isLoading } = useAuth();
   const policy = getAdminCmsRolePolicy(user);
+  const loginHref = createLoginHref(pathname);
 
   if (isLoading) {
     return (
@@ -59,7 +61,7 @@ export default function NotificationCenterWorkspaceLayout({
         <section className="admin-shell-panel p-8">
           <p className="text-lg">请先登录管理员账号后访问通知中心。</p>
           <Link
-            href="/login"
+            href={loginHref}
             className="mt-4 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white"
           >
             去登录

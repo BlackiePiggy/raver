@@ -7,6 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAdminCmsRolePolicy } from '@/lib/admin/role-policy';
 import { notificationApi, NotificationCount } from '@/lib/api/notification';
+import { createLoginHref } from '@/lib/auth/login-redirect';
 
 export default function Navigation() {
   const pathname = usePathname();
@@ -18,6 +19,7 @@ export default function Navigation() {
 
   const showBackButton = pathname !== '/';
   const adminCmsPolicy = getAdminCmsRolePolicy(user);
+  const loginHref = createLoginHref(pathname === '/login' ? '/' : pathname);
 
   // 加载通知数量
   useEffect(() => {
@@ -179,7 +181,7 @@ export default function Navigation() {
                 </div>
               </div>
             ) : (
-              <Link href="/login" className="text-sm text-primary-blue hover:text-primary-purple transition-colors">
+              <Link href={loginHref} className="text-sm text-primary-blue hover:text-primary-purple transition-colors">
                 登录
               </Link>
             )}

@@ -93,7 +93,7 @@ export default function AdminOverviewPage() {
       <AdminAppShell title="后台工作台" description="登录后可进入后台工作台和内容管理体系。">
         <div className="admin-shell-panel p-8">
           <p className="text-lg">请先登录后访问运营后台。</p>
-          <Link href="/login" className="mt-4 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
+          <Link href="/login?next=%2Fadmin" className="mt-4 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
             去登录
           </Link>
         </div>

@@ -161,7 +161,7 @@ export default function AuthSessionsAdminPage() {
           <div className="admin-shell-panel p-6">
             <h1 className="text-2xl font-semibold">登录设备与会话</h1>
             <p className="mt-3 text-sm text-black/48">请先登录后查看会话。</p>
-            <Link href="/login" className="mt-5 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
+            <Link href="/login?next=%2Fadmin" className="mt-5 inline-flex rounded-full bg-[#071110] px-5 py-3 text-sm font-semibold text-white">
               去登录
             </Link>
           </div>
