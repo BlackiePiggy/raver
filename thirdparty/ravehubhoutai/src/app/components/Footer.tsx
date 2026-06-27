@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowUpRight, Instagram, Twitter, Linkedin, Mail, X, Send } from 'lucide-react';
+import { ArrowUpRight, X, Send } from 'lucide-react';
+import { showComingSoon } from '../utils/comingSoon';
 
 export const Footer = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -40,9 +41,9 @@ export const Footer = () => {
                    </div>
                  </button>
 
-                 <a href="mailto:hello@studio.com" className="group flex items-center gap-4 break-all pl-1 text-sm font-mono text-neutral-500 transition-colors hover:text-white md:pl-4 md:text-lg">
+                 <a href="mailto:leshanlijiayu@126.com" className="group flex items-center gap-4 break-all pl-1 text-sm font-mono text-neutral-500 transition-colors hover:text-white md:pl-4 md:text-lg">
                    <span className="w-2 h-2 rounded-full bg-green-500" />
-                   hello@studio.com
+                   leshanlijiayu@126.com
                  </a>
               </div>
             </div>
@@ -54,7 +55,7 @@ export const Footer = () => {
                   <ul className="space-y-4">
                     {['Instagram', 'Twitter', 'LinkedIn', 'Awwwards'].map((social) => (
                       <li key={social}>
-                        <a href="#" className="flex items-center gap-2 text-lg font-light text-neutral-400 hover:text-white transition-colors group">
+                        <a href="#" onClick={showComingSoon} className="flex items-center gap-2 text-lg font-light text-neutral-400 hover:text-white transition-colors group">
                           {social}
                           <ArrowUpRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0" />
                         </a>
@@ -67,7 +68,11 @@ export const Footer = () => {
                   <ul className="space-y-4">
                     {['Home', 'Work', 'About', 'Contact'].map((link) => (
                       <li key={link}>
-                        <a href={`#${link.toLowerCase()}`} className="text-lg font-light text-neutral-400 hover:text-white transition-colors">
+                        <a
+                          href={`#${link.toLowerCase()}`}
+                          onClick={link === 'Work' ? showComingSoon : undefined}
+                          className="text-lg font-light text-neutral-400 hover:text-white transition-colors"
+                        >
                           {link}
                         </a>
                       </li>

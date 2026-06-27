@@ -589,7 +589,7 @@ export const ResourceAdmin = () => {
                       value={selected.appScreen ?? ''}
                       onChange={(event) => updateSelected({ appScreen: event.target.value })}
                       className={fieldClass}
-                      placeholder="https://ravehub.oss-ap-northeast-1.aliyuncs.com/..."
+                      placeholder="https://ravehubcn.oss-cn-beijing.aliyuncs.com/..."
                     />
                   </label>
 

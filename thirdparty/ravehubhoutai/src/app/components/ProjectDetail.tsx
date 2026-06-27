@@ -3,6 +3,7 @@ import { useParams, Link } from '../router';
 import { motion } from 'motion/react';
 import { ArrowLeft, ArrowUpRight } from 'lucide-react';
 import { projects } from '../data/projects';
+import { showComingSoon } from '../utils/comingSoon';
 
 export const ProjectDetail = () => {
   const { slug } = useParams();
@@ -13,7 +14,7 @@ export const ProjectDetail = () => {
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center text-white">
         <div className="text-center">
           <h1 className="text-4xl mb-4">Project not found</h1>
-          <Link to="/work" className="text-neutral-500 hover:text-white underline">Back to Archive</Link>
+          <Link to="/work" onClick={showComingSoon} className="text-neutral-500 hover:text-white underline">Back to Archive</Link>
         </div>
       </div>
     );
@@ -22,7 +23,7 @@ export const ProjectDetail = () => {
   return (
     <div className="bg-neutral-950 min-h-screen text-white pt-32 px-6">
       <div className="container mx-auto">
-        <Link to="/work" className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-neutral-500 hover:text-white transition-colors mb-12">
+        <Link to="/work" onClick={showComingSoon} className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-neutral-500 hover:text-white transition-colors mb-12">
           <ArrowLeft className="w-4 h-4" /> Back to Archive
         </Link>
 
@@ -89,7 +90,7 @@ export const ProjectDetail = () => {
         
         {/* Next Project (Simple Link) */}
         <div className="border-t border-white/10 py-24 text-center">
-           <Link to="/work" className="group inline-flex flex-col items-center gap-4">
+           <Link to="/work" onClick={showComingSoon} className="group inline-flex flex-col items-center gap-4">
               <span className="text-xs font-mono uppercase tracking-widest text-neutral-500">Next Project</span>
               <span className="text-6xl md:text-8xl font-medium tracking-tighter group-hover:text-neutral-400 transition-colors">
                 View Archive

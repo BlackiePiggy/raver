@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { ArrowUpRight } from 'lucide-react';
 import { Link } from '../router';
 import { projects } from '../data/projects'; // Import data
+import { showComingSoon } from '../utils/comingSoon';
 
 export const Work = () => {
   return (
@@ -29,7 +30,7 @@ export const Work = () => {
               transition={{ delay: index * 0.1 }}
               className="group cursor-pointer"
             >
-              <Link to={`/work/${project.slug}`}>
+              <Link to={`/work/${project.slug}`} onClick={showComingSoon}>
                 <div className="relative overflow-hidden aspect-[3/4] mb-6 bg-neutral-900 rounded-sm">
                    <img 
                      src={project.image} 

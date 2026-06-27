@@ -189,6 +189,59 @@
 html {
   font-size: var(--font-size);
   position: relative;
+  overflow-x: clip;
+  background: #050505;
+}
+
+body {
+  overflow-x: clip;
+  background: #050505;
+}
+
+html,
+body {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+@supports not (overflow: clip) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+}
+
+@media (max-width: 767px) {
+  #services {
+    height: auto;
+    min-height: 100svh;
+    overflow-x: clip;
+    overflow-y: visible;
+    overscroll-behavior-y: auto;
+  }
+
+  .ravehub-services-glow {
+    filter: blur(54px);
+    opacity: 0.62;
+  }
+
+  .ravehub-mobile-capability-card {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.42) !important;
+  }
+
+  .ravehub-mobile-capability-orb {
+    filter: blur(34px);
+    opacity: 0.2;
+  }
 }
 
 [data-section-scroll='true'],

@@ -12,8 +12,9 @@ import { Work } from './components/Work';
 import { ProjectDetail } from './components/ProjectDetail';
 import { ScrollIndicator } from './components/ScrollIndicator';
 import { ResourceAdmin } from './components/ResourceAdmin';
+import { comingSoonEvent } from './utils/comingSoon';
 
-const pageSectionIds = ['hero', 'about', 'services', 'community', 'download', 'contact'];
+const pageSectionIds = ['hero', 'services', 'community', 'about', 'download', 'contact'];
 
 const FullPageScrollController = () => {
   const [pathname] = useLocation();
@@ -24,10 +25,18 @@ const FullPageScrollController = () => {
       return;
     }
 
+    const desktopViewport = window.matchMedia('(min-width: 768px)');
+    if (!desktopViewport.matches) {
+      return;
+    }
+
     let isJumping = false;
     let lastJumpAt = 0;
     let gestureLocked = false;
+    let wheelGestureConsumed = false;
+    let touchConsumedInternalScroll = false;
     let gestureUnlockTimer: ReturnType<typeof window.setTimeout> | undefined;
+    let wheelGestureUnlockTimer: ReturnType<typeof window.setTimeout> | undefined;
     let touchStartX: number | null = null;
     let touchStartY: number | null = null;
     let touchLastX: number | null = null;
@@ -46,6 +55,16 @@ const FullPageScrollController = () => {
     const lockCurrentGesture = () => {
       gestureLocked = true;
       scheduleGestureUnlock();
+    };
+
+    const scheduleWheelGestureUnlock = () => {
+      if (wheelGestureUnlockTimer) {
+        window.clearTimeout(wheelGestureUnlockTimer);
+      }
+
+      wheelGestureUnlockTimer = window.setTimeout(() => {
+        wheelGestureConsumed = false;
+      }, 160);
     };
 
     const getCurrentSectionIndex = () => {
@@ -124,14 +143,13 @@ const FullPageScrollController = () => {
       }, 220);
     };
 
-    const processVerticalIntent = (deltaY: number) => {
+    const processVerticalIntent = (deltaY: number, source: 'wheel' | 'keyboard' | 'touch' = 'wheel') => {
       if (gestureLocked) {
-        scheduleGestureUnlock();
-        return;
+        return 'locked';
       }
 
       if (isJumping) {
-        return;
+        return 'jumping';
       }
 
       const currentIndex = getCurrentSectionIndex();
@@ -151,21 +169,26 @@ const FullPageScrollController = () => {
       currentSection?.dispatchEvent(internalEvent);
 
       if (internalEvent.defaultPrevented) {
-        return;
+        return 'section';
       }
 
       if (canScrollSectionInternally(currentSection, direction)) {
         scrollSectionInternally(currentSection as HTMLElement, deltaY);
-        return;
+        return 'internal';
+      }
+
+      if (source === 'touch' && touchConsumedInternalScroll) {
+        return 'boundary';
       }
 
       const now = Date.now();
       if (now - lastJumpAt < 360) {
-        return;
+        return 'cooldown';
       }
       lastJumpAt = now;
 
       jumpToSection(currentIndex + direction, direction);
+      return 'jump';
     };
 
     const handleWheel = (event: WheelEvent) => {
@@ -177,7 +200,16 @@ const FullPageScrollController = () => {
 
       event.preventDefault();
 
-      processVerticalIntent(event.deltaY);
+      if (wheelGestureConsumed) {
+        scheduleWheelGestureUnlock();
+        return;
+      }
+
+      const result = processVerticalIntent(event.deltaY, 'wheel');
+      if (['jump', 'jumping', 'locked', 'cooldown'].includes(result)) {
+        wheelGestureConsumed = true;
+        scheduleWheelGestureUnlock();
+      }
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -198,7 +230,7 @@ const FullPageScrollController = () => {
       const direction = event.key === 'ArrowUp' || event.key === 'PageUp' ? -1 : 1;
       event.preventDefault();
 
-      processVerticalIntent(direction * 120);
+      processVerticalIntent(direction * 120, 'keyboard');
     };
 
     const handleTouchStart = (event: TouchEvent) => {
@@ -249,7 +281,10 @@ const FullPageScrollController = () => {
       }
 
       event.preventDefault();
-      processVerticalIntent(deltaY);
+      const result = processVerticalIntent(deltaY, 'touch');
+      if (result === 'internal') {
+        touchConsumedInternalScroll = true;
+      }
       touchLastX = currentX;
       touchLastY = currentY;
     };
@@ -259,6 +294,7 @@ const FullPageScrollController = () => {
       touchStartY = null;
       touchLastX = null;
       touchLastY = null;
+      touchConsumedInternalScroll = false;
       scheduleGestureUnlock();
     };
 
@@ -271,6 +307,9 @@ const FullPageScrollController = () => {
     return () => {
       if (gestureUnlockTimer) {
         window.clearTimeout(gestureUnlockTimer);
+      }
+      if (wheelGestureUnlockTimer) {
+        window.clearTimeout(wheelGestureUnlockTimer);
       }
 
       window.removeEventListener('wheel', handleWheel);
@@ -342,16 +381,116 @@ const ScrollToTop = () => {
   return null;
 };
 
+const getOrCreateVisitorId = () => {
+  const storageKey = 'ravehub_visitor_id';
+  const visitorId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  try {
+    const existing = window.localStorage.getItem(storageKey);
+    if (existing) {
+      return existing;
+    }
+
+    window.localStorage.setItem(storageKey, visitorId);
+  } catch {
+    return visitorId;
+  }
+
+  return visitorId;
+};
+
+const VisitorTracker = () => {
+  const [pathname] = useLocation();
+
+  useEffect(() => {
+    const payload = {
+      visitorId: getOrCreateVisitorId(),
+      path: `${pathname}${window.location.hash || ''}`,
+      referrer: document.referrer || null,
+      language: navigator.language || null,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+      screen: {
+        width: window.screen.width,
+        height: window.screen.height,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        devicePixelRatio: window.devicePixelRatio,
+      },
+    };
+    const body = JSON.stringify(payload);
+
+    if (navigator.sendBeacon) {
+      const blob = new Blob([body], { type: 'application/json' });
+      navigator.sendBeacon('/api/analytics/visit', blob);
+      return;
+    }
+
+    fetch('/api/analytics/visit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true,
+    }).catch(() => {
+      // Analytics must never interrupt the public site.
+    });
+  }, [pathname]);
+
+  return null;
+};
+
 const HomePage = () => (
   <>
     <Hero />
-    <About />
     <Services />
     <FigmaCommunitySection />
+    <About />
     <Download />
     <Footer />
   </>
 );
+
+const ComingSoonToast = () => {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof window.setTimeout> | undefined;
+
+    const handleComingSoon = () => {
+      setVisible(true);
+      if (timer) {
+        window.clearTimeout(timer);
+      }
+      timer = window.setTimeout(() => setVisible(false), 1800);
+    };
+
+    window.addEventListener(comingSoonEvent, handleComingSoon);
+
+    return () => {
+      if (timer) {
+        window.clearTimeout(timer);
+      }
+      window.removeEventListener(comingSoonEvent, handleComingSoon);
+    };
+  }, []);
+
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          initial={{ opacity: 0, y: -16, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -12, scale: 0.98 }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          className="fixed left-1/2 top-24 z-[150] -translate-x-1/2 rounded-full border border-white/12 bg-white px-5 py-2.5 text-sm font-medium text-black shadow-2xl shadow-black/30"
+          role="status"
+          aria-live="polite"
+        >
+          敬请期待
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
 
 const AppContent = () => {
   const [pathname] = useLocation();
@@ -374,13 +513,14 @@ const AppContent = () => {
   return (
     <>
       <ScrollToTop />
+      <VisitorTracker />
 
       <AnimatePresence mode="wait">
         {loading && <Preloader key="preloader" />}
       </AnimatePresence>
 
       {!loading && (
-        <div className="bg-neutral-950 min-h-screen text-white selection:bg-white/20">
+        <div className="ravehub-snap-page bg-neutral-950 min-h-screen text-white selection:bg-white/20">
           {!isAdminRoute && <FullPageScrollController />}
           {!isAdminRoute && <Navbar />}
           <Switch>
@@ -390,6 +530,7 @@ const AppContent = () => {
             <Route path="/" component={HomePage} />
           </Switch>
           {!isAdminRoute && <ScrollIndicator />}
+          {!isAdminRoute && <ComingSoonToast />}
         </div>
       )}
     </>

@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Sparkles,
   TicketCheck,
+  BarChart3,
   Users,
 } from 'lucide-react';
 import type { AdminCmsRolePolicy } from '@/lib/admin/role-policy';
@@ -208,6 +209,14 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         description: 'Coze 与环境替换',
         icon: SlidersHorizontal,
         visible: notificationVisible,
+        matchMode: 'prefix',
+      },
+      {
+        href: '/admin/analytics/visits',
+        label: '访客记录',
+        description: '官网访问记录',
+        icon: BarChart3,
+        visible: opsVisible,
         matchMode: 'prefix',
       },
       {

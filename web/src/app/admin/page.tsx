@@ -197,6 +197,13 @@ export default function AdminOverviewPage() {
               <div className="mt-2 text-sm leading-6 text-text-secondary">查看 IM 删除、OSS 媒体清理与失败重试状态</div>
             </Link>
           )}
+          {rolePolicy.canAccessOperations && (
+            <Link href="/admin/analytics/visits" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
+              <div className="text-sm text-text-secondary">Website Analytics</div>
+              <div className="mt-2 text-lg font-semibold">访客记录</div>
+              <div className="mt-2 text-sm leading-6 text-text-secondary">查看官网最近访问、路径、来源、设备与匿名访客信息</div>
+            </Link>
+          )}
           <Link href="/admin/auth-sessions" className="rounded-lg border border-border-secondary bg-bg-secondary p-4 hover:border-primary-blue">
             <div className="text-sm text-text-secondary">Auth Sessions</div>
             <div className="mt-2 text-lg font-semibold">登录设备与会话</div>

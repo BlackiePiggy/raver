@@ -38,45 +38,48 @@ export const Hero = () => {
       <div className="relative z-10 w-full h-full flex flex-col">
         {/* Title at center */}
         <div className="flex-1 flex items-center justify-center -mt-4">
-          <motion.h1
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-            className="text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter leading-none"
-            style={{ fontFamily: 'Graduate, serif' }}
+          <motion.div
+            className="flex w-full flex-col items-center px-4"
+            style={{ y: yText, opacity: opacityText }}
           >
-            <span className="text-white">Rave</span>
-            <span className="italic text-neutral-500">hub</span>
-          </motion.h1>
+            <motion.h1
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+              className="text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter leading-none"
+              style={{ fontFamily: 'Graduate, serif' }}
+            >
+              <span className="text-white">Rave</span>
+              <span className="italic text-neutral-500">hub</span>
+            </motion.h1>
+
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 1, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="mt-7 flex w-full max-w-[22rem] items-center justify-center gap-4 text-sm font-light text-neutral-300 sm:max-w-[30rem] sm:gap-6 sm:text-base md:mt-9 md:max-w-4xl md:gap-16 md:text-lg"
+            >
+              <p className="min-w-0 flex-1 text-right leading-relaxed">
+                由电音人共建，<br />
+                为电音人而生
+              </p>
+
+              <div className="h-12 w-px shrink-0 bg-white/10 md:h-16" />
+
+              <p className="min-w-0 flex-1 text-left leading-relaxed">
+                Based in China,<br />
+                working globally.
+              </p>
+            </motion.div>
+          </motion.div>
         </div>
-
-        {/* Text content - positioned lower */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="absolute bottom-[30%] left-0 right-0 flex flex-col md:flex-row items-start md:items-center justify-center gap-6 md:gap-16 text-base md:text-lg font-light text-neutral-300 max-w-4xl mx-auto px-6"
-          style={{ y: yText, opacity: opacityText }}
-        >
-          <p className="md:text-right flex-1 leading-relaxed">
-            由电音人共建，<br />
-            为电音人而生
-          </p>
-
-          <div className="w-px h-16 bg-white/10 hidden md:block" />
-
-          <p className="md:text-left flex-1 leading-relaxed">
-            Based in China,<br />
-            working globally.
-          </p>
-        </motion.div>
 
         {/* Animated Arrow - at bottom */}
         <motion.button
           onClick={() => {
-            const aboutSection = document.getElementById('about');
-            if (aboutSection) {
-              aboutSection.scrollIntoView({ behavior: 'auto' });
+            const servicesSection = document.getElementById('services');
+            if (servicesSection) {
+              servicesSection.scrollIntoView({ behavior: 'auto' });
             }
           }}
           initial={{ opacity: 0 }}

@@ -14,11 +14,23 @@ const shouldPreloadNeighbor = (index: number, current: number) => Math.abs(index
 const SmartPhoneVideo = ({
   src,
   active,
+  onProgress,
 }: {
   src: string;
   active: boolean;
+  onProgress?: (progress: number) => void;
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const updateProgress = () => {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(video.duration) || video.duration <= 0) {
+      onProgress?.(0);
+      return;
+    }
+
+    onProgress?.(Math.min(1, Math.max(0, video.currentTime / video.duration)));
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -35,6 +47,10 @@ const SmartPhoneVideo = ({
     });
   }, [active, src]);
 
+  useEffect(() => {
+    onProgress?.(0);
+  }, [onProgress, src]);
+
   return (
     <video
       ref={videoRef}
@@ -43,7 +59,10 @@ const SmartPhoneVideo = ({
       loop
       muted
       playsInline
-      preload={active ? 'auto' : 'metadata'}
+      preload="metadata"
+      onLoadedMetadata={updateProgress}
+      onTimeUpdate={updateProgress}
+      onSeeking={updateProgress}
       className="absolute inset-0 w-full h-full object-cover"
     />
   );
@@ -91,6 +110,43 @@ const getDesktopArrowButtonStyle = (accentColor: string) => ({
   color: 'rgba(255,255,255,0.88)',
 });
 
+const VideoPlaybackProgress = ({
+  progress,
+  accentColor,
+  width,
+}: {
+  progress: number;
+  accentColor: string;
+  width: number;
+}) => (
+  <div
+    className="pointer-events-none relative left-1/2 mt-5 h-px -translate-x-1/2 overflow-visible bg-white/10"
+    style={{
+      width: `min(${Math.round(width * 1.45)}px, calc(100vw - 4.5rem))`,
+      boxShadow: '0 0 18px rgba(255,255,255,0.05)',
+    }}
+  >
+    <motion.div
+      className="absolute left-0 top-0 h-px"
+      animate={{ width: `${Math.round(progress * 100)}%` }}
+      transition={{ type: 'spring', stiffness: 180, damping: 26, mass: 0.55 }}
+      style={{
+        background: `linear-gradient(90deg, ${accentColor}00, ${accentColor} 28%, ${accentColor})`,
+        boxShadow: `0 0 10px ${accentColor}aa, 0 0 24px ${accentColor}66`,
+      }}
+    />
+    <motion.div
+      className="absolute top-1/2 h-2 w-2 -translate-y-1/2 rounded-full"
+      animate={{ left: `calc(${Math.round(progress * 100)}% - 4px)` }}
+      transition={{ type: 'spring', stiffness: 180, damping: 26, mass: 0.55 }}
+      style={{
+        background: accentColor,
+        boxShadow: `0 0 10px ${accentColor}, 0 0 24px ${accentColor}`,
+      }}
+    />
+  </div>
+);
+
 // ── 手机框（可替换图片）──────────────────────────────────────────────────────
 const PhoneMockup = ({
   item,
@@ -104,6 +160,9 @@ const PhoneMockup = ({
   floating?: boolean;
 }) => {
   const [a, b, c] = item.accent;
+  const [videoProgress, setVideoProgress] = useState(0);
+  const hasVideoProgress = Boolean(item.appScreen && item.appScreenType === 'video');
+
   return (
     <div
       className="relative flex-shrink-0"
@@ -131,7 +190,7 @@ const PhoneMockup = ({
           }}
         >
           {item.appScreen && item.appScreenType === 'video' ? (
-            <SmartPhoneVideo src={item.appScreen} active={active} />
+            <SmartPhoneVideo src={item.appScreen} active={active} onProgress={setVideoProgress} />
           ) : item.appScreen ? (
             <img
               src={item.appScreen}
@@ -176,9 +235,83 @@ const PhoneMockup = ({
 
         <div className="pointer-events-none absolute inset-x-[9%] top-[1.1%] z-30 h-[2.8%] rounded-full bg-white/20 blur-md opacity-45" />
       </div>
+
+      {hasVideoProgress && (
+        <VideoPlaybackProgress progress={videoProgress} accentColor={a} width={width} />
+      )}
     </div>
   );
 };
+
+const GalleryShowcase = ({
+  item,
+  compact = false,
+}: {
+  item: Capability;
+  compact?: boolean;
+}) => {
+  const images = item.galleryImages?.length ? item.galleryImages : item.appScreen ? [item.appScreen] : [];
+  const [a, b] = item.accent;
+
+  return (
+    <div
+      className={`relative flex-shrink-0 ${compact ? 'w-full max-w-[21rem]' : 'w-[28rem]'}`}
+      style={{ zIndex: 20 }}
+    >
+      <div
+        className="pointer-events-none absolute -inset-8 rounded-[2rem] blur-3xl opacity-35"
+        style={{ background: `radial-gradient(ellipse, ${item.glowColor}, transparent 68%)` }}
+      />
+      <div
+        className="relative overflow-hidden rounded-2xl border border-white/12 bg-neutral-950/70 shadow-2xl"
+        style={{
+          boxShadow: `0 24px 70px rgba(0,0,0,0.55), 0 0 46px ${item.glowColor}`,
+        }}
+      >
+        <div
+          className="absolute inset-x-0 top-0 h-px"
+          style={{ background: `linear-gradient(90deg, transparent, ${a}, ${b}, transparent)` }}
+        />
+        <div
+          data-native-scroll="true"
+          className="scrollbar-hidden relative flex snap-x snap-mandatory gap-3 overflow-x-auto p-3"
+        >
+          {images.map((src, index) => (
+            <img
+              key={src}
+              src={src}
+              alt={`${item.title} ${index + 1}`}
+              loading="lazy"
+              decoding="async"
+              className={`${compact ? 'w-[17rem]' : 'w-[23rem]'} flex-none snap-center rounded-xl border border-white/10 object-cover`}
+              style={{ aspectRatio: '16 / 10' }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CapabilityShowcase = ({
+  item,
+  active = true,
+  compact = false,
+  phoneWidth = 225,
+  floating = true,
+}: {
+  item: Capability;
+  active?: boolean;
+  compact?: boolean;
+  phoneWidth?: number;
+  floating?: boolean;
+}) => (
+  item.displayMode === 'gallery' ? (
+    <GalleryShowcase item={item} compact={compact} />
+  ) : (
+    <PhoneMockup item={item} active={active} width={phoneWidth} floating={floating} />
+  )
+);
 
 const MobileServicesCarousel = ({
   item,
@@ -208,7 +341,7 @@ const MobileServicesCarousel = ({
   const [a, b] = item.accent;
 
   return (
-    <div className="md:hidden">
+    <div className="relative md:hidden">
       <div className="relative mx-auto max-w-[23rem]">
         <button
           type="button"
@@ -229,7 +362,7 @@ const MobileServicesCarousel = ({
           <ChevronRight className="h-5 w-5" />
         </button>
 
-        <div className="relative min-h-[36rem] overflow-hidden">
+        <div className="relative min-h-[44rem] overflow-visible">
           <AnimatePresence mode="wait" custom={direction}>
             <motion.div
               key={item.id}
@@ -243,15 +376,12 @@ const MobileServicesCarousel = ({
               style={{ willChange: 'transform, opacity' }}
             >
               <div className="flex justify-center pb-4 pt-1">
-                <PhoneMockup item={item} active width={190} floating={false} />
+                <CapabilityShowcase item={item} active compact phoneWidth={190} floating={false} />
               </div>
 
-              <article
-                className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.055] p-5 backdrop-blur-md"
-                style={{ boxShadow: `0 18px 52px ${item.glowColor}` }}
-              >
+              <article className="relative px-5 py-1">
                 <div
-                  className="pointer-events-none absolute -right-16 -top-20 h-44 w-44 rounded-full blur-3xl opacity-35"
+                  className="ravehub-mobile-capability-orb pointer-events-none absolute -right-16 -top-20 h-44 w-44 rounded-full blur-3xl opacity-20"
                   style={{ background: `radial-gradient(circle, ${a}, transparent 70%)` }}
                 />
                 <div className="relative z-10 min-w-0">
@@ -279,17 +409,24 @@ const MobileServicesCarousel = ({
           </AnimatePresence>
         </div>
 
-        <div className="mt-5 flex items-center justify-center gap-2.5">
+        <div className="pointer-events-auto absolute left-full top-[calc(8.5rem+1.25rem)] z-40 ml-2 flex -translate-y-1/2 flex-col items-center justify-center gap-1.5">
           {capabilities.map((capability, index) => (
-            <button key={capability.id} type="button" onClick={() => onJump(index)} aria-label={`Show capability ${index + 1}`}>
+            <button
+              key={capability.id}
+              type="button"
+              onClick={() => onJump(index)}
+              aria-label={`Show capability ${index + 1}`}
+              className="flex w-2 justify-center py-0.5"
+            >
               <motion.div
                 animate={{
-                  width: index === current ? 22 : 7,
-                  background: index === current ? capability.accent[0] : 'rgba(255,255,255,0.18)',
-                  boxShadow: index === current ? `0 0 8px ${capability.accent[0]}99` : 'none',
+                  height: index === current ? 16 : 4,
+                  width: 4,
+                  background: index === current ? capability.accent[0] : 'rgba(255,255,255,0.2)',
+                  boxShadow: index === current ? `0 0 6px ${capability.accent[0]}88` : 'none',
                 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-                className="h-[7px] rounded-full"
+                className="rounded-full"
               />
             </button>
           ))}
@@ -381,7 +518,7 @@ export const Services = () => {
       data-section-scroll="true"
       className="relative h-screen overflow-y-auto overflow-x-hidden overscroll-contain bg-neutral-950 px-5 py-24 [-webkit-overflow-scrolling:touch] md:flex md:items-center md:px-6 md:py-10"
     >
-      <AdjacentCapabilityVideoPreloader capabilities={capabilities} current={current} />
+      {isDesktop && <AdjacentCapabilityVideoPreloader capabilities={capabilities} current={current} />}
       {/* 背景装饰 */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div
@@ -390,7 +527,7 @@ export const Services = () => {
           className="absolute bottom-[5%] -left-[8%] w-[500px] h-[500px] border border-white/[0.03] rounded-full" />
         {/* accent 大光晕随卡片变化 */}
         <motion.div key={current} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] rounded-full blur-[130px]"
+          className="ravehub-services-glow absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] rounded-full blur-[130px]"
           style={{ background: `radial-gradient(ellipse, ${item.glowColor}, transparent 70%)`, willChange: 'opacity' }} />
       </div>
 
@@ -400,7 +537,7 @@ export const Services = () => {
           <div>
             <div className="mb-5 flex items-center gap-4 md:mb-6 md:gap-6">
               <div className="flex items-baseline gap-3">
-                <span className="font-serif italic text-lg text-white">03</span>
+                <span className="font-serif italic text-lg text-white">02</span>
                 <span className="text-[0.62rem] font-mono uppercase tracking-[0.24em] text-neutral-400 md:text-xs md:tracking-[0.3em]">/ Capabilities</span>
               </div>
               <div className="h-px flex-1 bg-gradient-to-r from-white/30 to-transparent md:w-32 md:flex-none" />
@@ -533,7 +670,7 @@ export const Services = () => {
                   </div>
 
                   <div className="flex-shrink-0 pr-8 relative z-20">
-                    <PhoneMockup item={item} active />
+                    <CapabilityShowcase item={item} active />
                   </div>
                 </div>
               </motion.div>

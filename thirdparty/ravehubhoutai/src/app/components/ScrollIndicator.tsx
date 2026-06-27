@@ -8,9 +8,9 @@ interface Section {
 
 const sections: Section[] = [
   { id: 'hero', label: 'Home' },
-  { id: 'about', label: 'About' },
   { id: 'services', label: 'Services' },
   { id: 'community', label: 'Community' },
+  { id: 'about', label: 'About' },
   { id: 'download', label: 'Download' },
   { id: 'contact', label: 'Contact' }
 ];
@@ -21,10 +21,8 @@ export const ScrollIndicator = () => {
 
   useEffect(() => {
     const handleScroll = () => {
-      // Show indicator after scrolling past hero
       setIsVisible(window.scrollY > 200);
 
-      // Determine active section
       const scrollPosition = window.scrollY + window.innerHeight / 2;
 
       for (let i = sections.length - 1; i >= 0; i--) {
@@ -37,7 +35,7 @@ export const ScrollIndicator = () => {
     };
 
     window.addEventListener('scroll', handleScroll);
-    handleScroll(); // Initialize
+    handleScroll();
 
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -62,9 +60,9 @@ export const ScrollIndicator = () => {
           className="fixed right-8 top-1/2 -translate-y-1/2 z-40 hidden lg:block"
         >
           <div className="flex flex-col gap-6">
-            {sections.map((section, index) => {
+            {sections.map((section) => {
               const isActive = activeSection === section.id;
-              
+
               return (
                 <motion.button
                   key={section.id}
@@ -73,7 +71,6 @@ export const ScrollIndicator = () => {
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  {/* Label - appears on hover */}
                   <motion.span
                     initial={{ opacity: 0, x: 10 }}
                     whileHover={{ opacity: 1, x: 0 }}
@@ -82,18 +79,15 @@ export const ScrollIndicator = () => {
                     {section.label}
                   </motion.span>
 
-                  {/* Circular indicator */}
                   <div className="relative w-3 h-3">
-                    {/* Outer ring - always visible */}
-                    <div 
+                    <div
                       className={`absolute inset-0 rounded-full border transition-all duration-300 ${
-                        isActive 
-                          ? 'border-white border-2' 
+                        isActive
+                          ? 'border-white border-2'
                           : 'border-white/30 border group-hover:border-white/50'
                       }`}
                     />
-                    
-                    {/* Inner dot - visible when active */}
+
                     <motion.div
                       initial={false}
                       animate={{
@@ -104,7 +98,6 @@ export const ScrollIndicator = () => {
                       className="absolute inset-[3px] rounded-full bg-white"
                     />
 
-                    {/* Pulse effect when active */}
                     {isActive && (
                       <motion.div
                         initial={{ scale: 1, opacity: 0.5 }}
@@ -112,7 +105,7 @@ export const ScrollIndicator = () => {
                         transition={{
                           duration: 1.5,
                           repeat: Infinity,
-                          ease: "easeOut"
+                          ease: 'easeOut'
                         }}
                         className="absolute inset-0 rounded-full border-2 border-white"
                       />
@@ -123,7 +116,6 @@ export const ScrollIndicator = () => {
             })}
           </div>
 
-          {/* Progress line connecting dots */}
           <div className="absolute top-0 bottom-0 right-[5px] w-[1px] bg-white/10 -z-10" />
         </motion.div>
       )}

@@ -1,5 +1,7 @@
 import { NextFunction, Request, RequestHandler, Response, Router } from 'express';
 import multer from 'multer';
+import { readFile, stat } from 'fs/promises';
+import path from 'path';
 import { authenticate, AuthRequest } from '../../middleware/auth';
 import checkinsV2Routes from '../../routes/checkins-v2.routes';
 import notificationCenterRoutes from '../../routes/notification-center.routes';
@@ -36,6 +38,10 @@ import {
 
 const router: Router = Router();
 const prisma = new PrismaClient();
+const analyticsDir = path.resolve(
+  process.env.ANALYTICS_LOG_DIR || path.join(process.cwd(), 'storage', 'analytics')
+);
+const visitLogPath = path.join(analyticsDir, 'website-visits.jsonl');
 const quizOssPrefix = (process.env.OSS_QUIZ_PREFIX || 'wen-jasonlee/quiz').replace(/^\/+|\/+$/g, '');
 const quizImageUpload = multer({
   storage: multer.memoryStorage(),
@@ -1504,6 +1510,93 @@ router.get('/status', authenticate, requireAdminOrOperator, async (req: AuthRequ
   } catch (error) {
     console.error('Fetch admin status error:', error);
     res.status(500).json({ error: 'Failed to fetch admin status' });
+  }
+});
+
+router.get('/analytics/visits', authenticate, requireAdminOrOperator, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const limit = parseLimit(req.query.limit, 100, 500);
+    const maxBytes = 1024 * 1024;
+    let raw = '';
+
+    try {
+      const fileStat = await stat(visitLogPath);
+      raw = await readFile(visitLogPath, 'utf8');
+
+      if (fileStat.size > maxBytes) {
+        raw = raw.slice(-maxBytes);
+        const firstNewline = raw.indexOf('\n');
+        raw = firstNewline >= 0 ? raw.slice(firstNewline + 1) : raw;
+      }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT') {
+        throw error;
+      }
+    }
+
+    const rows = raw
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return JSON.parse(line) as {
+            id?: string;
+            createdAt?: string;
+            visitorIdHash?: string;
+            path?: string;
+            referrer?: string | null;
+            language?: string | null;
+            timezone?: string | null;
+            screen?: {
+              width?: number;
+              height?: number;
+              viewportWidth?: number;
+              viewportHeight?: number;
+              devicePixelRatio?: number;
+            } | null;
+            ipHash?: string;
+            userAgent?: string | null;
+          };
+        } catch {
+          return null;
+        }
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null)
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+
+    const visitorIds = new Set(rows.map((row) => row.visitorIdHash).filter(Boolean));
+    const pathCounts = new Map<string, number>();
+    const referrerCounts = new Map<string, number>();
+
+    for (const row of rows) {
+      const rowPath = row.path || '/';
+      pathCounts.set(rowPath, (pathCounts.get(rowPath) || 0) + 1);
+
+      const referrer = row.referrer || 'direct';
+      referrerCounts.set(referrer, (referrerCounts.get(referrer) || 0) + 1);
+    }
+
+    const toTopList = (map: Map<string, number>) =>
+      Array.from(map.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([value, count]) => ({ value, count }));
+
+    res.json({
+      success: true,
+      summary: {
+        totalVisits: rows.length,
+        uniqueVisitors: visitorIds.size,
+        topPaths: toTopList(pathCounts),
+        topReferrers: toTopList(referrerCounts),
+      },
+      visits: rows.slice(0, limit),
+    });
+  } catch (error) {
+    console.error('Fetch website visits error:', error);
+    res.status(500).json({ error: 'Failed to fetch website visits' });
   }
 });
 

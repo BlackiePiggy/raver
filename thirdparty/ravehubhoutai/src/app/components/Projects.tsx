@@ -3,6 +3,7 @@ import { motion, useScroll, useTransform } from 'motion/react';
 import { ArrowUpRight } from 'lucide-react';
 import { Link } from '../router';
 import { projects } from '../data/projects'; // Import shared data
+import { showComingSoon } from '../utils/comingSoon';
 
 export const Projects = () => {
   // Use first 4 projects for home
@@ -33,7 +34,7 @@ export const Projects = () => {
             </h2>
           </div>
           <div className="hidden md:block mb-2">
-             <Link to="/work" className="text-xs font-mono uppercase tracking-widest border-b border-white/30 pb-2 hover:text-neutral-300 transition-colors inline-block">
+             <Link to="/work" onClick={showComingSoon} className="text-xs font-mono uppercase tracking-widest border-b border-white/30 pb-2 hover:text-neutral-300 transition-colors inline-block">
                View All Projects
              </Link>
           </div>
@@ -65,7 +66,7 @@ const ProjectCard = ({ project, index }: { project: any, index: number }) => {
       style={{ y: isEven ? 0 : y }}
       className={`group cursor-pointer relative ${!isEven ? 'md:mt-32' : ''}`}
     >
-      <Link to={`/work/${project.slug}`}>
+      <Link to={`/work/${project.slug}`} onClick={showComingSoon}>
         <div className="relative overflow-hidden rounded-sm aspect-[4/3] mb-8 bg-neutral-900">
           <motion.img 
             whileHover={{ scale: 1.05 }}

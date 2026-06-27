@@ -85,8 +85,12 @@ interface LinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
 
 export function Link({ to, onClick, children, ...rest }: LinkProps) {
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
     onClick?.(e);
+    if (e.defaultPrevented) {
+      return;
+    }
+
+    e.preventDefault();
     (window as any).__navigate?.(to);
     if (!to.includes('#')) {
       window.scrollTo(0, 0);

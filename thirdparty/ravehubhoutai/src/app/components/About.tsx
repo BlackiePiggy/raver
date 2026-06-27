@@ -24,7 +24,7 @@ export const About = () => {
       ref={containerRef}
       id="about"
       data-section-scroll="true"
-      className="relative h-screen overflow-y-auto overflow-x-hidden overscroll-contain bg-neutral-950 px-5 py-24 [-webkit-overflow-scrolling:touch] md:flex md:items-center md:px-6 md:py-10"
+      className="relative min-h-screen overflow-y-auto overflow-x-hidden overscroll-contain bg-neutral-950 px-5 py-24 [-webkit-overflow-scrolling:touch] md:px-6 md:pb-10 md:pt-28 lg:h-screen lg:overflow-hidden"
     >
       {/* Background Grid - Technical Texture */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] pointer-events-none" />
@@ -59,7 +59,7 @@ export const About = () => {
         {/* Section Header - Consistent Style */}
         <div className="mb-8 flex items-center gap-4 md:mb-10 md:gap-6">
            <div className="flex items-baseline gap-3">
-              <span className="font-serif italic text-lg text-white">02</span>
+              <span className="font-serif italic text-lg text-white">04</span>
               <span className="text-[0.62rem] font-mono uppercase tracking-[0.24em] text-neutral-400 md:text-xs md:tracking-[0.3em]">The Studio</span>
            </div>
            <div className="h-px flex-1 bg-gradient-to-r from-white/30 to-transparent md:w-32 md:flex-none" />
@@ -105,13 +105,13 @@ export const About = () => {
           {/* Image Area */}
           <motion.div
             style={{ opacity }}
-            className="relative hidden lg:mt-16 md:block"
+            className="relative hidden lg:mt-4 lg:block"
           >
-            <div className="relative z-10">
+            <div className="relative z-10 mx-auto flex max-h-[calc(100svh-14rem)] justify-center">
               <motion.div
                 whileHover={{ scale: 0.98 }}
                 transition={{ duration: 0.5 }}
-                className="aspect-[4/5] overflow-hidden grayscale hover:grayscale-0 transition-all duration-700 ease-in-out bg-neutral-900"
+                className="aspect-[4/5] h-[min(42vw,calc(100svh-14rem))] max-h-[34rem] max-w-full overflow-hidden bg-neutral-900 grayscale transition-all duration-700 ease-in-out hover:grayscale-0"
               >
                 <img
                   src={media.images.aboutWorkspace}
@@ -124,7 +124,7 @@ export const About = () => {
               </motion.div>
 
               {/* Decorative Ring */}
-              <div className="absolute -bottom-12 -left-12 w-48 h-48 border border-white/10 rounded-full flex items-center justify-center backdrop-blur-sm hidden md:flex" style={{ animation: 'spin 15s linear infinite' }}>
+              <div className="absolute -bottom-6 left-0 hidden h-36 w-36 items-center justify-center rounded-full border border-white/10 backdrop-blur-sm lg:flex xl:h-40 xl:w-40" style={{ animation: 'spin 15s linear infinite' }}>
                 <style dangerouslySetInnerHTML={{__html: `
                   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
                 `}} />
@@ -158,9 +158,9 @@ export const About = () => {
       {/* 底部下拉箭头 */}
       <motion.button
         onClick={() => {
-          const servicesSection = document.getElementById('services');
-          if (servicesSection) {
-            servicesSection.scrollIntoView({ behavior: 'auto' });
+          const downloadSection = document.getElementById('download');
+          if (downloadSection) {
+            downloadSection.scrollIntoView({ behavior: 'auto' });
           }
         }}
         initial={{ opacity: 0 }}

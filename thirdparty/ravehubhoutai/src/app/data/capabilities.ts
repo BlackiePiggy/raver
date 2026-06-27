@@ -1,6 +1,7 @@
 import { media } from './media';
 
 export type CapabilityMediaType = 'image' | 'video';
+export type CapabilityDisplayMode = 'phone' | 'gallery';
 
 export interface Capability {
   id: string;
@@ -10,9 +11,11 @@ export interface Capability {
   glowColor: string;
   appScreen: string | null;
   appScreenType: CapabilityMediaType;
+  displayMode?: CapabilityDisplayMode;
+  galleryImages?: string[];
 }
 
-export const capabilitiesStorageKey = 'ravehub.capabilities.v1';
+export const capabilitiesStorageKey = 'ravehub.capabilities.v4';
 export const capabilitiesChangedEvent = 'ravehub:capabilities-changed';
 const capabilitiesApiPath = '/api/ravehub-website/capabilities';
 
@@ -27,8 +30,9 @@ export const defaultCapabilities: Capability[] = [
       "#10b981"
     ],
     glowColor: "rgba(6,182,212,0.4)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/6a6e2075ffed7d458c676062443b5895.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "02",
@@ -40,8 +44,9 @@ export const defaultCapabilities: Capability[] = [
       "#ec4899"
     ],
     glowColor: "rgba(139,92,246,0.45)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/ScreenRecording_06-18-2026%2018-51-00_1_converted%20%281%29.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "03",
@@ -53,8 +58,9 @@ export const defaultCapabilities: Capability[] = [
       "#fb7185"
     ],
     glowColor: "rgba(236,72,153,0.4)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/ScreenRecording_06-18-2026%2018-48-11_1_converted%20%281%29.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "04",
@@ -66,8 +72,9 @@ export const defaultCapabilities: Capability[] = [
       "#facc15"
     ],
     glowColor: "rgba(249,115,22,0.4)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/ScreenRecording_06-18-2026%2018-50-24_1_converted%20%281%29.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "05",
@@ -79,8 +86,9 @@ export const defaultCapabilities: Capability[] = [
       "#8b5cf6"
     ],
     glowColor: "rgba(99,102,241,0.4)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/ScreenRecording_06-18-2026%2018-52-40_1_converted%20%281%29.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "06",
@@ -92,8 +100,9 @@ export const defaultCapabilities: Capability[] = [
       "#4f46e5"
     ],
     glowColor: "rgba(168,85,247,0.4)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/ScreenRecording_06-18-2026%2018-55-50_1_converted%20%281%29.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "07",
@@ -105,8 +114,9 @@ export const defaultCapabilities: Capability[] = [
       "#38bdf8"
     ],
     glowColor: "rgba(20,184,166,0.38)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/%E7%8E%B0%E5%9C%BA%E8%A7%86%E9%A2%91%E4%B8%8E%E6%AD%8C%E5%8D%95%E5%8A%9F%E8%83%BD%E5%B1%95%E7%A4%BA.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "08",
@@ -118,8 +128,9 @@ export const defaultCapabilities: Capability[] = [
       "#f97316"
     ],
     glowColor: "rgba(244,63,94,0.38)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/%E5%8F%91%E5%B8%96%E5%B9%BF%E5%9C%BA%E5%B1%95%E7%A4%BA.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "09",
@@ -131,8 +142,9 @@ export const defaultCapabilities: Capability[] = [
       "#84cc16"
     ],
     glowColor: "rgba(245,158,11,0.36)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/%E6%B4%BB%E5%8A%A8%E7%9B%B4%E6%92%AD%E8%81%8A%E5%A4%A9%E5%8C%BA%E5%8A%9F%E8%83%BD%E5%B1%95%E7%A4%BA.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "10",
@@ -144,8 +156,9 @@ export const defaultCapabilities: Capability[] = [
       "#84cc16"
     ],
     glowColor: "rgba(16,185,129,0.36)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/%E5%B0%8F%E9%98%9F%E7%BA%BF%E4%B8%8B%E6%B4%BB%E5%8A%A8%E5%8A%9F%E8%83%BD%E5%B1%95%E7%A4%BA.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "11",
@@ -157,8 +170,9 @@ export const defaultCapabilities: Capability[] = [
       "#67e8f9"
     ],
     glowColor: "rgba(14,165,233,0.36)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/%E8%B5%84%E8%AE%AF%E5%8A%9F%E8%83%BD%E5%B1%95%E7%A4%BA.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "12",
@@ -170,8 +184,9 @@ export const defaultCapabilities: Capability[] = [
       "#c084fc"
     ],
     glowColor: "rgba(139,92,246,0.38)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/ScreenRecording_06-18-2026%2018-54-42_1_converted%20%281%29.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "13",
@@ -183,8 +198,9 @@ export const defaultCapabilities: Capability[] = [
       "#6366f1"
     ],
     glowColor: "rgba(59,130,246,0.38)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/%E8%81%9A%E5%90%88%E6%90%9C%E7%B4%A2%E5%8A%9F%E8%83%BD%E5%B1%95%E7%A4%BA.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "14",
@@ -196,8 +212,9 @@ export const defaultCapabilities: Capability[] = [
       "#6366f1"
     ],
     glowColor: "rgba(236,72,153,0.36)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/%E6%B6%88%E6%81%AF%E4%B8%AD%E5%BF%83%E5%8A%9F%E8%83%BD%E5%B1%95%E7%A4%BA.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "15",
@@ -209,8 +226,9 @@ export const defaultCapabilities: Capability[] = [
       "#06b6d4"
     ],
     glowColor: "rgba(34,197,94,0.36)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/f1c6ab3186eeb5078623064ceced0db4.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "16",
@@ -222,8 +240,9 @@ export const defaultCapabilities: Capability[] = [
       "#facc15"
     ],
     glowColor: "rgba(251,113,133,0.36)",
-    appScreen: null,
-    appScreenType: 'video'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/vids/feats/d0f110ef37dcf26af06b582cbf006a24.mp4",
+    appScreenType: 'video',
+    displayMode: 'phone'
   },
   {
     id: "17",
@@ -235,8 +254,19 @@ export const defaultCapabilities: Capability[] = [
       "#a78bfa"
     ],
     glowColor: "rgba(34,211,238,0.36)",
-    appScreen: null,
-    appScreenType: 'image'
+    appScreen: "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/pics/admin/image%20%2810%29.png",
+    appScreenType: 'image',
+    displayMode: 'gallery',
+    galleryImages: [
+      "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/pics/admin/image%20%2810%29.png",
+      "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/pics/admin/image%20%2811%29.png",
+      "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/pics/admin/image%20%2812%29.png",
+      "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/pics/admin/image%20%2813%29.png",
+      "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/pics/admin/image%20%2814%29.png",
+      "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/pics/admin/image%20%2815%29.png",
+      "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/pics/admin/image%20%288%29.png",
+      "https://ravehubcn.oss-cn-beijing.aliyuncs.com/website/pics/admin/image%20%289%29.png"
+    ]
   }
 ];
 
@@ -244,9 +274,22 @@ const isCapabilityMediaType = (value: unknown): value is CapabilityMediaType => 
   value === 'image' || value === 'video'
 );
 
+const isCapabilityDisplayMode = (value: unknown): value is CapabilityDisplayMode => (
+  value === 'phone' || value === 'gallery'
+);
+
 const asString = (value: unknown, fallback: string) => (
   typeof value === 'string' ? value : fallback
 );
+
+const normalizeStringList = (value: unknown, fallback: string[] = []) => {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  const strings = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  return strings.length > 0 ? strings : fallback;
+};
 
 const normalizeAccent = (value: unknown, fallback: [string, string, string]) => {
   if (!Array.isArray(value)) {
@@ -266,7 +309,7 @@ export const normalizeCapabilities = (value: unknown): Capability[] => {
   }
 
   const normalized = value
-    .map((item, index) => {
+    .map((item, index): Capability | null => {
       if (!item || typeof item !== 'object') {
         return null;
       }
@@ -274,6 +317,7 @@ export const normalizeCapabilities = (value: unknown): Capability[] => {
       const source = item as Partial<Capability>;
       const fallback = defaultCapabilities[index] ?? defaultCapabilities[0];
       const mediaType = isCapabilityMediaType(source.appScreenType) ? source.appScreenType : fallback.appScreenType;
+      const displayMode = isCapabilityDisplayMode(source.displayMode) ? source.displayMode : fallback.displayMode ?? 'phone';
 
       return {
         id: asString(source.id, String(index + 1).padStart(2, '0')),
@@ -283,6 +327,8 @@ export const normalizeCapabilities = (value: unknown): Capability[] => {
         glowColor: asString(source.glowColor, fallback.glowColor),
         appScreen: typeof source.appScreen === 'string' && source.appScreen.trim() ? source.appScreen : null,
         appScreenType: mediaType,
+        displayMode,
+        galleryImages: normalizeStringList(source.galleryImages, fallback.galleryImages),
       };
     })
     .filter((item): item is Capability => item !== null);
